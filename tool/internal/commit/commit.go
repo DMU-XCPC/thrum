@@ -46,22 +46,15 @@ func Event(l workspace.Layout, kind Kind, subject, summary string, paths ...stri
 	if len(paths) == 0 {
 		return "", fmt.Errorf("a commit needs at least one path")
 	}
-	args := []string{"add", "-A", "--"}
-	args = append(args, paths...)
-	if _, err := gitx.Run(l.Root, args...); err != nil {
+	if err := stage(l, paths); err != nil {
 		return "", fmt.Errorf("staging: %w", err)
 	}
-
-	commitArgs := gitx.IdentityArgs(l.Root, "thrum")
-	commitArgs = append(commitArgs, "commit", "--quiet", "-m", Subject(kind, subject, summary))
-	if _, err := gitx.Run(l.Root, commitArgs...); err != nil {
-		return "", err
-	}
-	id, err := gitx.Run(l.Root, "rev-parse", "HEAD")
+	message := Subject(kind, subject, summary)
+	id, err := commitNow(l, paths, message)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(id), nil
+	return publishOrUndo(l, paths, message, id)
 }
 
 // Nothing reports whether there is anything to commit among the given paths, which is

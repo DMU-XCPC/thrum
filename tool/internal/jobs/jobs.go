@@ -68,6 +68,12 @@ func Open(l workspace.Layout, o OpenOptions) (string, error) {
 	} else if materialised && held != "" {
 		return "", fmt.Errorf("worktree %q already holds job %s", o.Label, held)
 	}
+	// Nothing is written or decided before the line is current: what this reads has to
+	// be what the other sites have already published.
+	if err := commit.Current(l); err != nil {
+		return "", err
+	}
+
 	// A job branches from the project's history. With no history there is no branch,
 	// and git will make one that resolves to nothing — so this says so now, rather than
 	// leaving the first handoff to fail with something about common ancestors.
@@ -122,7 +128,7 @@ func Open(l workspace.Layout, o OpenOptions) (string, error) {
 	if summary == "" {
 		summary = fmt.Sprintf("opened in worktree %s", o.Label)
 	}
-	id, err := commit.Event(l, commit.KindBrief, o.Job, summary, rel(l, l.TaskDir(o.Job)))
+	id, err := commit.Event(l, commit.KindBrief, o.Job, summary, rel(l, l.Brief(o.Job)))
 	if err != nil {
 		_ = worktrees.Remove(l, o.Label)
 		_ = os.RemoveAll(l.TaskDir(o.Job))
@@ -160,6 +166,9 @@ type HandoffOptions struct {
 // WriteHandoff records one stretch of work. It refuses a file name that already
 // exists: never overwriting is the minimum an append-only record owes.
 func WriteHandoff(l workspace.Layout, o HandoffOptions) (string, error) {
+	if err := commit.Current(l); err != nil {
+		return "", err
+	}
 	if workspace.JobExists(l, o.Job) == false {
 		return "", fmt.Errorf("no brief for job %q", o.Job)
 	}
@@ -251,6 +260,9 @@ func WriteHandoff(l workspace.Layout, o HandoffOptions) (string, error) {
 // Close ends a job: it sets the final status, archives the brief, and releases the
 // working directory. It merges nothing.
 func Close(l workspace.Layout, job, status, summary string) (string, error) {
+	if err := commit.Current(l); err != nil {
+		return "", err
+	}
 	switch status {
 	case format.StatusDone, format.StatusAbandoned:
 	default:
@@ -292,8 +304,10 @@ func Close(l workspace.Layout, job, status, summary string) (string, error) {
 	if summary == "" {
 		summary = fmt.Sprintf("closed as %s", status)
 	}
+	// The event owns one job's directory and its place in the archive, not the whole of
+	// doc/task: another site's event elsewhere must not be swept into this commit.
 	return commit.Event(l, commit.KindClose, job, summary,
-		rel(l, l.Task()), rel(l, l.Archive()))
+		rel(l, l.TaskDir(job)), rel(l, filepath.Join(l.Archive(), "task", job)))
 }
 
 // releaseWorktrees leaves every directory carrying this job's branch clean and
@@ -335,6 +349,9 @@ func releaseLeases(l workspace.Layout, job string) error {
 // responsible for: it has either never been assigned or been given up, and either way
 // whoever takes it up may claim it without asking.
 func SetOwner(l workspace.Layout, job, owner, summary string) (string, error) {
+	if err := commit.Current(l); err != nil {
+		return "", err
+	}
 	if owner != "" && !format.ValidSlug(owner) {
 		return "", fmt.Errorf("%q is not an actor name", owner)
 	}

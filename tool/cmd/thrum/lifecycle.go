@@ -159,6 +159,9 @@ func declareLabel(l workspace.Layout, label, purpose string, ephemeral bool) err
 		}
 		return nil
 	}
+	if err := commit.Current(l); err != nil {
+		return err
+	}
 	_, err := commit.Event(l, commit.KindResource, "", "declared "+label,
 		relToRoot(l, l.ResourceKind(format.WorktreeKind)))
 	return err

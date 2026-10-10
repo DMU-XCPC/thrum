@@ -53,6 +53,9 @@ func newCommitCmd() *cobra.Command {
 				paths = append(paths, filepath.ToSlash(rel))
 			}
 
+			if err := commit.Current(l); err != nil {
+				return err
+			}
 			id, err := commit.Event(l, kind, subject, summary, paths...)
 			if err != nil {
 				return err

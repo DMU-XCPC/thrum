@@ -164,6 +164,9 @@ type PublishOptions struct {
 
 // Publish tags a version and writes its manifest, in one asset commit.
 func Publish(l workspace.Layout, o PublishOptions) (string, error) {
+	if err := commit.Current(l); err != nil {
+		return "", err
+	}
 	if !format.ValidSlug(o.Asset) {
 		return "", fmt.Errorf("%q is not an asset name: an asset name is a slug", o.Asset)
 	}
@@ -423,6 +426,9 @@ type WithdrawOptions struct {
 // version keeps a resolvable reference and the reason is on record. The version number
 // stays taken.
 func Withdraw(l workspace.Layout, o WithdrawOptions) (string, error) {
+	if err := commit.Current(l); err != nil {
+		return "", err
+	}
 	if o.Date == "" {
 		return "", fmt.Errorf("a withdrawal needs a date")
 	}

@@ -171,6 +171,18 @@ If `job/<job-id>/` is already present, import refuses and says so. Only an expli
 
 Import commits nothing, because it writes nothing versioned. The payload's presence is anchored by the job itself, which is a versioned record.
 
+### One line, published or withdrawn
+
+The records are one line, and that is a property of how an event is recorded rather than a rule everybody is asked to keep. It has three parts.
+
+**A site brings itself up to date before it writes.** Every operation that records something begins by taking what the others have published, so what it reads — which names are taken, what a job's status is, who owns it — is what is already true. A site that is alone in the world skips this, and a workspace with no remote cannot fall behind anything.
+
+**An event is published or withdrawn, never kept.** If the line moved while the event was being written, the event's commit comes back out and is made again on top of what moved: it was never in the line, so nothing anybody has seen is rewritten. If the same file moved as well, there is no way to put both in one line, and the event is refused: nothing is published, nothing is merged, and what it wrote is still in the working tree for the actor to look at and record again.
+
+**Records made while a site is alone are published when it is not.** They are put on top of what was published meanwhile, by the same rule: they were never in the line. If they cannot go together with it, nothing is published and nothing is merged, and the site says so.
+
+What this buys is one line with no merges and nothing rewritten that has been seen. What it costs is a round trip per recorded event at a site that has a remote, and it is why a workspace whose sites are never connected is still a workspace with one line — its own.
+
 ### Joining a site
 
 A site is added in two places, and the order matters: the workspace has to know the site exists before the site knows the workspace does.

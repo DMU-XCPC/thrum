@@ -128,6 +128,14 @@ the workspace or by dialling the site that can answer it.
 global and defaults to `$THRUM_ACTOR`, then `$USER`: an actor is a stable name, not a
 per-command choice.
 
+**Every command that records something** brings this site up to date from the shared line
+first, and then puts the event in it or takes it back out. So a workspace whose sites share
+a remote has one line with no merges and nothing rewritten, at the cost of a round trip per
+recorded event; a workspace with no remote has one line trivially. A site that cannot reach
+the remote keeps working, and publishes when it can. If the same file moved at another site
+in the meantime, the event is refused rather than merged: what it wrote stays in the working
+tree, uncommitted, and the message names the file.
+
 Two commands carry documents written by hand. `thrum open --goal/--scope/--criteria` (or
 `--brief <file>`) writes a brief that says something, and `thrum commit` commits a
 document an actor edited — a brief's body, a topic, a convention — inferring the event

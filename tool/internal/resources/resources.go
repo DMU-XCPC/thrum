@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/atomic"
+	"github.com/multiagentworkspace/thrum/tool/internal/commit"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"gopkg.in/yaml.v3"
@@ -30,6 +31,11 @@ type Entry struct {
 // Declare adds an entry to a kind's registry, creating the file when the kind has not
 // been declared before.
 func Declare(l workspace.Layout, kind string, e Entry) error {
+	// Nothing is read or written before the line is current: a declaration is a decision
+	// about what exists, and it has to be made on what the others have published.
+	if err := commit.Current(l); err != nil {
+		return err
+	}
 	if !format.ValidSlug(kind) {
 		return fmt.Errorf("%q is not a kind: a kind is a slug", kind)
 	}
@@ -69,6 +75,9 @@ func Declare(l workspace.Layout, kind string, e Entry) error {
 // pulling a working directory out from under whatever is using it is not a thing a
 // permission makes safe.
 func Remove(l workspace.Layout, kind, name string) error {
+	if err := commit.Current(l); err != nil {
+		return err
+	}
 	path := l.ResourceKind(kind)
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("%s declares nothing", kind)
