@@ -58,6 +58,13 @@ func newRootCmd() *cobra.Command {
 			// A site that says it accepts peers has to have something accepting them,
 			// or a message addressed to an actor here is refused for no good reason.
 			// A command that does not need a daemon does not wait long for one.
+			//
+			// The daemon's own commands are the exception, and they have to be: the
+			// thing that gets started must not start itself, or it spends its life
+			// spawning children that each try to start it again.
+			if isDaemonCommand(cmd) {
+				return nil
+			}
 			if err := ensureServing(l); err != nil {
 				fmt.Fprintf(os.Stderr, "thrum: this site accepts peers and no daemon is serving them: %v\n", err)
 			}
@@ -101,6 +108,12 @@ func newRootCmd() *cobra.Command {
 		newDaemonCmd(),
 	)
 	return root
+}
+
+// isDaemonCommand reports whether this command is the daemon itself, or one of the
+// things it is asked to do.
+func isDaemonCommand(cmd *cobra.Command) bool {
+	return strings.HasPrefix(cmd.CommandPath(), "thrum daemon")
 }
 
 // defaultRoot is where the workspace is: what the environment says, else where the

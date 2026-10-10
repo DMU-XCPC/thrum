@@ -83,48 +83,18 @@ func newActorCmd() *cobra.Command {
 	var jobID string
 	ask := &cobra.Command{
 		Use:   "ask --job <id>",
-		Short: "Who is on a job right now, here and at every site that answers",
-		Long: "The file at var/occupy/ is a claim, and this reports the claim: a name that stayed\n" +
-			"behind says somebody was working, and nothing on disk can say whether they still are.",
+		Short: "Who is on a job right now, according to the site that holds it",
+		Long: "The file at var/occupy/ is a claim, and the site that holds the job is the one site\n" +
+			"whose claim counts: a job is materialised at a site, and that site's tooling is\n" +
+			"what refuses a second actor. Nothing on disk can say whether an actor is still\n" +
+			"working, and this does not pretend otherwise.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			l := layout()
-			answered := false
-
-			if note, ok, err := occupancyOf(l, jobID); err != nil {
+			line, err := whoIsOn(layout(), jobID)
+			if err != nil {
 				return err
-			} else if ok {
-				fmt.Printf("%-20s %-14s since %s\n", roster.Site(l), note.Occupant, note.Since)
-				answered = true
 			}
-
-			peers := daemon.NewPeers(l)
-			for _, report := range peers.Report() {
-				if !report.Reachable || report.Name == peers.Site() {
-					continue
-				}
-				ref, err := peers.Lookup(report.Name)
-				if err != nil {
-					continue
-				}
-				resp, err := peers.Ask(ref, daemon.Request{
-					Verb: daemon.VerbAsk,
-					Args: daemon.Args(map[string]string{"job": jobID}),
-				})
-				if err != nil || len(resp.Data) == 0 {
-					continue
-				}
-				var there map[string]string
-				if err := decode(resp, &there); err != nil || there["occupant"] == "" {
-					continue
-				}
-				fmt.Printf("%-20s %-14s since %s\n", there["site"], there["occupant"], there["since"])
-				answered = true
-			}
-
-			if !answered {
-				fmt.Println("nobody, as far as any site that answered knows")
-			}
+			fmt.Println(line)
 			return nil
 		},
 	}

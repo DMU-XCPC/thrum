@@ -19,6 +19,7 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/messages"
 	"github.com/multiagentworkspace/thrum/tool/internal/roster"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -132,13 +133,12 @@ func TestTheSocketAnswersWhatFilesCannot(t *testing.T) {
 	}
 
 	// The answer is the claim, and the daemon does not pretend it is more.
-	resp := ask(t, l, daemon.VerbAsk, map[string]string{"job": "job-a"})
-	var told map[string]string
-	if err := json.Unmarshal(resp.Data, &told); err != nil {
+	var told jobAnswer
+	if err := json.Unmarshal(ask(t, l, daemon.VerbJob, map[string]string{"job": "job-a"}).Data, &told); err != nil {
 		t.Fatal(err)
 	}
-	if told["occupant"] != "claude-sonnet" || told["site"] != "build-01" {
-		t.Errorf("who is on it: %v", told)
+	if told.Occupant != "claude-sonnet" || told.Site != "build-01" {
+		t.Errorf("who is on it: %+v", told)
 	}
 
 	// Being named makes an actor exist, and the roster says where it was heard from.
@@ -269,6 +269,51 @@ func mustRoster(t *testing.T, l workspace.Layout) []roster.Entry {
 		t.Fatal(err)
 	}
 	return entries
+}
+
+// A site answers for the jobs it holds, and says plainly when it holds none: the site
+// that holds a job is the one whose claim counts, so "I do not hold it" is an answer
+// rather than a silence.
+func TestASiteAnswersForTheJobsItHolds(t *testing.T) {
+	l := site(t, "build-01")
+	writeBrief(t, l, "job-a")
+	serve(t, l)
+
+	answer := func() jobAnswer {
+		t.Helper()
+		var body jobAnswer
+		if err := json.Unmarshal(ask(t, l, daemon.VerbJob, map[string]string{"job": "job-a"}).Data, &body); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	if answer().Holds {
+		t.Error("a job nobody materialised is held nowhere")
+	}
+
+	// Materialising it is what gives it a home, and the branch is made here because the
+	// working directory is the first thing that needs one.
+	if err := worktrees.Add(l, "uploader", "job-a", ""); err != nil {
+		t.Fatalf("materialising: %v", err)
+	}
+	if got := answer(); !got.Holds || got.Occupant != "" {
+		t.Errorf("a materialised job is held here, and nobody is on it yet: %+v", got)
+	}
+
+	if resp := ask(t, l, daemon.VerbOccupy, map[string]string{"job": "job-a", "actor": "claude-opus"}); !resp.OK {
+		t.Fatalf("occupy: %s", resp.Error)
+	}
+	if got := answer(); got.Occupant != "claude-opus" || got.Since == "" {
+		t.Errorf("the claim should be what the site answers with: %+v", got)
+	}
+}
+
+type jobAnswer struct {
+	Site     string `json:"site"`
+	Holds    bool   `json:"holds"`
+	Occupant string `json:"occupant"`
+	Since    string `json:"since"`
 }
 
 func TestPeersAnswerOverSSH(t *testing.T) {

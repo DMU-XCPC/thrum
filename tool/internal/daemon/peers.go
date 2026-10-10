@@ -11,6 +11,7 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/leases"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 )
 
 // PeerRef is one site in the roster: the half that travels, and the half that does not.
@@ -239,6 +240,25 @@ func (p *Peers) Holds(resource string) bool {
 		return true
 	}
 	return materialisedHere(p.l, resource)
+}
+
+// HoldsJob reports whether this site holds a job, which is to say whether a working
+// directory here has its branch checked out.
+//
+// A job's home is not declared and not agreed on: it is the site where the job is
+// materialised, which is the only site whose tooling can answer for it. That is the
+// same rule a resource gets, and it is why a claim is consistent without consensus.
+func HoldsJob(l workspace.Layout, job string) bool {
+	entries, err := worktrees.List(l)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.Job() == job {
+			return true
+		}
+	}
+	return false
 }
 
 // materialisedHere reports whether a resource has anything on disk at this site.

@@ -109,7 +109,7 @@ Every operation in this document works with no daemon running: the command-line 
 | Question | Asked of | Answer |
 | --- | --- | --- |
 | Take this unit of this resource until then | the resource's home site | written, or refused because it is held |
-| Who is on this job | every peer, in parallel | the site whose actor holds it, if any. Sites are few, and the broadcast doubles as a reachability check |
+| Who is on this job | the site that holds the job | its claim, and whether it holds the job at all. A peer that does not answer means *cannot be established*, never *nobody is on it* |
 | This job reached `done` | the actors who were waiting on it | a message left in each of their mailboxes, at whichever site they are |
 | Who exists, and where | every peer, in parallel | the actor roster each of them keeps |
 | Send this actor a message | the recipient's site | written into its mailbox, or refused because that site cannot be reached |
@@ -171,7 +171,7 @@ An actor is a name: nothing is started, and nothing is bound to a process. Which
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
 | `roster` | Knows which names this site has seen, when each was last heard from, and which job each says it is on. | The workspace records names and claims; this is what the tooling has seen, and it is never used to refuse anything |
-| `ask` | Answers *who is on this job right now*. | The file at `var/occupy/` is a claim; this reports the claim, and whether the site that made it can be reached |
+| `ask` | Answers *who is on this job right now*, from the site that holds it. | The file at `var/occupy/` is a claim, and this reports the one that counts; a query, so it answers rather than refuses, including when the answer is that nobody can say |
 | `env` | Prints the base environment variables that point a job's tools at the workspace. | An actor that runs a tool without them writes outside the workspace, where nothing collects or reviews what it leaves |
 
 ## Messages
@@ -202,9 +202,9 @@ Actors reach each other through the tooling rather than through the records: a m
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `occupy` | Writes `<job-id>.yaml` with the actor and the time a stretch starts. | The actor never writes this file itself; it goes through here. |
+| `occupy` | Writes `<job-id>.yaml` with the actor and the time a stretch starts — **at the site that holds the job**, which is the site whose working directory has its branch. | The actor never writes this file itself; it goes through here. A job no site holds is refused, and two sites holding one job is refused rather than picked between. Silence from a peer that might hold it is refused too: not answering is not the same as being free |
 | `vacate` | Clears it when the stretch ends. | Left behind, it would claim someone is still working — the one lie the file must not tell. |
-| `sweep` | Removes an entry whose job has left `doc/task/`. | The file is anchored by its job, so a file with no job is stale. |
+| `sweep` | Removes an entry whose job has left `doc/task/`, and one at a site that no longer holds the job. | The file is anchored by its job, and a claim follows the working directory: a site that released the job has no business holding a claim on it |
 
 ## Resources and leases
 

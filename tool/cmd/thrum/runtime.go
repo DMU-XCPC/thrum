@@ -39,10 +39,28 @@ func newOccupancyCmd() *cobra.Command {
 		Short: "Record that an actor is on a job",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := occupancy.Occupy(layout(), jobID, actor, takeover, time.Now().UTC()); err != nil {
+			l := layout()
+			home, err := resolveJob(l, jobID)
+			if err != nil {
 				return err
 			}
-			fmt.Printf("%s is on %s\n", actor, jobID)
+			// The claim is written where the job is, so that the one site that can
+			// answer for it is the one site that decides. Anywhere else it would be an
+			// opinion, and two sites' opinions are how one job gets two actors.
+			if home.remote == "" {
+				if err := occupancy.Occupy(l, jobID, actor, takeover, time.Now().UTC()); err != nil {
+					return err
+				}
+				fmt.Printf("%s is on %s\n", actor, jobID)
+				return nil
+			}
+			if _, err := claimAt(l, home, daemon.Request{
+				Verb: daemon.VerbOccupy,
+				Args: daemon.Args(map[string]any{"job": jobID, "actor": actor, "takeover": takeover}),
+			}); err != nil {
+				return err
+			}
+			fmt.Printf("%s is on %s at %s\n", actor, jobID, home.remote)
 			return nil
 		},
 	}
@@ -55,15 +73,34 @@ func newOccupancyCmd() *cobra.Command {
 		Short: "Clear the note for a job",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			was, err := occupancy.Vacate(layout(), jobID)
+			l := layout()
+			// A claim is cleared where it is. When the job has moved away from the site
+			// that made it, sweep is what clears it; here, clearing means either this
+			// site or the site that holds the job now.
+			was, err := occupancy.Vacate(l, jobID)
 			if err != nil {
 				return err
 			}
-			if was.Occupant == "" {
-				fmt.Printf("%s was not occupied\n", jobID)
-			} else {
+			if was.Occupant != "" {
 				fmt.Printf("%s is no longer occupied (it was %s)\n", jobID, was.Occupant)
+				return nil
 			}
+			home, err := resolveJob(l, jobID)
+			if err != nil {
+				fmt.Printf("%s was not occupied here\n", jobID)
+				return nil
+			}
+			if home.remote == "" || home.claim.Occupant == "" {
+				fmt.Printf("%s was not occupied\n", jobID)
+				return nil
+			}
+			if _, err := claimAt(l, home, daemon.Request{
+				Verb: daemon.VerbVacate,
+				Args: daemon.Args(map[string]string{"job": jobID}),
+			}); err != nil {
+				return err
+			}
+			fmt.Printf("%s is no longer occupied at %s (it was %s)\n", jobID, home.remote, home.claim.Occupant)
 			return nil
 		},
 	}

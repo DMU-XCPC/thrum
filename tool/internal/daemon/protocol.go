@@ -31,8 +31,12 @@ const (
 	VerbStatus Verb = "status"
 	// VerbRoster is the names this site has seen.
 	VerbRoster Verb = "roster"
-	// VerbAsk answers who is on a job at this site.
-	VerbAsk Verb = "ask"
+	// VerbJob answers two things at once: whether this site holds the job — whether a
+	// working directory here has its branch checked out — and what its claim says. It
+	// is what makes a claim globally consistent without anybody agreeing on anything:
+	// the site that holds the job is the one site whose answer counts, and everyone
+	// asks it.
+	VerbJob Verb = "job"
 	// VerbOccupy and VerbVacate are how the claim at var/occupy/ is written and
 	// cleared. An actor never edits it itself: it goes through the tooling.
 	VerbOccupy Verb = "occupy"

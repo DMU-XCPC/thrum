@@ -17,6 +17,7 @@ import (
 
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 )
 
 // Get returns the note for a job, if there is one.
@@ -87,10 +88,13 @@ func Vacate(l workspace.Layout, job string) (format.Occupy, error) {
 	return existing, nil
 }
 
-// Sweep removes the notes of jobs that have left doc/task/.
+// Sweep removes the notes this site has no business holding.
 //
-// A closed job's note is stale even though the job still exists: the note is about who
-// is working, and nobody is.
+// A note is stale in two ways, and both of them are this site's own business. The job
+// has left doc/task/, so nobody is working it anywhere. Or this site no longer holds the
+// job — its working directory was released or moved elsewhere — and a claim follows the
+// working directory, because the site that holds a job is the only site whose claim
+// means anything.
 func Sweep(l workspace.Layout) ([]string, error) {
 	paths, err := filepath.Glob(filepath.Join(l.Occupy(), "*.yaml"))
 	if err != nil {
@@ -98,11 +102,13 @@ func Sweep(l workspace.Layout) ([]string, error) {
 	}
 	sort.Strings(paths)
 
+	held := heldHere(l)
+
 	var swept []string
 	for _, path := range paths {
 		job := strings.TrimSuffix(filepath.Base(path), ".yaml")
-		if _, err := os.Stat(l.Brief(job)); err == nil {
-			continue // live: somebody may still be on it
+		if _, err := os.Stat(l.Brief(job)); err == nil && held[job] {
+			continue // live, and here: somebody may still be on it
 		}
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return swept, err
@@ -110,4 +116,19 @@ func Sweep(l workspace.Layout) ([]string, error) {
 		swept = append(swept, job)
 	}
 	return swept, nil
+}
+
+// heldHere is the set of jobs a working directory at this site has checked out.
+func heldHere(l workspace.Layout) map[string]bool {
+	out := map[string]bool{}
+	entries, err := worktrees.List(l)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		if job := e.Job(); job != "" {
+			out[job] = true
+		}
+	}
+	return out
 }

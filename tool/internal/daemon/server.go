@@ -52,25 +52,26 @@ func (s *Service) Handle(req Request) Response {
 		}
 		return resp
 
-	case VerbAsk:
+	case VerbJob:
 		var args struct {
 			Job string `json:"job"`
 		}
 		if err := req.DecodeArgs(&args); err != nil {
 			return Fail(err)
 		}
+		if args.Job == "" {
+			return Fail(fmt.Errorf("which job"))
+		}
 		note, ok, err := occupancy.Get(s.L, args.Job)
 		if err != nil {
 			return Fail(err)
 		}
-		if !ok {
-			return Response{OK: true}
+		body := map[string]any{"site": Site(s.L), "holds": HoldsJob(s.L, args.Job)}
+		if ok {
+			body["occupant"] = note.Occupant
+			body["since"] = note.Since
 		}
-		resp, err := Payload(map[string]string{
-			"site":     Site(s.L),
-			"occupant": note.Occupant,
-			"since":    note.Since,
-		})
+		resp, err := Payload(body)
 		if err != nil {
 			return Fail(err)
 		}
