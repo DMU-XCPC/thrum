@@ -10,7 +10,7 @@ An operation belongs here when doing it by hand is unsafe or impossible:
 - **it spans several things at once** — opening a job touches a brief, the code repository and a working directory, and has to leave all three consistent or none;
 - **it computes something a hand gets wrong** — content hashes, tags, git bundles, a file name from a timestamp;
 - **it deletes something a hand would delete too much of** — the guarded clean;
-- **it answers a question no file can** — who is alive, and who is on what.
+- **it answers a question no file can** — who is where, and who is on what, right now — and it carries a message from one actor to another;
 
 Everything else is a file plus a commit, and an actor does it in an editor. That is not an oversight: the workspace has to stay readable and editable without a helper.
 
@@ -22,14 +22,14 @@ The operations above are the interface. This section is about the processes that
 
 ### One site
 
-Everything above is a command-line program and nothing else. No long-running process is required, and that is a constraint rather than an accident: the simplest case — one machine, somebody watching — must work with no infrastructure at all. `var/occupy/` is a note, and "who is working" is answerable by looking around.
+Everything above is a command-line program and nothing else. No long-running process is required, and that is a constraint rather than an accident: the simplest case — one machine, somebody watching — must work with no infrastructure at all. `var/occupy/` is a note, and "who is working" is answerable by looking around. Actors on one machine can reach each other with no daemon either: a mailbox is a directory, and a roster is a file.
 
 ### Several sites
 
 A file cannot do three things, which is why a long-running process exists at all:
 
-- **liveness** — no file can tell a working actor from a dead one, and this document says so more than once;
-- **waking** — bringing an actor back when the job it waits on reaches `done` needs something listening;
+- **questions about the present** — who exists and where, who is on a job, which peer can be reached: no file can answer these, because they are true only now;
+- **carrying a message** — one actor telling another something needs something listening, and the recipient may be on another machine;
 - **exclusion across machines** — the invariants that one working tree gives for free have to be held by something.
 
 So each site may run the same daemon, in the same role. **There is no hub and no privileged node**, and the reasons are structural:
@@ -37,7 +37,7 @@ So each site may run the same daemon, in the same role. **There is no hub and no
 - **The roster is a declaration, not a service.** Which sites exist is `doc/resource/site.yaml`, so it travels by git like every other record, is auditable, and needs no quorum to be readable. It also closes the last machine fact this design was missing: a site's `capacity` is how many jobs that host runs at once.
 - **A resource is leased where it is, never where it is used.** A lease is taken at the resource's home site — the machine that physically holds the thing — so exclusion stays site-local and needs no consensus. This costs no new exposure, because reaching the resource already meant reaching that machine.
 - **Transport is symmetric.** Peers serve their repositories to each other, so an external git remote becomes useful rather than necessary. Payload bundles travel directly between peers.
-- **Liveness is gossip, not a registry.** Each daemon knows its own actors and learns the others' from its peers.
+- **The actor roster is a service, not a declaration.** Each daemon knows the names its own site has seen and learns the rest from its peers, because which actors exist is the tooling's knowledge and never a file. The sites themselves are the other case, and stay a declaration.
 
 ### Why this topology
 
@@ -47,9 +47,9 @@ The state in this design falls into three kinds, and the topology follows from w
 | --- | --- | --- |
 | Permanent decisions and evidence | handoffs, briefs, conventions, manifests | the shared line — git |
 | Site-local runtime | occupancy, this machine's leases, environments, caches | `var/`, tooling-managed |
-| **Cross-site runtime** | *nothing, once resources have home sites* | — |
+| **Cross-site runtime** | a message on its way to an actor, and the answer to *who exists, and where* | the daemons, and the mailboxes under `var/` |
 
-The third row is the one that forces a service in most designs. Pinning each resource to a home site is what empties it, and that is the whole reason this topology can be symmetric.
+Pinning each resource to a home site is what keeps the third row from swallowing the design: exclusion needs no agreement beyond the one machine that physically holds the thing, so nothing has to be agreed globally. What is left is small and does not want agreement either — a message, and the answer to who exists and where — so the daemons carry it and the topology stays symmetric.
 
 Two lessons from prior art are worth recording, because both were learned the hard way elsewhere:
 
@@ -68,12 +68,12 @@ What is borrowed, and from where:
 - **SWIM, memberlist, Serf** — failure detection without a registry.
 - **Fossil and `hg serve`** — a version-control system with a built-in server is a well-trodden path, so `serve` is not an invention.
 - **Content-addressed caches** — anything whose bytes are named by their hash can be fetched from any peer that holds them, which is what `store/` already is.
-- **etcd** — if a central service is ever wanted, this is the primitive set it would need: leases with a TTL, watches for waking, compare-and-swap. It should be used rather than reimplemented.
+- **etcd** — if a central service is ever wanted, this is the primitive set it would need: leases with a TTL, watches for telling one actor that something happened, compare-and-swap. It should be used rather than reimplemented.
 
 ### Degradation
 
 - A peer that is unreachable takes only its own resources out of reach. Work at every other site continues.
-- With the roster unreadable, each site keeps working from the last roster it saw. A control plane that is down must not stop work that needs no control.
+- With the site roster unreadable, each site keeps working from the last one it saw. A control plane that is down must not stop work that needs no control.
 - If exclusion cannot be established for a cross-site resource, the claim is **refused, not assumed** — the same answer this design gives everywhere else.
 
 ## The daemon
@@ -82,26 +82,26 @@ The previous section says why a long-running process exists and why there is no 
 
 ### It is optional, and that is load-bearing
 
-Every operation in this document works with no daemon running: the command-line program does its work locally and returns. The daemon is started when liveness has to be answerable and when peers have to be reached, and the program talks to it when it is there. A site with somebody watching never needs it.
+Every operation in this document works with no daemon running: the command-line program does its work locally and returns. The daemon is started when a question about the present has to be answered, when peers have to be reached, or when an actor has to be sent something, and the program talks to it when it is there. A site with somebody watching never needs it.
 
 ### Lifecycle
 
 - **One per site.** A second refuses to start, by the same atomic discipline the rest of this design uses for occupancy: create a lock under `var/`, and lose if it is already there.
-- **Restarting is safe and loses nothing that matters.** The daemon holds almost no state of its own, because the workspace is the state: it re-reads the roster and the records when it starts, and the leases it honours are files. What a restart does lose is its supervision of running actors — and an actor that dies with its supervisor leaves exactly the stale occupancy this design already expects. Nothing pretends otherwise.
+- **Restarting is safe and loses nothing that matters.** The daemon holds almost no state of its own, because the workspace is the state: it re-reads the roster and the records when it starts, and the leases it honours are files. What a restart does lose is a message that was in flight, and nothing else: the roster and the mailboxes are files under `var/`, so they are still there when it returns. Nothing pretends otherwise.
 - **Starting needs no network.** It reads the roster from the workspace, begins listening, and reports ready; peers are found later, or never.
 
 ### State
 
 | Where | What |
 | --- | --- |
-| In memory | which actors it supervises and which job each is on, the last roster it read, which peers it can currently reach |
-| On disk, under `var/` | `occupy/`, which it writes and clears; its lock; its socket |
+| In memory | the names its site has seen and when each was last heard from, which job each says it is on, the last site roster it read, which peers it can currently reach |
+| On disk, under `var/` | the actor roster; the mailboxes, with the bytes they carry; `occupy/`, which it writes and clears on an actor's behalf; its lock; its socket |
 | Nowhere | job records; payloads except while carrying them; any decision about who should take which job |
 
 ### Interfaces
 
 - **Local**: a socket under `var/`, so the command-line program on the same site can ask and tell. When the socket is not there, the command does the work itself.
-- **Remote**: SSH, with no authentication model of its own. The machines that hold resources are already reachable over SSH — that is what reaching a resource always meant — so the daemon rides on what exists rather than inventing a trust model. A peer runs one command per request, over the same channel it would use to use the resource.
+- **Remote**: SSH, with no authentication model of its own. The machines that hold resources are already reachable over SSH — that is what reaching a resource always meant — so the daemon rides on what exists rather than inventing a trust model. A peer runs one command per request, over the same channel it would use to use the resource; a message is one of those requests, with its attachments behind it.
 - **`serve` is therefore nearly free**: the repositories are files at paths the roster declares, and a peer fetches them over SSH like any other remote. Where the sites already share an external git remote, none of it is needed.
 
 ### What it answers
@@ -109,24 +109,26 @@ Every operation in this document works with no daemon running: the command-line 
 | Question | Asked of | Answer |
 | --- | --- | --- |
 | Take this unit of this resource until then | the resource's home site | written, or refused because it is held |
-| Who is on this job | every peer, in parallel | the site whose actor holds it, if any. Sites are few, and the broadcast doubles as a liveness check |
-| This job reached `done` | broadcast to every peer | each peer wakes any actor of its own that was waiting on it |
-| Who is alive, and on what | this site's own daemon | the registry it holds, which no file can replace |
+| Who is on this job | every peer, in parallel | the site whose actor holds it, if any. Sites are few, and the broadcast doubles as a reachability check |
+| This job reached `done` | the actors who were waiting on it | a message left in each of their mailboxes, at whichever site they are |
+| Who exists, and where | every peer, in parallel | the actor roster each of them keeps |
+| Send this actor a message | the recipient's site | written into its mailbox, or refused because that site cannot be reached |
 
 ### Configuration
 
-It needs two things and no more: the workspace root, which is where it was started, and the name of the site it is on. The second comes from `var/site`, a one-line site-local file, because a site that cannot name itself cannot find its own half of a resource declaration — and every peer it talks to needs to know which roster entry it is. Everything else it reads from the workspace: the roster is a declaration, and git is the directory service. There is no discovery protocol.
+Two things it cannot read from the workspace: the root it was started in, and the name of the site it is on. The second comes from `var/site`, a one-line site-local file, because a site that cannot name itself cannot find its own half of a resource declaration — and every peer it talks to needs to know which roster entry it is. Everything else it reads from the workspace: the site roster is a declaration, where it accepts peers is its own file, and git is the directory service. There is no discovery protocol.
 
 ### Failure
 
 - **A peer is unreachable** — its resources are out of reach; every other site carries on.
 - **The roster cannot be read** — keep working from the last one seen.
 - **A claim cannot be established** — refused, never assumed.
-- **The daemon is absent** — everything local still works, and everything that needed a peer fails loudly.
+- **A message cannot be delivered** — the send is refused and says so. Nothing is queued, because a workspace that assumes delivery loses messages quietly.
+- **The daemon is absent** — everything local still works, including messages between actors on this machine, because a mailbox is a directory; asking about another site, and sending to one, fails loudly.
 
 ### What it must not do
 
-Everything in *What the tooling must not do* below, and two more: it does not hold payloads except while carrying them, and it introduces no rule of its own. It exists so that "nobody is watching" and "several machines" can be true, and for nothing else.
+Everything in *What the tooling must not do* below, and two more: it does not hold a job's payload except while carrying a bundle through — message attachments are its own business and live only under `var/` — and it introduces no rule of its own. It exists so that "nobody is watching" and "several machines" can be true, and for nothing else.
 
 ## Stack
 
@@ -164,12 +166,26 @@ The parts:
 
 ## Actors
 
+An actor is a name: nothing is started, and nothing is bound to a process. Which names exist, and where each was last heard from, is the tooling's knowledge — deliberately not a file in the workspace.
+
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `registry` | Knows who exists, who is alive, and which job each one is on. | Not a file in the workspace: the workspace records names, and this is the running world. |
-| `ask` | Answers *who is on this job right now*. | The file at `var/occupy/` is a claim; this is the answer. |
-| `start` | Starts an actor on a job with two facts — the workspace root and the job id — and with the base environment variables that point `TMPDIR`, `XDG_CACHE_HOME` and `XDG_STATE_HOME` at the workspace. | An actor started without them writes outside the workspace, where nothing collects or reviews what it leaves. |
-| `wake` | Brings an actor back when a job it is waiting on reaches `done`. | The rule is the workspace's — end the stretch as `blocked` — but waking something is not a thing a file can do. |
+| `roster` | Knows which names this site has seen, when each was last heard from, and which job each says it is on. | The workspace records names and claims; this is what the tooling has seen, and it is never used to refuse anything |
+| `ask` | Answers *who is on this job right now*. | The file at `var/occupy/` is a claim; this reports the claim, and whether the site that made it can be reached |
+| `env` | Prints the base environment variables that point a job's tools at the workspace. | An actor that runs a tool without them writes outside the workspace, where nothing collects or reviews what it leaves |
+
+## Messages
+
+Actors reach each other through the tooling rather than through the records: a message is process information, never committed and never validated. The format is in `README.md`; what matters here is that `id` and `subject` are separate, that a reply names what it answers, and that a message may carry bytes.
+
+| Operation | Does | Refuses, or guarantees |
+| --- | --- | --- |
+| `send` | Writes a message into another actor's mailbox, at this site or at the recipient's. | Delivered or refused, never queued: a recipient whose site cannot be reached is an error, not a backlog |
+| `inbox`, `read` | Lists a mailbox, and reads one message. | Process information, not records: never committed, never collected, kept until somebody removes it |
+| `reply` | Sends a message whose `reply_to` names the one being answered. | A message cannot be retracted or edited, because it may already have started something; a correction is another message |
+| `attach` | Carries bytes with a message. | Not an asset: no content addressing, no tag, no manifest, and never `store/`. Anything that has to survive is published as an asset and referred to by name |
+| `purge` | Removes a message and its attachments from a mailbox. | Manual on purpose: nothing collects messages, because nothing can know which of them still matter |
+
 
 ## Jobs
 
@@ -235,10 +251,9 @@ The parts:
 
 ## What the tooling must not do
 
-Merging a job's branch, starting and stopping services, running tests, and deciding which actor takes which job. The first three are the project's business; the last belongs to whoever dispatches work. The workspace never assigns a job to an actor.
+Merging a job's branch, starting and stopping services, running tests, running an actor's harness, and deciding which actor takes which job. The first four are the project's business; the last belongs to whoever dispatches work. The workspace never assigns a job to an actor.
 
 ## Still open
 
 - **How an instantiated workspace receives updates to the template.** Its ignore rules and its templates come from outside itself.
-- **The actor registry's own shape** — what it stores and where it lives. It is deliberately not a file in the workspace.
 - **Whether a stored copy of a peer's state is ever needed** for a site that is offline for a long time, and if so whose.

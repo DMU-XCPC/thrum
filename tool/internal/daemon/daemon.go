@@ -94,25 +94,33 @@ func Run(l workspace.Layout, o Options) error {
 		o.Ready(socket, sshAddress)
 	}
 
+	// It stays until it is asked to stop, because being reachable is the whole of why
+	// it exists: a site that accepted peers a moment ago and then left is a site whose
+	// actors cannot be written to. Stopping it is `daemon stop`, and stopping it is
+	// safe — the workspace is the state, and a message already in a mailbox stays there.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+	return nil
+}
 
-	// A daemon that nobody asked to run should not stay: it is started when an
-	// operation needs something alive, and this is where it decides it is no longer
-	// needed. Nothing is lost by leaving — the workspace is the state — except
-	// supervision, which is exactly what it has none of at this point.
-	tick := time.NewTicker(5 * time.Second)
-	defer tick.Stop()
-	for {
-		select {
-		case <-stop:
-			return nil
-		case <-tick.C:
-			if service.Idle() {
-				return nil
-			}
-		}
+// Stop asks the daemon on this site to leave.
+//
+// It is the only way to end one, because a daemon that exits on its own is a daemon
+// whose peers cannot tell the difference between a quiet site and a stopped one.
+func Stop(l workspace.Layout) error {
+	pid := lockPID(l.DaemonLock())
+	if pid == 0 {
+		return fmt.Errorf("no daemon is running here")
 	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	if err := proc.Signal(sigTerm); err != nil {
+		return fmt.Errorf("the daemon at pid %d did not take the signal: %w", pid, err)
+	}
+	return nil
 }
 
 // listenTarget reads where to accept peers. The forms are the same ones a reach uses,

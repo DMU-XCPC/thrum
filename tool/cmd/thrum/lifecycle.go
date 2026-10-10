@@ -1,25 +1,40 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/commit"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/jobs"
+	"github.com/multiagentworkspace/thrum/tool/internal/resources"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 	"github.com/spf13/cobra"
 )
 
 func newOpenCmd() *cobra.Command {
 	var (
-		jobID      string
-		label      string
-		owner      string
-		dependsOn  string
-		ownedPaths string
-		keep       bool
-		base       string
-		summary    string
+		jobID       string
+		label       string
+		owner       string
+		dependsOn   string
+		ownedPaths  string
+		keep        bool
+		base        string
+		summary     string
+		purpose     string
+		goal        string
+		scope       string
+		criteria    string
+		briefPath   string
+		createLabel bool
+		ephemeral   bool
 	)
 
 	cmd := &cobra.Command{
@@ -30,7 +45,22 @@ func newOpenCmd() *cobra.Command {
 			"resource is a different event with a commit of its own.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := jobs.Open(layout(), jobs.OpenOptions{
+			l := layout()
+			body, err := briefBody(goal, scope, criteria, briefPath)
+			if err != nil {
+				return err
+			}
+
+			// A label that has not been declared is a different event with a commit of
+			// its own, so opening is two commits and says so rather than pretending
+			// otherwise.
+			if createLabel {
+				if err := declareLabel(l, label, purpose, ephemeral); err != nil {
+					return err
+				}
+			}
+
+			id, err := jobs.Open(l, jobs.OpenOptions{
 				Job:        jobID,
 				Owner:      owner,
 				DependsOn:  list(dependsOn),
@@ -39,6 +69,7 @@ func newOpenCmd() *cobra.Command {
 				Label:      label,
 				Base:       base,
 				Summary:    summary,
+				Body:       body,
 			})
 			if err != nil {
 				return err
@@ -55,9 +86,82 @@ func newOpenCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&keep, "keep", false, "protect this job's payload from collection")
 	cmd.Flags().StringVar(&base, "base", "", "the commit to branch from (default: the code repository's default branch)")
 	cmd.Flags().StringVar(&summary, "summary", "", "the commit's summary")
+	cmd.Flags().StringVar(&goal, "goal", "", "what the job is for")
+	cmd.Flags().StringVar(&scope, "scope", "", "what is out of scope")
+	cmd.Flags().StringVar(&criteria, "criteria", "", "how it will be known to be done")
+	cmd.Flags().StringVar(&briefPath, "brief", "", "read the body from this file, or from - for standard input")
+	cmd.Flags().BoolVar(&createLabel, "create-label", false, "declare the label first when it does not exist yet, which is a second commit")
+	cmd.Flags().StringVar(&purpose, "purpose", "", "what the label is for, when declaring it")
+	cmd.Flags().BoolVar(&ephemeral, "ephemeral", false, "whether the label exists for a single use, when declaring it")
 	_ = cmd.MarkFlagRequired("job")
 	_ = cmd.MarkFlagRequired("label")
 	return cmd
+}
+
+// briefBody is what goes under the brief's three headings.
+//
+// A file beats the flags, because a brief that already exists somewhere is the thing
+// being handed over; reading standard input covers a shell that has it in a pipe.
+func briefBody(goal, scope, criteria, from string) ([]byte, error) {
+	if from != "" {
+		var (
+			raw []byte
+			err error
+		)
+		if from == "-" {
+			raw, err = io.ReadAll(os.Stdin)
+		} else {
+			raw, err = os.ReadFile(from)
+		}
+		if err != nil {
+			return nil, err
+		}
+		// The sections are the brief's shape, and a body without them is a body that
+		// validation will reject later. Saying so now, before anything is created, is
+		// the difference between an error and a half-made job.
+		text := string(raw)
+		for _, section := range format.BriefSections {
+			if !strings.Contains(text, "## "+section) {
+				return nil, fmt.Errorf("the brief has no %q section: a brief is its three sections", section)
+			}
+		}
+		return raw, nil
+	}
+	if goal == "" && scope == "" && criteria == "" {
+		return nil, nil
+	}
+	var b strings.Builder
+	for _, section := range []struct{ name, text string }{
+		{"Goal", goal},
+		{"Scope", scope},
+		{"Acceptance criteria", criteria},
+	} {
+		b.WriteString("## " + section.name + "\n\n" + strings.TrimSpace(section.text) + "\n\n")
+	}
+	return []byte(b.String()), nil
+}
+
+// declareLabel is the event that comes before opening, when a label is new.
+func declareLabel(l workspace.Layout, label, purpose string, ephemeral bool) error {
+	if purpose == "" {
+		return fmt.Errorf("declaring %s needs a purpose: one line saying what it is for", label)
+	}
+	eph := ephemeral
+	if err := resources.Declare(l, format.WorktreeKind, resources.Entry{
+		Name:      label,
+		Purpose:   purpose,
+		Ephemeral: &eph,
+	}); err != nil {
+		// Declaring one that is already there is not an error when the reason for
+		// declaring it was "it might not exist".
+		if !strings.Contains(err.Error(), "already declares") {
+			return err
+		}
+		return nil
+	}
+	_, err := commit.Event(l, commit.KindResource, "", "declared "+label,
+		relToRoot(l, l.ResourceKind(format.WorktreeKind)))
+	return err
 }
 
 func newHandoffCmd() *cobra.Command {
@@ -71,6 +175,8 @@ func newHandoffCmd() *cobra.Command {
 		ownedPaths string
 		assets     string
 		summary    string
+		artifacts  []string
+		metrics    []string
 	)
 
 	cmd := &cobra.Command{
@@ -82,6 +188,14 @@ func newHandoffCmd() *cobra.Command {
 			"nothing in between.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			recorded, err := recordedArtifacts(layout(), artifacts)
+			if err != nil {
+				return err
+			}
+			numbers, err := recordedMetrics(metrics)
+			if err != nil {
+				return err
+			}
 			id, err := jobs.WriteHandoff(layout(), jobs.HandoffOptions{
 				Job:        jobID,
 				Agent:      actor,
@@ -93,26 +207,19 @@ func newHandoffCmd() *cobra.Command {
 				OwnedPaths: list(ownedPaths),
 				Assets:     list(assets),
 				Summary:    summary,
+				Artifacts:  recorded,
+				Metrics:    numbers,
 			})
 			if err != nil {
 				return err
 			}
 			fmt.Printf("recorded %s (%s)\n", jobID, short(id))
 
-			l := layout()
 			switch state {
-			case format.HandoffBlocked:
-				// Something is waiting, so something has to be alive to wake it when
-				// the wait ends. This is the only reason a daemon is started without
-				// being asked for, and it leaves once nothing is waiting.
-				if err := startDaemonIfNeeded(l); err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "warning: nothing here can wake %s when %s finishes: %v\n",
-						jobID, strings.Join(list(blockedBy), ", "), err)
-				}
 			case format.HandoffDone:
-				if told := announce(l, jobID, actor); len(told) > 0 {
-					fmt.Printf("told %d site(s) that %s is done: %s\n", len(told), jobID, strings.Join(told, ", "))
-				}
+				// Whoever was waiting on this job can stop waiting, and the tooling
+				// says so: a message, addressed to the actor, delivered or refused.
+				tellWaiters(cmd, jobID)
 			}
 			return nil
 		},
@@ -126,9 +233,72 @@ func newHandoffCmd() *cobra.Command {
 	cmd.Flags().StringVar(&ownedPaths, "owned-paths", "", "paths actually touched")
 	cmd.Flags().StringVar(&assets, "assets", "", "assets published by this stretch, as name@version")
 	cmd.Flags().StringVar(&summary, "summary", "", "the commit's summary")
+	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil,
+		"a file this stretch produced, by path relative to the workspace; its raw sha256 is recorded; repeatable")
+	cmd.Flags().StringArrayVar(&metrics, "metric", nil, "a number worth recording, as key=value; repeatable")
 	_ = cmd.MarkFlagRequired("job")
 	_ = cmd.MarkFlagRequired("status")
 	return cmd
+}
+
+// recordedArtifacts hashes what a stretch produced.
+//
+// It is here rather than left to the hand because it is exactly the kind of thing a
+// hand gets wrong, and because the whole of "collection never makes a record false"
+// rests on the hash being the one of the bytes that were there.
+func recordedArtifacts(l workspace.Layout, paths []string) ([]format.Artifact, error) {
+	out := make([]format.Artifact, 0, len(paths))
+	for _, path := range paths {
+		// An artifact path is relative to the workspace root, and it names where the
+		// bytes are rather than where the command happened to be run.
+		file := path
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(l.Root, file)
+		}
+		sum, size, err := sha256Of(file)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, format.Artifact{Path: filepath.ToSlash(path), SHA256: sum, Bytes: size})
+	}
+	return out, nil
+}
+
+// recordedMetrics reads key=value pairs, keeping a number a number.
+func recordedMetrics(pairs []string) (map[string]any, error) {
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	out := map[string]any{}
+	for _, pair := range pairs {
+		key, value, ok := strings.Cut(pair, "=")
+		if !ok {
+			return nil, fmt.Errorf("--metric takes key=value, got %q", pair)
+		}
+		var number float64
+		if _, err := fmt.Sscanf(value, "%g", &number); err == nil && fmt.Sprint(number) == value {
+			out[key] = number
+			continue
+		}
+		out[key] = value
+	}
+	return out, nil
+}
+
+// sha256Of is the raw hash of a file: not the git object id, which hashes a header
+// first. Anything crossing the workspace boundary speaks in raw hashes.
+func sha256Of(path string) (string, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer f.Close()
+	h := sha256.New()
+	n, err := io.Copy(h, f)
+	if err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(h.Sum(nil)), n, nil
 }
 
 func newCloseCmd() *cobra.Command {
@@ -157,9 +327,7 @@ func newCloseCmd() *cobra.Command {
 			}
 			fmt.Printf("closed %s as %s (%s)\n", jobID, state, short(id))
 			// Whatever was waiting on it can stop waiting.
-			if told := announce(l, jobID, actor); len(told) > 0 {
-				fmt.Printf("told %d site(s) that %s is done: %s\n", len(told), jobID, strings.Join(told, ", "))
-			}
+			tellWaiters(cmd, jobID)
 			return nil
 		},
 	}

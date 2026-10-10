@@ -20,7 +20,7 @@ Development-side files are not part of the design; the two layouts are independe
 
 ## The designed workspace
 
-The rest of this document describes a workspace created from the template, not this repository. Four words are used throughout. An **actor** is a person or an agent acting through the tooling, identified by a stable name rather than by one run of one process; which actors exist, and which of them are alive, is the tooling's knowledge, and this workspace writes down names and nothing else about them. A **job** is one unit of work, and it is what holds everything at runtime: the working directory it occupies, its leases, its payload. An actor holds none of those. A **workspace** is one project's shared thing — the code repository, the asset repository, and the coordination plane — while a **site** is one machine's copy of it, with its own checkouts, working directories, payloads and runtime state. A project may have more than one workspace; a workspace has one or more sites. Records travel between sites through git, and `job/`, `worktree/` and `var/` never leave the machine on their own — the one exception is a payload deliberately bundled for another site.
+The rest of this document describes a workspace created from the template, not this repository. Four words are used throughout. An **actor** is a person or an agent acting through the tooling, identified by a stable name rather than by one run of one process; which actors exist, and where each of them is, is the tooling's knowledge, and this workspace writes down names and nothing else about them. A **job** is one unit of work, and it is what holds everything at runtime: the working directory it occupies, its leases, its payload. An actor holds none of those. A **workspace** is one project's shared thing — the code repository, the asset repository, and the coordination plane — while a **site** is one machine's copy of it, with its own checkouts, working directories, payloads and runtime state. A project may have more than one workspace; a workspace has one or more sites. Records travel between sites through git, and `job/`, `worktree/` and `var/` never leave the machine on their own — the one exception is a payload deliberately bundled for another site.
 
 ### Workspace tree
 
@@ -139,7 +139,7 @@ Everything a job writes stays inside the workspace, because anything outside it 
 
 The working directory holds source and the documents that change with it, and nothing else. That is not tidiness: it is what lets a label be handed to the next job without inheriting someone else's mess.
 
-**How.** Point the tools there before running them. `TMPDIR`, `XDG_CACHE_HOME` and `XDG_STATE_HOME` cover most of it, and a tool with its own variable has one — `PIP_CACHE_DIR`, `npm_config_cache`, `GOCACHE`, `CARGO_TARGET_DIR`, `PYTHONPYCACHEPREFIX`, `GRADLE_USER_HOME` and so on. The base variables belong to the spawning context; the tool-specific ones are set when the tool is invoked. A job that runs a tool without redirecting it has written outside the workspace, and the next actor cannot see what it left behind.
+**How.** Point the tools there before running them. `TMPDIR`, `XDG_CACHE_HOME` and `XDG_STATE_HOME` cover most of it, and a tool with its own variable has one — `PIP_CACHE_DIR`, `npm_config_cache`, `GOCACHE`, `CARGO_TARGET_DIR`, `PYTHONPYCACHEPREFIX`, `GRADLE_USER_HOME` and so on. The base variables belong to whoever starts the work — a shell, a scheduler, the person at the keyboard — and the tooling can print them for a job; the tool-specific ones are set when the tool is invoked. A job that runs a tool without redirecting it has written outside the workspace, and the next actor cannot see what it left behind.
 
 ### Closing a job
 
@@ -173,11 +173,11 @@ Import commits nothing, because it writes nothing versioned. The payload's prese
 
 ### What you decide alone
 
-Everything inside the brief: how to implement it, what to verify, when to hand off, what `next` says, and closing the job once its acceptance criteria hold. You also decide alone to take and release leases, to declare a resource, to declare or retire a topic, to publish or withdraw an asset, to claim a job that has no owner, and to give up a job you own.
+Everything inside the brief: how to implement it, what to verify, when to hand off, what `next` says, and closing the job once its acceptance criteria hold. You also decide alone to take and release leases, to declare a resource, to declare or retire a topic, to publish or withdraw an asset, to claim a job that has no owner, to give up a job you own, and to send another actor a message.
 
 ### When you are unsure
 
-**You do not know whether someone else is touching a file.** `owned_paths` is a declaration, and you can read everyone's. You may touch a path outside your own when no other live brief claims it — live meaning the brief is still in `doc/task/`, since closing both sets the status and moves it out — and you say so in your handoff. When one does claim it, that is not yours to decide: ask that job's owner, and if the owner is an agent, stop and record `blocked` with `blocked_by` naming it. If that job has no owner, there is nobody to ask — you may claim it and decide, which is precisely what an unowned job is for.
+**You do not know whether someone else is touching a file.** `owned_paths` is a declaration, and you can read everyone's. You may touch a path outside your own when no other live brief claims it — live meaning the brief is still in `doc/task/`, since closing both sets the status and moves it out — and you say so in your handoff. When one does claim it, that is not yours to decide: ask that job's owner — which is a message — and if the owner is an agent, stop and record `blocked` with `blocked_by` naming it. If that job has no owner, there is nobody to ask — you may claim it and decide, which is precisely what an unowned job is for.
 
 **Reality does not match the resource registries.** They and the filesystem are two authorities, so drift is expected rather than exceptional.
 
@@ -193,7 +193,7 @@ Abandoning a job is not in that category: it is the owner's decision, because th
 
 ### Outside the workflow
 
-Merging branches, starting and stopping services, running tests, and deciding which actor takes which job. The first three are the project's business and the last belongs to whoever dispatches work; the workspace never assigns a job to an actor.
+Merging branches, starting and stopping services, running tests, running an actor's harness, and deciding which actor takes which job. The first four are the project's business and the last belongs to whoever dispatches work; the workspace never assigns a job to an actor.
 
 Conventions and topics change on a slower loop than jobs do, and an actor edits them like any other document. Resource declarations change on the same slow loop but not by the same hand: only the tooling writes them.
 
@@ -485,11 +485,11 @@ keep: false                      # optional; true protects this job's payload fr
 
 **Whose brief it is.** The body belongs to whoever is on the job: only the actor currently working it changes `## Goal`, `## Scope`, `## Acceptance criteria`, or the sections after them, because that is the understanding that is current. Ownership is a separate matter — an owner may reassign or give up the `owner` field, and does not thereby gain the body. The remaining fields change with the acts this document already assigns: opening, claiming, giving up, and closing.
 
-**Occupancy is not a brief field.** Who is on a job right now changes with every stretch, and the coordination repository is a shared, permanent line: putting that churn in it would make the line something everybody has to synchronise just to know who is busy. So the claim lives where it belongs — site-locally, at `var/occupy/<job-id>.yaml`, with an `occupant` and a `since`, written and cleared by the tooling and read through it — and the two questions get two answers. *Who is on this job right now* comes from the tooling, which started the process and knows whether it is still alive. *Who has held it, and since when* comes from the record: the file for the current stretch, and the handoffs for every finished one, since each of those already names its `agent` and its start and end.
+**Occupancy is not a brief field.** Who is on a job right now changes with every stretch, and the coordination repository is a shared, permanent line: putting that churn in it would make the line something everybody has to synchronise just to know who is busy. So the claim lives where it belongs — site-locally, at `var/occupy/<job-id>.yaml`, with an `occupant` and a `since`, written and cleared by the tooling and read through it — and the two questions get two answers. *Who is on this job right now* comes from the tooling, which knows what the sites can see: the claim, and whether the site that made it is reachable. It is a claim, and this document does not pretend otherwise. *Who has held it, and since when* comes from the record: the file for the current stretch, and the handoffs for every finished one, since each of those already names its `agent` and its start and end.
 
-That also makes the site-local file a note rather than a lock. A name stays behind after its process is gone, and nothing on disk can tell a working actor from a dead one. Taking a job over is therefore a decision rather than a field edit: an actor that finds another name in `occupant` asks the tooling, or the owner — it does not overwrite the file and call the job its own.
+That also makes the site-local file a note rather than a lock. A name stays behind after the actor has stopped, and nothing on disk can tell an actor who is working from one who is not. Taking a job over is therefore a decision rather than a field edit: an actor that finds another name in `occupant` asks the tooling, or the owner — it does not overwrite the file and call the job its own.
 
-`depends_on` is checked before work starts rather than after it fails. A dependency is satisfied only when its brief says `done`, and that brief may be in `doc/task/` or in `doc/archive/`, since finishing moves it. An `abandoned` dependency is not satisfied: the premise it stood for is gone, and only the owner — or whoever claims the job, if it has none — can decide what that means. An actor that finds a dependency unmet does not wait for it — it ends the stretch as `blocked` with `blocked_by` naming the job. Waking it again when that job finishes is the tooling's business, not the workspace's.
+`depends_on` is checked before work starts rather than after it fails. A dependency is satisfied only when its brief says `done`, and that brief may be in `doc/task/` or in `doc/archive/`, since finishing moves it. An `abandoned` dependency is not satisfied: the premise it stood for is gone, and only the owner — or whoever claims the job, if it has none — can decide what that means. An actor that finds a dependency unmet does not wait for it — it ends the stretch as `blocked` with `blocked_by` naming the job. Telling it again when that job finishes is the tooling's business, not the workspace's: the tooling sends a message, and the actor it is addressed to reads it when it next looks.
 
 The brief also decides the fate of the job's payload: the payload becomes collectible once `status` is `done` or `abandoned`, unless `keep` is true. That decision lives here rather than in `job/` because a marker stored inside the payload cannot protect the payload.
 
@@ -791,7 +791,7 @@ The payload paths are workspace-relative, so importing is an unpack, and `tmp/` 
 | `var/cache/` | Regenerable and machine-specific. |
 | `var/config/`, `var/secrets/` | Site-local by definition; that is what they are for. |
 
-The environment variables that point a job's tools at the workspace name paths **inside** it, so they read the same on every site: each site's spawning context supplies them, and there is nothing for a bundle to carry.
+The environment variables that point a job's tools at the workspace name paths **inside** it, so they read the same on every site: whoever starts the work supplies them on each site, and the tooling can print them, and there is nothing for a bundle to carry.
 
 A bundle carries whatever the job wrote — logs and inputs included — so it is exactly as publishable as the payload was, and no more.
 
@@ -803,7 +803,7 @@ A bundle carries whatever the job wrote — logs and inputs included — so it i
 
 `var/` holds what a workspace needs while it runs, and nothing it needs to remember. It carries no decision, so losing it loses coordination rather than knowledge: a lease is taken again, an environment is rebuilt, a cache is recomputed. Most of it is a **materialisation rather than a recipe**: the environment under `env/<label>/` is built from the project's own setup, and it is never portable — a virtualenv embeds absolute paths, a dependency tree may hold native builds, a compiler cache belongs to one architecture — so it is rebuilt per site rather than copied between them. The two entries that are not produced by building anything are `lease/`, which is occupancy, and `config/`, which is the site-local half of a declaration.
 
-**Exactly one thing in it has a mechanism.** A lease is the only way to say *this unit of this resource is mine until then*. It covers exclusion as well as capacity, because an exclusive resource is simply one whose `capacity` is `1`, which is the default. A lease is site-local — it names something on this machine — so what it can constrain is a resource that lives here. That is not a limitation once resources are understood to have a home: a resource reachable from several sites is leased at the site that holds it rather than at the site that wants it, so exclusion stays on the machine the thing is physically on, and nothing central is involved. A lease is taken at the site the resource lives on and nowhere else, so exclusion stays on the machine the thing is physically on — and the site holding it is asked rather than assumed, because only that machine knows. Two sites that both claim a resource are refused rather than picked between: a resource with two homes is one the workspace has nothing to say about.
+**Exclusion is the one thing in it with a mechanism.** A lease is the only way to say *this unit of this resource is mine until then*. It covers exclusion as well as capacity, because an exclusive resource is simply one whose `capacity` is `1`, which is the default. A lease is site-local — it names something on this machine — so what it can constrain is a resource that lives here. That is not a limitation once resources are understood to have a home: a resource reachable from several sites is leased at the site that holds it rather than at the site that wants it, so exclusion stays on the machine the thing is physically on, and nothing central is involved. A lease is taken at the site the resource lives on and nowhere else, so exclusion stays on the machine the thing is physically on — and the site holding it is asked rather than assumed, because only that machine knows. Two sites that both claim a resource are refused rather than picked between: a resource with two homes is one the workspace has nothing to say about.
 
 There is deliberately no separate lock, because every other contention a workspace can have is cheaper to settle without persistent state:
 
@@ -817,19 +817,47 @@ There is deliberately no separate lock, because every other contention a workspa
 
 A lease cannot be replaced that way, and that is the entire reason it exists: whether a GPU is free is a question that has to be answered *before* acting, and the answer has to outlive the command that asked it.
 
-**The rest of `var/` is a naming agreement, not machinery.** Each entry keeps something out of a worktree or out of a job's payload:
+**The rest of `var/` is mostly a naming agreement.** Each entry keeps something out of a worktree or out of a job's payload, or keeps what the tooling needs in order to answer a question about right now:
 
 | Directory | Holds | Rule |
 | --- | --- | --- |
 | `state/<service>/` | The data of a shared stateful dependency | The acquirer resets it; reset the content, never the identity; never collected |
 | `env/<label>/` | A worktree's dependency environment | Keyed by label, not by job: it belongs to the directory, not to whoever is using it |
 | `cache/` | Regenerable caches shared across jobs | Safe to delete at any time |
-| `occupy/<job-id>.yaml` | The actor the tooling is running on a job here | Written and cleared by the tooling, read through it; a claim, not a lock, and stale once the job leaves `doc/task/` |
+| `occupy/<job-id>.yaml` | The actor who says they are on a job here | Written and cleared by the tooling on the actor's behalf, read through it; a claim, not a lock, and stale once the job leaves `doc/task/` |
 | `config/<name>.yaml` | The site-local half of a resource declaration | Never committed; declared by this site, for this site |
 | `site` | Which site this machine is, by name | A one-line site-local fact: a site that cannot name itself cannot find its own half of a declaration |
 | `secrets/` | Machine-local credentials | Prefer outside the workspace; never in git, never in a handoff |
 | `daemon.lock`, `daemon.sock`, `daemon.log` | The daemon's own: the process holding this site, the socket commands reach it on, and what it has said | Written and cleared by the daemon; the log is the only place it explains a refusal |
 | `daemon.yaml` | Where this site accepts peers, if it accepts any | Never committed: how to reach this machine is this machine's own business, and a site that says nothing accepts nobody |
+| `actors.yaml` | The actor roster: which names this site has seen, and when each was last heard from | Written by the tooling, never committed. A name is what an actor is, so this is the whole of what a name has |
+| `msg/<actor>/` | That actor's mailbox: one file per message, with any attachments beside it | Written by the tooling on delivery, never committed, never collected, and never in git |
+
+
+### Messages
+
+An actor is a name, and actors reach each other through the tooling rather than through the records. A message is **process information**: it is not a record, it is never committed, it does not travel by git, and nothing about it is validated. It exists so that one actor can tell another something now — that a job is free, that the job it was waiting on is done, that the file it wanted is ready.
+
+```text
+var/msg/<actor>/<id>.md          # one message
+var/msg/<actor>/<id>/<file>      # its attachments, if any
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `id` | Always | Opaque and unique. It is what a reply and any other tool refers to, and it deliberately carries nothing — the subject is a separate field, because a title is for a person and an identity is for a machine |
+| `from`, `to` | Always | Actor names |
+| `site` | Always | Where the sender was when it sent it |
+| `sent` | Always | RFC 3339 UTC |
+| `subject` | Always | One line, for a person reading a list |
+| `reply_to` | When it answers one | The `id` of the message being answered |
+| `job` | When it is about one | A job id, as a topic marker and nothing more |
+| `attachments[]` | When there are files | Each name and its size; the bytes sit beside the message |
+
+- **It is delivered or refused, and never queued.** The sender's tooling hands the message to the recipient's site; when that site cannot be reached the send fails and says so, because a workspace that assumes delivery is a workspace that loses messages quietly. Once accepted, the message is in the recipient's mailbox and stays there until somebody removes it.
+- **It cannot be retracted or edited, because it may already have started something.** An agent's own tooling may act on a message the moment it arrives, so a correction is another message with `reply_to` set.
+- **Attachments are bytes and nothing more.** They are not assets: no content addressing, no tag, no manifest, and never `store/`. Sending a file this way is the transport, not the record — anything that has to survive is published as an asset and referred to by name.
+- **Nothing parses `subject`, and nothing depends on `id` being readable.** Tools refer to `id`; people read `subject`.
 
 The workspace does not manage processes, evict caches or read secrets. It only says where those things go.
 
@@ -840,7 +868,7 @@ The workspace does not manage processes, evict caches or read secrets. It only s
 The following are left open deliberately rather than guessed at:
 
 - **The set and format of `doc/convention/`** — which conventions exist, how they are written, and how a rule exposes the values a tool has to read. The rules in this document reach an instantiated workspace only through them.
-- **The startup context injected into an agent**, discussed together with the conventions because both are pushed to every agent — and with it the base environment variables that point a job's tools at the workspace rather than at their own temp and cache directories.
+- **The startup context given to an agent** — what an actor is told when it takes up a job, discussed together with the conventions because both are pushed to every agent. The base environment variables are no longer part of this: the tooling prints them for a job, and they name paths inside the workspace.
 - **Coordinating across sites.** One machine needs nothing beyond what is already here: a single working tree, and the retry discipline for its read-modify-write steps. Several machines need the same invariants held across them — that a change to the coordination plane is serialised, that one job is worked by one actor, that a name is used once — and the mechanism this document names for them is that **a resource is leased where it lives**, at the site that holds it, never at the site that wants it. Exclusion therefore stays on the machine the thing is physically on, and nothing central is required. Which sites hold what is settled by asking them — a site's own half, or a resource materialised there — so the answer is local to the machine it is about rather than a registry somewhere; two sites claiming one resource is refused rather than resolved. Payloads are not part of it — they travel as a bundle, which is a transport rather than a coordination problem.
 - **Carrying a job into a different workspace** of the same project, rather than to another site of the same one. That has to carry the records and the branch as well, and the naming guarantees are workspace-scoped, so an incoming job id can collide. Deliberately out of scope.
-- **The tooling** — its operations, the shape they take across machines, and the stack they are built on are all in `TOOLING.md`. An instantiated workspace receives updates to the template from the tooling rather than through git, because the template is what the tooling carries. What remains unspecified here is the actor registry's own shape: that registry is what answers *who is working right now*, which is why it is deliberately not a file in the workspace — the workspace records claims, and the tooling knows the running world.
+- **The tooling** — its operations, the shape they take across machines, and the stack they are built on are all in `TOOLING.md`. An instantiated workspace receives updates to the template from the tooling rather than through git, because the template is what the tooling carries. The actor roster is not part of it either: what the tooling knows about names — who exists, where each was last heard from, and what has been said to whom — is the daemon's, and is deliberately not a file in the workspace, because the workspace records names and claims and nothing else about actors.

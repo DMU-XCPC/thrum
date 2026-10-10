@@ -8,6 +8,8 @@
 package e2e_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,8 +84,10 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 
 	// A registry is written by the tooling, one change per commit, and a project's own
 	// fields survive the tooling touching the file.
-	run(t, "--root", root, "resource", "declare", "--name", "uploader",
+	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "uploader",
 		"--purpose", "Uploader reliability work", "--field", "owned-by=the platform team")
+	// A kind has no default: declaring a GPU must never write a worktree entry.
+	refuses(t, "kind", "--root", root, "resource", "declare", "--name", "guesswork", "--purpose", "Which kind?")
 	run(t, "--root", root, "resource", "declare", "--name", "gpu",
 		"--kind", "gpu", "--purpose", "The only GPU", "--capacity", "1")
 	registry, err := os.ReadFile(filepath.Join(root, "doc", "resource", "worktree.yaml"))
@@ -103,7 +107,23 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 
 	// Open: the brief, the branch, and a labelled working directory, in one commit.
 	run(t, "--root", root, "open", "--job", "add-retry", "--label", "uploader",
-		"--owner", "fixture-actor", "--owned-paths", "src/upload/**")
+		"--owner", "fixture-actor", "--owned-paths", "src/upload/**",
+		"--goal", "Retry the uploader instead of failing it",
+		"--scope", "The uploader only",
+		"--criteria", "A flaky upload succeeds on the second attempt")
+	brief, err := os.ReadFile(filepath.Join(root, "doc", "task", "add-retry", "brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Retry the uploader instead of failing it", "The uploader only", "succeeds on the second attempt"} {
+		if !strings.Contains(string(brief), want) {
+			t.Errorf("a brief should say what the job is for, and it does not say %q:\n%s", want, brief)
+		}
+	}
+	// The opener is on it, because it said who it was.
+	if out := run(t, "--root", root, "actor", "ask", "--job", "add-retry"); !strings.Contains(out, "fixture-actor") {
+		t.Errorf("opening with an owner should claim the job: %s", out)
+	}
 
 	// A label is held by its job, and a second job may not take it.
 	refuses(t, "holds", "--root", root, "worktree", "add", "--label", "uploader", "--job", "another-job")
@@ -228,28 +248,161 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 		t.Errorf("the branch did not arrive:\n%s", out)
 	}
 
-	// With nothing supervised here, the running world is honestly reported as a claim
-	// rather than a live answer.
+	// The claim is still the answer, and the tooling does not pretend it is more.
 	if out := run(t, "--root", root, "actor", "ask", "--job", "add-retry"); !strings.Contains(out, "nobody") && !strings.Contains(out, "claim") {
 		t.Errorf("with nothing running there is no live answer: %s", out)
 	}
-	// A job that has closed is not something to start an actor on.
-	refuses(t, "no longer meant to happen", "--root", root, "start", "--job", "add-retry", "--", "/bin/true")
 
-	// Starting one on a live job needs nothing a person has to know about: the tool
-	// starts what it needs, and it goes away again once there is nothing to do.
-	run(t, "--root", root, "open", "--job", "second-job", "--label", "uploader")
-	out := run(t, "--root", root, "start", "--job", "second-job", "--", "/bin/sh", "-c", "echo worked >> "+filepath.Join(root, "job", "second-job", "out", "log"))
-	if !strings.Contains(out, "started") {
-		t.Errorf("starting an actor said: %s", out)
+	// An actor exists by being named, and the roster says where it was heard from.
+	if out := run(t, "--root", root, "actor", "list"); !strings.Contains(out, "fixture-actor") {
+		t.Errorf("the roster should know the names that have acted:\n%s", out)
 	}
-	waitForFile(t, filepath.Join(root, "job", "second-job", "out", "log"))
-	if out := run(t, "--root", root, "status"); !strings.Contains(out, "running") || !strings.Contains(out, "second-job") {
-		t.Errorf("status should say what this site is running:\n%s", out)
+
+	// A document written by hand still gets committed, and the event is read from where
+	// it lives.
+	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "second-area", "--purpose", "A second area")
+	run(t, "--root", root, "open", "--job", "second-job", "--label", "second-area")
+	topicDir := filepath.Join(root, "doc", "topic", "uploader")
+	if err := os.MkdirAll(topicDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	// And nothing anywhere named a daemon.
-	if out := run(t, "--root", root, "stop", "--job", "second-job"); !strings.Contains(out, "stopped") {
-		t.Errorf("stopping said: %s", out)
+	if err := os.WriteFile(filepath.Join(topicDir, "overview.md"), []byte("# The uploader\n\nIt retries.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// What an actor runs stays inside the workspace, because the tooling can say where
+	// the workspace is.
+	env := run(t, "--root", root, "env", "--job", "second-job")
+	for _, want := range []string{"THRUM_ROOT=" + root, "THRUM_ACTOR=fixture-actor", "TMPDIR=" + filepath.Join(root, "job", "second-job", "tmp")} {
+		if !strings.Contains(env, want) {
+			t.Errorf("env should say %s:\n%s", want, env)
+		}
+	}
+
+	if out := run(t, "--root", root, "commit", "--summary", "added the retry contract",
+		"--", filepath.Join("doc", "topic", "uploader", "overview.md")); !strings.Contains(out, "topic uploader") {
+		t.Errorf("the event should be read from the path: %s", out)
+	}
+	if out := gitOut(t, root, "log", "-1", "--pretty=%s"); !strings.Contains(out, "topic uploader: added the retry contract") {
+		t.Errorf("the commit message should name the event: %s", out)
+	}
+	// One commit is one event, so two documents of different events are refused.
+	refuses(t, "different event", "--root", root, "commit", "--summary", "mixed",
+		"--", filepath.Join("doc", "topic", "uploader", "overview.md"), filepath.Join("doc", "resource", "worktree.yaml"))
+
+	// What a stretch produced is recorded with the hash of the bytes that were there,
+	// because that is what makes a collected artifact a detectable absence.
+	artifact := filepath.Join(root, "job", "second-job", "out", "report.txt")
+	if err := os.WriteFile(artifact, []byte("the result\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(t, "--root", root, "handoff", "--job", "second-job", "--status", "done",
+		"--started", "2026-10-10T02:10:00Z",
+		"--artifact", filepath.Join("job", "second-job", "out", "report.txt"))
+	handoff, err := os.ReadFile(filepath.Join(root, "handoff", "second-job", "2026-10-10T02-10-00Z.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte("the result\n"))
+	if !strings.Contains(string(handoff), hex.EncodeToString(sum[:])) {
+		t.Errorf("the handoff should carry the raw hash of what it names, and says:\n%s", handoff)
+	}
+	if !strings.Contains(string(handoff), "job/second-job/out/report.txt") {
+		t.Errorf("and the path it is relative to the workspace root:\n%s", handoff)
+	}
+
+	// And the job can be closed, which is the end of it.
+	run(t, "--root", root, "close", "--job", "second-job")
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the workspace should validate with everything in it, and said:\n%s", out)
+	}
+}
+
+// Actors reach each other by message, and a mailbox is a directory: on one machine this
+// needs nothing running at all.
+func TestActorsReachEachOther(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "area", "--purpose", "An area")
+	seedCode(t, root)
+	run(t, "--root", root, "open", "--job", "first-job", "--label", "area", "--owner", "claude-sonnet")
+	// A name exists by acting: the owner is written into the brief, but it is this that
+	// makes it a name the tooling has heard from.
+	run(t, "--root", root, "occupancy", "occupy", "--job", "first-job", "--actor", "claude-sonnet")
+
+	// The recipient exists because it has acted, which is the whole of what an actor
+	// does to exist.
+	out := run(t, "--root", root, "send", "--to", "claude-sonnet", "--subject", "the timeout is explained",
+		"--body", "It was the retry budget.", "--job", "first-job")
+	if !strings.Contains(out, "delivered to claude-sonnet at build-01") {
+		t.Errorf("sending said: %s", out)
+	}
+
+	// A name nobody has seen is refused rather than written into a mailbox nobody
+	// reads: the roster is exactly the knowledge that makes the check possible.
+	refuses(t, "no actor named", "--root", root, "send", "--to", "claud-sonnet", "--subject", "typo")
+
+	// The recipient reads it, and the list shows an id and a subject as separate things.
+	inbox := run(t, "--root", root, "inbox", "--actor", "claude-sonnet")
+	if !strings.Contains(inbox, "the timeout is explained") || !strings.Contains(inbox, "m-") {
+		t.Errorf("the inbox should show an id and a subject:\n%s", inbox)
+	}
+	id := ""
+	for _, line := range strings.Split(inbox, "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 && strings.HasPrefix(fields[0], "m-") {
+			id = fields[0]
+			break
+		}
+	}
+	if id == "" {
+		t.Fatalf("no message id in the inbox:\n%s", inbox)
+	}
+
+	// A message carries bytes, and they arrive with it.
+	sample := filepath.Join(t.TempDir(), "sample.csv")
+	if err := os.WriteFile(sample, []byte("a,b\n1,2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(t, "--root", root, "send", "--to", "claude-sonnet", "--subject", "the sample", "--file", sample)
+	second := ""
+	for _, line := range strings.Split(run(t, "--root", root, "inbox", "--actor", "claude-sonnet", "--json"), "\n") {
+		_ = line
+	}
+	list := run(t, "--root", root, "inbox", "--actor", "claude-sonnet")
+	for _, line := range strings.Split(list, "\n") {
+		if fields := strings.Fields(line); len(fields) > 1 && fields[len(fields)-1] == "sample" {
+			second = fields[0]
+		}
+	}
+	if second == "" {
+		t.Fatalf("the second message is not in the inbox:\n%s", list)
+	}
+	outDir := t.TempDir()
+	read := run(t, "--root", root, "read", second, "--actor", "claude-sonnet", "--out", outDir)
+	if !strings.Contains(read, "attachment sample.csv") {
+		t.Errorf("reading should mention its attachment:\n%s", read)
+	}
+	got, err := os.ReadFile(filepath.Join(outDir, "sample.csv"))
+	if err != nil {
+		t.Fatalf("the attachment was not saved: %v", err)
+	}
+	if string(got) != "a,b\n1,2\n" {
+		t.Errorf("the attachment changed: %q", got)
+	}
+
+	// A reply is written by whoever received the message, and read by whoever sent it.
+	run(t, "--root", root, "reply", id, "--actor", "claude-sonnet", "--body", "Thanks.")
+	replies := run(t, "--root", root, "inbox")
+	if !strings.Contains(replies, "re: the timeout is explained") {
+		t.Errorf("the reply should arrive with the subject marked:\n%s", replies)
+	}
+	if !strings.Contains(run(t, "--root", root, "inbox", "--json"), "\"reply_to\"") {
+		t.Errorf("a reply carries the id it answers")
+	}
+
+	// A message cannot be retracted, so removing one is a deliberate local act.
+	run(t, "--root", root, "purge", id, "--actor", "claude-sonnet")
+	if out := run(t, "--root", root, "inbox", "--actor", "claude-sonnet"); strings.Contains(out, id) {
+		t.Errorf("the purged message is still listed:\n%s", out)
 	}
 }
 
@@ -259,7 +412,7 @@ func TestAJobMovesToAnotherSite(t *testing.T) {
 	to := filepath.Join(t.TempDir(), "to")
 
 	run(t, "create", from, "--site", "build-01")
-	run(t, "--root", from, "resource", "declare", "--name", "uploader", "--purpose", "Uploader reliability work")
+	run(t, "--root", from, "resource", "declare", "--kind", "worktree", "--name", "uploader", "--purpose", "Uploader reliability work")
 	seedCode(t, from)
 	run(t, "--root", from, "open", "--job", "carried-work", "--label", "uploader")
 	if err := os.WriteFile(filepath.Join(from, "job", "carried-work", "out", "result.txt"),

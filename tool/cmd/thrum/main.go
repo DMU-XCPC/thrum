@@ -1,5 +1,5 @@
-// Command thrum is the workspace tool: the operations a workspace needs, and the daemon
-// that gives them liveness and peers.
+// Command thrum is the workspace tool: the operations a workspace needs, and the
+// daemon that makes a site reachable.
 //
 // The command surface is not part of the design. What is part of it is that every
 // operation exists and refuses what it must.
@@ -9,14 +9,17 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 	"unicode"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/roster"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
 // The tree the command operates on, and who is running it. Both are ambient: an actor
-// is a stable identity rather than a per-command choice, and a workspace root is
-// usually simply where the command was run.
+// is a stable name rather than a per-command choice, and a workspace root is usually
+// where the command was run — or what whoever started this work said it was.
 var (
 	rootDir string
 	actor   string
@@ -41,34 +44,73 @@ func newRootCmd() *cobra.Command {
 			"question no file can.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// Being a name is being an actor, so the first thing any command does is let
+		// the roster know this name is here. There is no join, no invite, and nothing
+		// to be added to.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			l := workspace.New(rootDir)
+			if _, err := os.Stat(l.Var()); err != nil {
+				return nil // nothing to register with yet
+			}
+			if err := roster.Seen(l, actor, "", now()); err != nil {
+				return err
+			}
+			// A site that says it accepts peers has to have something accepting them,
+			// or a message addressed to an actor here is refused for no good reason.
+			// A command that does not need a daemon does not wait long for one.
+			if err := ensureServing(l); err != nil {
+				fmt.Fprintf(os.Stderr, "thrum: this site accepts peers and no daemon is serving them: %v\n", err)
+			}
+			return nil
+		},
 	}
-	root.PersistentFlags().StringVar(&rootDir, "root", ".", "the workspace root")
+	root.PersistentFlags().StringVar(&rootDir, "root", defaultRoot(), "the workspace root")
 	root.PersistentFlags().StringVar(&actor, "actor", defaultActor(), "who is running this (default: $THRUM_ACTOR, else $USER)")
 
 	root.AddCommand(
 		newCreateCmd(),
 		newVerifyCmd(),
 		newStatusCmd(),
+		newSyncCmd(),
+		newCleanCmd(),
+		newCollectCmd(),
+		// Jobs.
 		newOpenCmd(),
 		newHandoffCmd(),
 		newCloseCmd(),
 		newClaimCmd(),
 		newRelinquishCmd(),
 		newWorktreeCmd(),
-		newStartCmd(),
-		newStopCmd(),
+		newCommitCmd(),
+		// Runtime.
 		newOccupancyCmd(),
 		newResourceCmd(),
 		newLeaseCmd(),
+		// Assets and payloads.
 		newAssetCmd(),
 		newBundleCmd(),
-		newDaemonCmd(),
+		// Actors, and reaching them.
 		newActorCmd(),
-		newSyncCmd(),
-		newCollectCmd(),
-		newCleanCmd(),
+		newEnvCmd(),
+		newSendCmd(),
+		newInboxCmd(),
+		newReadCmd(),
+		newReplyCmd(),
+		newPurgeCmd(),
+		// The daemon is an implementation detail, and these are hidden.
+		newDaemonCmd(),
 	)
 	return root
+}
+
+// defaultRoot is where the workspace is: what the environment says, else where the
+// command was run. An actor started inside a working directory is told where the
+// workspace is, and it should not have to pass it again on every command.
+func defaultRoot() string {
+	if root := os.Getenv("THRUM_ROOT"); root != "" {
+		return root
+	}
+	return "."
 }
 
 func defaultActor() string {
@@ -124,3 +166,6 @@ func list(s string) []string {
 	}
 	return out
 }
+
+// now is the clock, in the one form this workspace writes time in.
+func now() time.Time { return time.Now().UTC() }

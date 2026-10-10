@@ -22,10 +22,15 @@ func Template(l Layout, name string) (front, body []byte, err error) {
 	return front, body, nil
 }
 
-// WriteBrief writes a brief from the workspace's own template, filling only the
-// fields given.
-func WriteBrief(l Layout, b format.Brief) error {
-	front, body, err := Template(l, "brief.md")
+// WriteBrief writes a brief from the workspace's own template, with the body the actor
+// gave it.
+//
+// A brief whose Goal, Scope and Acceptance criteria are empty is a brief that says
+// nothing, so the body is an argument rather than something to be filled in later: an
+// actor that opens a job already knows what it is for, and the design says opening is
+// one commit.
+func WriteBrief(l Layout, b format.Brief, body []byte) error {
+	front, templateBody, err := Template(l, "brief.md")
 	if err != nil {
 		return err
 	}
@@ -33,8 +38,9 @@ func WriteBrief(l Layout, b format.Brief) error {
 	if err := format.Decode(front, &tmpl); err != nil {
 		return fmt.Errorf("doc/template/brief.md: %w", err)
 	}
-	// The template's fields are placeholders; the body, which carries the three
-	// required sections, is kept as it is.
+	if len(body) == 0 {
+		body = templateBody
+	}
 	encoded, err := format.Encode(b)
 	if err != nil {
 		return err

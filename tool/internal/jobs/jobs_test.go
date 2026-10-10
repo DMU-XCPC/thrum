@@ -187,6 +187,35 @@ func TestTheLifeOfAJob(t *testing.T) {
 	}
 }
 
+// A job branches from the project's history. Without any, there is no branch to make,
+// and saying so now beats a failure at the first handoff that mentions ancestors.
+func TestOpenRefusesAnEmptyCodeRepository(t *testing.T) {
+	l, err := workspace.Create(workspace.CreateOptions{
+		Root:  filepath.Join(t.TempDir(), "workspace"),
+		Site:  "demo",
+		Actor: "tester",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := "worktree:\n  - name: uploader\n    purpose: work\n    ephemeral: false\n"
+	if err := os.WriteFile(l.ResourceKind("worktree"), []byte(registry), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = jobs.Open(l, jobs.OpenOptions{Job: "add-retry", Label: "uploader"})
+	if err == nil {
+		t.Fatal("opening a job in a project with no commits should be refused")
+	}
+	if !strings.Contains(err.Error(), "no commits") {
+		t.Errorf("the refusal should say what is missing: %v", err)
+	}
+	// And nothing was left behind by the attempt.
+	if _, err := os.Stat(l.TaskDir("add-retry")); err == nil {
+		t.Error("a refused open left a brief behind")
+	}
+}
+
 func TestOpenRefusesWhatItMust(t *testing.T) {
 	l := fixture(t)
 

@@ -6,6 +6,7 @@ package commit
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
@@ -73,4 +74,88 @@ func Nothing(l workspace.Layout, paths ...string) (bool, error) {
 		return false, err
 	}
 	return strings.TrimSpace(out) == "", nil
+}
+
+// Infer names the coordination event a document belongs to, from where it lives.
+//
+// It exists for the documents an actor writes by hand — a brief's body, a topic, a
+// convention — because the design says those are written in an editor, and every commit
+// still goes through the tooling, which is where the coordination lock lives. Inferring
+// the event from the path is what lets one command commit any of them with the same
+// message form as everything else.
+func Infer(path string) (Kind, string, error) {
+	// The archive is where a retired document goes, and the event that put it there is
+	// a retirement: its subject is the live path, so the message reads as what was
+	// retired rather than where it now sits.
+	if rest, ok := strings.CutPrefix(path, "doc/archive/"); ok {
+		live, err := trimExtension(rest)
+		if err != nil {
+			return "", "", err
+		}
+		return KindRetire, live, nil
+	}
+
+	switch {
+	case strings.HasPrefix(path, "doc/task/"), strings.HasPrefix(path, "doc/archive/task/"):
+		job, err := jobOf(path)
+		if err != nil {
+			return "", "", err
+		}
+		return KindBrief, job, nil
+
+	case strings.HasPrefix(path, "handoff/"):
+		job, err := jobOf(path)
+		if err != nil {
+			return "", "", err
+		}
+		return KindHandoff, job, nil
+
+	case strings.HasPrefix(path, "doc/topic/"):
+		rest := strings.TrimPrefix(path, "doc/topic/")
+		topic, _, _ := strings.Cut(rest, "/")
+		if topic == "" {
+			return "", "", fmt.Errorf("%s is not inside a topic", path)
+		}
+		return KindTopic, topic, nil
+
+	case strings.HasPrefix(path, "doc/convention/"):
+		name := strings.TrimSuffix(filepath.Base(path), ".md")
+		return KindConvention, name, nil
+
+	case strings.HasPrefix(path, "doc/asset/"):
+		rest := strings.TrimPrefix(path, "doc/asset/")
+		parts := strings.Split(rest, "/")
+		if len(parts) < 2 {
+			return "", "", fmt.Errorf("%s is not an asset manifest", path)
+		}
+		version := strings.TrimSuffix(parts[len(parts)-1], ".md")
+		return KindAsset, parts[0] + "@" + version, nil
+
+	case strings.HasPrefix(path, "doc/resource/"):
+		return KindResource, "", nil
+	}
+	return "", "", fmt.Errorf("%s is not a document this can name an event for: say which one it is", path)
+}
+
+// jobOf reads the job id out of a path that has one.
+func jobOf(path string) (string, error) {
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		if part == "task" && i+1 < len(parts) {
+			return parts[i+1], nil
+		}
+		if part == "handoff" && i+1 < len(parts) {
+			return parts[i+1], nil
+		}
+	}
+	return "", fmt.Errorf("%s does not name a job", path)
+}
+
+// trimExtension removes a document's extension, for a subject that reads the way a
+// person says it.
+func trimExtension(path string) (string, error) {
+	if filepath.Ext(path) == "" {
+		return "", fmt.Errorf("%s is not a document", path)
+	}
+	return strings.TrimSuffix(path, filepath.Ext(path)), nil
 }

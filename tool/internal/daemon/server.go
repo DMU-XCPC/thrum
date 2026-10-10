@@ -12,32 +12,27 @@ import (
 
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/leases"
+	"github.com/multiagentworkspace/thrum/tool/internal/messages"
 	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
+	"github.com/multiagentworkspace/thrum/tool/internal/roster"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
-// Handler answers one request. The socket and the forced command share it, so that a
-// peer and a local command do exactly the same thing.
-type Handler func(Request) Response
-
-// Service is the daemon's state: the registry it holds, the roster it read, and the
-// workspace it serves.
+// Service is the daemon's state: the workspace it serves, the site it is, and when it
+// started. Almost nothing is held in memory, because almost everything is a file.
 type Service struct {
-	L        workspace.Layout
-	Registry *Registry
-	Peers    *Peers
-	Started  time.Time
+	L       workspace.Layout
+	Peers   *Peers
+	Started time.Time
 }
 
 // NewService builds a service over a workspace.
 func NewService(l workspace.Layout) *Service {
-	return &Service{
-		L:        l,
-		Registry: NewRegistry(),
-		Peers:    NewPeers(l),
-		Started:  time.Now().UTC(),
-	}
+	return &Service{L: l, Peers: NewPeers(l), Started: time.Now().UTC()}
 }
+
+// Site is the name this machine's workspace goes by.
+func Site(l workspace.Layout) string { return roster.Site(l) }
 
 // Handle is the whole surface. Each verb is one operation from the design, and the
 // daemon answers it the same way whoever asks.
@@ -45,6 +40,42 @@ func (s *Service) Handle(req Request) Response {
 	switch req.Verb {
 	case VerbStatus:
 		return s.status()
+
+	case VerbRoster:
+		entries, err := roster.Local(s.L)
+		if err != nil {
+			return Fail(err)
+		}
+		resp, err := Payload(map[string]any{"site": Site(s.L), "actors": entries})
+		if err != nil {
+			return Fail(err)
+		}
+		return resp
+
+	case VerbAsk:
+		var args struct {
+			Job string `json:"job"`
+		}
+		if err := req.DecodeArgs(&args); err != nil {
+			return Fail(err)
+		}
+		note, ok, err := occupancy.Get(s.L, args.Job)
+		if err != nil {
+			return Fail(err)
+		}
+		if !ok {
+			return Response{OK: true}
+		}
+		resp, err := Payload(map[string]string{
+			"site":     Site(s.L),
+			"occupant": note.Occupant,
+			"since":    note.Since,
+		})
+		if err != nil {
+			return Fail(err)
+		}
+		return resp
+
 	case VerbOccupy:
 		var args struct {
 			Job      string `json:"job"`
@@ -76,105 +107,25 @@ func (s *Service) Handle(req Request) Response {
 		}
 		return resp
 
-	case VerbStart:
+	case VerbHolds:
 		var args struct {
-			Job     string   `json:"job"`
-			Actor   string   `json:"actor"`
-			Command []string `json:"command"`
+			Resource string `json:"resource"`
 		}
 		if err := req.DecodeArgs(&args); err != nil {
 			return Fail(err)
 		}
-		actor, err := s.Registry.Start(s.L, args.Actor, args.Job, args.Command)
-		if err != nil {
-			return Fail(err)
-		}
-		resp, err := Payload(actor)
-		if err != nil {
-			return Fail(err)
-		}
-		return resp
-
-	case VerbStop:
-		var args struct {
-			Job string `json:"job"`
-		}
-		if err := req.DecodeArgs(&args); err != nil {
-			return Fail(err)
-		}
-		return Fail(s.Registry.Stop(s.L, args.Job))
-
-	case VerbNotify, VerbAnnounce:
-		var args struct {
-			Job   string `json:"job"`
-			Actor string `json:"actor"`
-		}
-		if err := req.DecodeArgs(&args); err != nil {
-			return Fail(err)
-		}
-		woken, failures, err := s.Registry.Wake(s.L, args.Job, args.Actor)
-		if err != nil {
-			return Fail(err)
-		}
-		// Every other site wakes its own waiters, and exactly one site does the
-		// telling: the one where the job finished. A peer that hears it wakes its own
-		// and stops, because a broadcast that re-broadcasts never ends.
-		var told []string
-		if req.Verb == VerbAnnounce {
-			forwarded, _ := s.Peers.Broadcast(Request{
-				Verb: VerbNotify,
-				Args: Args(map[string]string{"job": args.Job, "actor": args.Actor}),
-			})
-			told = forwarded
-		}
-		resp, err := Payload(map[string]any{"woken": woken, "told": told, "failed": failures})
-		if err != nil {
-			return Fail(err)
-		}
-		return resp
-
-	case VerbAsk:
-		var args struct {
-			Job string `json:"job"`
-		}
-		if err := req.DecodeArgs(&args); err != nil {
-			return Fail(err)
-		}
-		note, ok, err := occupancy.Get(s.L, args.Job)
-		if err != nil {
-			return Fail(err)
-		}
-		if !ok {
-			return Response{OK: true}
-		}
-		resp, err := Payload(map[string]string{
-			"site":     Site(s.L),
-			"occupant": note.Occupant,
-			"since":    note.Since,
-		})
+		resp, err := Payload(map[string]bool{"holds": s.Peers.Holds(args.Resource)})
 		if err != nil {
 			return Fail(err)
 		}
 		return resp
 
 	case VerbLeaseTake:
-		var args struct {
-			Resource string `json:"resource"`
-			Unit     string `json:"unit"`
-			Occupant string `json:"occupant"`
-			Job      string `json:"job"`
-			TTL      int    `json:"ttl_seconds"`
-		}
+		var args leaseArgs
 		if err := req.DecodeArgs(&args); err != nil {
 			return Fail(err)
 		}
-		lease, err := leases.Take(s.L, leases.Request{
-			Resource: args.Resource,
-			Unit:     args.Unit,
-			Occupant: args.Occupant,
-			Job:      args.Job,
-			TTL:      time.Duration(args.TTL) * time.Second,
-		}, time.Now().UTC())
+		lease, err := leases.Take(s.L, args.request(), time.Now().UTC())
 		if err != nil {
 			return Fail(err)
 		}
@@ -185,23 +136,11 @@ func (s *Service) Handle(req Request) Response {
 		return resp
 
 	case VerbLeaseRenew:
-		var args struct {
-			Resource string `json:"resource"`
-			Unit     string `json:"unit"`
-			Occupant string `json:"occupant"`
-			Job      string `json:"job"`
-			TTL      int    `json:"ttl_seconds"`
-		}
+		var args leaseArgs
 		if err := req.DecodeArgs(&args); err != nil {
 			return Fail(err)
 		}
-		lease, err := leases.Renew(s.L, leases.Request{
-			Resource: args.Resource,
-			Unit:     args.Unit,
-			Occupant: args.Occupant,
-			Job:      args.Job,
-			TTL:      time.Duration(args.TTL) * time.Second,
-		}, time.Now().UTC())
+		lease, err := leases.Renew(s.L, args.request(), time.Now().UTC())
 		if err != nil {
 			return Fail(err)
 		}
@@ -222,48 +161,101 @@ func (s *Service) Handle(req Request) Response {
 		}
 		return Fail(leases.Release(s.L, args.Resource, args.Unit, args.Occupant))
 
-	case VerbHolds:
-		var args struct {
-			Resource string `json:"resource"`
-		}
-		if err := req.DecodeArgs(&args); err != nil {
-			return Fail(err)
-		}
-		resp, err := Payload(map[string]bool{"holds": s.Peers.Holds(args.Resource)})
-		if err != nil {
-			return Fail(err)
-		}
-		return resp
-
-	case VerbPeers:
-		resp, err := Payload(map[string]any{"peers": s.Peers.Report()})
-		if err != nil {
-			return Fail(err)
-		}
-		return resp
+	case VerbDeliver:
+		return s.deliver(req)
 	}
 	return Fail(fmt.Errorf("unknown verb %q", req.Verb))
 }
 
-// OccupantNote is one site-local note, as the status verb reports it.
-type OccupantNote struct {
-	Job      string `json:"job"`
+// leaseArgs is one shape for the three lease verbs, because they differ only in what
+// they do with it.
+type leaseArgs struct {
+	Resource string `json:"resource"`
+	Unit     string `json:"unit"`
 	Occupant string `json:"occupant"`
-	Since    string `json:"since"`
+	Job      string `json:"job"`
+	TTL      int    `json:"ttl_seconds"`
 }
 
-// StatusData is what the daemon knows without asking anybody.
+func (a leaseArgs) request() leases.Request {
+	return leases.Request{
+		Resource: a.Resource,
+		Unit:     a.Unit,
+		Occupant: a.Occupant,
+		Job:      a.Job,
+		TTL:      time.Duration(a.TTL) * time.Second,
+	}
+}
+
+// deliver takes a message for an actor here, with whatever travelled with it.
 //
-// Nothing here is a question about another machine. Asking a peer for its status must
-// not make that peer ask back, or two sites that answer each other's questions ring
-// forever; who is reachable is the peers verb's business, and it is asked once.
+// It is the one thing a daemon is needed for that a single machine does not need: a
+// mailbox is a directory, so only a message from somewhere else needs something
+// listening.
+func (s *Service) deliver(req Request) Response {
+	var args struct {
+		Message     json.RawMessage `json:"message"`
+		Body        string          `json:"body"`
+		Attachments []struct {
+			Name string `json:"name"`
+			Size int64  `json:"size"`
+		} `json:"attachments"`
+	}
+	if err := req.DecodeArgs(&args); err != nil {
+		return Fail(err)
+	}
+	var m messages.Message
+	if err := json.Unmarshal(args.Message, &m); err != nil {
+		return Fail(fmt.Errorf("the message does not decode: %w", err))
+	}
+
+	// The bytes arrive in the order the message names them, and the sizes are what the
+	// sender said, so the split is exact.
+	files := map[string][]byte{}
+	offset := 0
+	for _, a := range args.Attachments {
+		end := offset + int(a.Size)
+		if end > len(req.Files) {
+			return Fail(fmt.Errorf("%s was announced as %d bytes and fewer arrived", a.Name, a.Size))
+		}
+		files[a.Name] = req.Files[offset:end]
+		offset = end
+	}
+	if offset != len(req.Files) {
+		return Fail(fmt.Errorf("%d bytes arrived that no attachment named", len(req.Files)-offset))
+	}
+
+	if err := messages.Deliver(s.L, m, args.Body, files); err != nil {
+		return Fail(err)
+	}
+	// An actor that has been written to exists: being sent something is being named.
+	if err := roster.Seen(s.L, m.To, m.Job, time.Now().UTC()); err != nil {
+		return Fail(err)
+	}
+	resp, err := Payload(map[string]string{"delivered": m.ID, "to": m.To})
+	if err != nil {
+		return Fail(err)
+	}
+	return resp
+}
+
+// StatusData is what this site is and what it holds. Nothing in it is a question about
+// another machine: asking a peer for its status must not make that peer ask back.
 type StatusData struct {
 	Site   string         `json:"site"`
 	Root   string         `json:"root"`
 	Uptime string         `json:"uptime"`
-	Actors []Actor        `json:"actors"`
 	Held   []format.Lease `json:"held"`
 	Occupy []OccupantNote `json:"occupancy"`
+	Actors []roster.Entry `json:"actors"`
+	Peers  []PeerReport   `json:"peers,omitempty"`
+}
+
+// OccupantNote is one site-local claim, as the status verb reports it.
+type OccupantNote struct {
+	Job      string `json:"job"`
+	Occupant string `json:"occupant"`
+	Since    string `json:"since"`
 }
 
 func (s *Service) status() Response {
@@ -271,11 +263,12 @@ func (s *Service) status() Response {
 		Site:   Site(s.L),
 		Root:   s.L.Root,
 		Uptime: time.Since(s.Started).Round(time.Second).String(),
-		Actors: s.Registry.Actors(),
 	}
-
 	if held, err := leases.Held(s.L); err == nil {
 		data.Held = held
+	}
+	if entries, err := roster.Local(s.L); err == nil {
+		data.Actors = entries
 	}
 	paths, _ := filepath.Glob(filepath.Join(s.L.Occupy(), "*.yaml"))
 	for _, path := range paths {
@@ -302,53 +295,7 @@ func (s *Service) status() Response {
 	return resp
 }
 
-// Idle reports whether this site has nothing left that needs something alive.
-//
-// A daemon exists for two reasons: to supervise an actor, and to act later on behalf of
-// a job that is waiting. When it has neither, it has no reason to exist, and a daemon
-// nobody asked to run is worse than no daemon at all.
-//
-// The grace period covers the one race that matters: a daemon started in order to serve
-// a request that has not arrived yet must not decide it is idle and leave.
-func (s *Service) Idle() bool {
-	if time.Since(s.Started) < 10*time.Second {
-		return false
-	}
-	if s.Registry.AnyAlive() {
-		return false
-	}
-	jobs, err := liveJobs(s.L)
-	if err != nil {
-		return false // unsure is not idle
-	}
-	for _, job := range jobs {
-		if blocked(s.L, job) {
-			return false // something is waiting, and only this can wake it
-		}
-	}
-	return true
-}
-
-// blocked reports whether a job's latest handoff says it is waiting on another.
-func blocked(l workspace.Layout, job string) bool {
-	paths, _ := filepath.Glob(filepath.Join(l.HandoffDir(job), "*.md"))
-	if len(paths) == 0 {
-		return false
-	}
-	sort.Strings(paths)
-	front, _, err := format.LoadDocument(paths[len(paths)-1])
-	if err != nil {
-		return false
-	}
-	var h format.Handoff
-	if err := format.Decode(front, &h); err != nil {
-		return false
-	}
-	return h.Status == format.HandoffBlocked && len(h.BlockedBy) > 0
-}
-
-// Serve answers connections on a listener until it is closed. The socket and the SSH
-// server both come through here, so both speak the same protocol.
+// Serve answers connections on a listener until it is closed.
 func Serve(h Handler, ln net.Listener) error {
 	for {
 		conn, err := ln.Accept()
@@ -357,12 +304,12 @@ func Serve(h Handler, ln net.Listener) error {
 		}
 		go func() {
 			defer conn.Close()
-			var req Request
-			if err := json.NewDecoder(conn).Decode(&req); err != nil {
-				_ = json.NewEncoder(conn).Encode(Fail(err))
+			req, err := ReadRequest(conn)
+			if err != nil {
+				_ = Reply(conn, Fail(err))
 				return
 			}
-			_ = json.NewEncoder(conn).Encode(h(req))
+			_ = Reply(conn, h(req))
 		}()
 	}
 }

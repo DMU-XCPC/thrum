@@ -1,12 +1,19 @@
 // Package daemon is the one long-running process a site may run.
 //
-// It is optional: every operation works with no daemon running, because the
-// command-line program does its work locally and returns. The daemon exists for the
-// three things a file cannot do — being alive, waking something, and holding an
-// invariant across machines — and it adds no rule of its own.
+// It is the site's endpoint, and it is optional: everything a single machine needs
+// works with no daemon at all, because the workspace is files and the command-line
+// program writes them itself. What a daemon adds is being *reachable* — answering a
+// peer's question, holding a lease another site asked for, and taking delivery of a
+// message addressed to an actor here.
+//
+// It adds no rule of its own. An actor is a name, and nothing here starts or supervises
+// anything: the commands that talk to it say what a person is doing, and never name it.
 package daemon
 
 import (
+	"bufio"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,41 +27,37 @@ import (
 type Verb string
 
 const (
-	// VerbStatus reports what this site knows: its actors, its peers, its occupancy.
+	// VerbStatus is what this site is, and what it holds.
 	VerbStatus Verb = "status"
-	// VerbOccupy and VerbVacate are how an actor touches the site-local note: it goes
-	// through here rather than editing the file, because the note describes a running
-	// world and this is what runs it.
-	VerbOccupy Verb = "occupy"
-	VerbVacate Verb = "vacate"
-	// VerbStart and VerbStop run an actor on a job.
-	VerbStart Verb = "start"
-	VerbStop  Verb = "stop"
-	// VerbAnnounce and VerbNotify are a job reaching done. Announce is what the site
-	// where it happened says, and it is the only thing that fans out; Notify is what a
-	// peer hears, and it wakes that peer's own waiters and stops there. One hop is all
-	// the design asks for, and a broadcast that re-broadcasts never ends.
-	VerbAnnounce Verb = "announce"
-	VerbNotify   Verb = "notify"
+	// VerbRoster is the names this site has seen.
+	VerbRoster Verb = "roster"
 	// VerbAsk answers who is on a job at this site.
 	VerbAsk Verb = "ask"
-	// VerbLease takes or releases a unit at the site the resource lives on.
-	VerbLeaseTake    Verb = "lease.take"
-	VerbLeaseRenew   Verb = "lease.renew"
-	VerbLeaseRelease Verb = "lease.release"
-	// VerbPeers reports the roster and which peers are reachable.
-	VerbPeers Verb = "peers"
+	// VerbOccupy and VerbVacate are how the claim at var/occupy/ is written and
+	// cleared. An actor never edits it itself: it goes through the tooling.
+	VerbOccupy Verb = "occupy"
+	VerbVacate Verb = "vacate"
 	// VerbHolds asks a site whether it is where a resource lives, which is the only
 	// question that can settle where a lease may be taken.
 	VerbHolds Verb = "holds"
+	// VerbLeaseTake, VerbLeaseRenew and VerbLeaseRelease are taken at the resource's
+	// home site, never at the site that wants it.
+	VerbLeaseTake    Verb = "lease.take"
+	VerbLeaseRenew   Verb = "lease.renew"
+	VerbLeaseRelease Verb = "lease.release"
+	// VerbDeliver hands a message, with its attachments, to the site of the actor it
+	// is addressed to.
+	VerbDeliver Verb = "msg.deliver"
 	// VerbExec is the forced command a peer runs: the same JSON, in and out.
 	VerbExec Verb = "exec"
 )
 
-// Request is one call. Args is the verb's own structure, encoded.
+// Request is one call. Args is the verb's own structure, encoded, and Files are the
+// attachment bytes when there are any.
 type Request struct {
-	Verb Verb            `json:"verb"`
-	Args json.RawMessage `json:"args,omitempty"`
+	Verb  Verb            `json:"verb"`
+	Args  json.RawMessage `json:"args,omitempty"`
+	Files []byte          `json:"files,omitempty"`
 }
 
 // Response is one answer. Data is the verb's own structure, encoded.
@@ -98,13 +101,49 @@ func Args(v any) json.RawMessage {
 	return data
 }
 
-// Call sends one request over a connection and reads the answer.
+// Handler answers one request. The socket and the forced command share it, so that a
+// peer and a local command do exactly the same thing.
+type Handler func(Request) Response
+
+// Call sends one request and reads the answer.
+//
+// The framing is a JSON line, then the attachments as raw bytes, then a JSON line back.
+// It is deliberately not base64: an attachment is a file, and a file that has been
+// through an encoder is a file that has to fit in memory twice.
 func Call(conn net.Conn, req Request) (Response, error) {
-	if err := json.NewEncoder(conn).Encode(req); err != nil {
+	if err := write(conn, req); err != nil {
+		return Response{}, err
+	}
+	return read(conn)
+}
+
+// write sends one request, with its attachment bytes behind the JSON.
+func write(w io.Writer, req Request) error {
+	head := Request{Verb: req.Verb, Args: req.Args}
+	line, err := json.Marshal(head)
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(append(line, '\n')); err != nil {
+		return err
+	}
+	if len(req.Files) > 0 {
+		if _, err := w.Write(req.Files); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// read reads one answer.
+func read(r io.Reader) (Response, error) {
+	buffered := bufio.NewReader(r)
+	line, err := buffered.ReadBytes('\n')
+	if err != nil && len(line) == 0 {
 		return Response{}, err
 	}
 	var resp Response
-	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+	if err := json.Unmarshal(line, &resp); err != nil {
 		return Response{}, err
 	}
 	if !resp.OK {
@@ -113,9 +152,79 @@ func Call(conn net.Conn, req Request) (Response, error) {
 	return resp, nil
 }
 
-// Local sends one request to the daemon on this site, if there is one. A missing
-// socket is not an error: it means there is no daemon, and the caller does the work
-// itself.
+// ReadRequest reads one request, and its attachment bytes.
+//
+// The sizes are in the arguments, so the bytes are read exactly and the connection is
+// left where the reply goes. A reader that buffered ahead would swallow them, which is
+// why this reads a line rather than decoding a stream.
+func ReadRequest(r io.Reader) (Request, error) {
+	buffered := bufio.NewReader(r)
+	line, err := buffered.ReadBytes('\n')
+	if err != nil && len(line) == 0 {
+		return Request{}, err
+	}
+	var req Request
+	if err := json.Unmarshal(line, &req); err != nil {
+		return Request{}, err
+	}
+
+	size, err := attachmentBytes(req.Args)
+	if err != nil {
+		return Request{}, err
+	}
+	if size > 0 {
+		req.Files = make([]byte, size)
+		if _, err := io.ReadFull(buffered, req.Files); err != nil {
+			return Request{}, err
+		}
+	}
+	return req, nil
+}
+
+// Reply writes one answer.
+func Reply(w io.Writer, resp Response) error {
+	return json.NewEncoder(w).Encode(resp)
+}
+
+// attachmentBytes is how many bytes follow the header, which the receiving side learns
+// from the arguments rather than from a length prefix of its own.
+func attachmentBytes(args json.RawMessage) (int, error) {
+	if len(args) == 0 {
+		return 0, nil
+	}
+	var probe struct {
+		Attachments []struct {
+			Name string `json:"name"`
+			Size int64  `json:"size"`
+		} `json:"attachments"`
+	}
+	if err := json.Unmarshal(args, &probe); err != nil {
+		return 0, nil // a verb with no attachments at all
+	}
+	total := 0
+	for _, a := range probe.Attachments {
+		if a.Size < 0 {
+			return 0, fmt.Errorf("an attachment cannot be a negative size")
+		}
+		total += int(a.Size)
+	}
+	return total, nil
+}
+
+// DeliverOptions is what handing a message to a site needs.
+type DeliverOptions struct {
+	Message     json.RawMessage `json:"message"`
+	Attachments []struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+	} `json:"attachments,omitempty"`
+}
+
+var _ = base64.StdEncoding
+var _ = binary.BigEndian
+
+// Local sends one request to the daemon on this site, if there is one. A missing socket
+// is not an error: it means this site runs no daemon, and most operations do not care.
 func Local(l workspace.Layout, req Request) (Response, bool, error) {
 	conn, err := net.DialTimeout("unix", l.DaemonSocket(), time.Second)
 	if err != nil {
@@ -130,9 +239,9 @@ func Local(l workspace.Layout, req Request) (Response, bool, error) {
 // runs, whether through this daemon's own SSH server or through a system sshd whose
 // authorized_keys names it.
 func Exec(h Handler, in io.Reader, out io.Writer) error {
-	var req Request
-	if err := json.NewDecoder(in).Decode(&req); err != nil {
-		return json.NewEncoder(out).Encode(Fail(err))
+	req, err := ReadRequest(in)
+	if err != nil {
+		return Reply(out, Fail(err))
 	}
-	return json.NewEncoder(out).Encode(h(req))
+	return Reply(out, h(req))
 }

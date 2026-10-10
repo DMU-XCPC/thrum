@@ -168,7 +168,7 @@ func newResourceCmd() *cobra.Command {
 			return nil
 		},
 	}
-	declare.Flags().StringVar(&kind, "kind", format.WorktreeKind, "the kind of resource")
+	declare.Flags().StringVar(&kind, "kind", "", "the kind of resource: worktree, or a kind the project adds (required)")
 	declare.Flags().StringVar(&name, "name", "", "the resource's name (required)")
 	declare.Flags().StringVar(&purpose, "purpose", "", "what it is for (required)")
 	declare.Flags().IntVar(&capacity, "capacity", 0, "how many holders at once; omitted means one, which means exclusive")
@@ -177,6 +177,7 @@ func newResourceCmd() *cobra.Command {
 	declare.Flags().StringVar(&summary, "summary", "", "the commit's summary")
 	_ = declare.MarkFlagRequired("name")
 	_ = declare.MarkFlagRequired("purpose")
+	_ = declare.MarkFlagRequired("kind")
 
 	remove := &cobra.Command{
 		Use:   "remove",
@@ -198,10 +199,11 @@ func newResourceCmd() *cobra.Command {
 			return nil
 		},
 	}
-	remove.Flags().StringVar(&kind, "kind", format.WorktreeKind, "the kind of resource")
+	remove.Flags().StringVar(&kind, "kind", "", "the kind of resource (required)")
 	remove.Flags().StringVar(&name, "name", "", "the resource's name (required)")
 	remove.Flags().StringVar(&summary, "summary", "", "the commit's summary")
 	_ = remove.MarkFlagRequired("name")
+	_ = remove.MarkFlagRequired("kind")
 
 	listCmd := &cobra.Command{
 		Use:   "list",

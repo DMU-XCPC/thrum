@@ -86,6 +86,16 @@ func (l Layout) DaemonSocket() string { return filepath.Join(l.Var(), "daemon.so
 func (l Layout) DaemonLock() string   { return filepath.Join(l.Var(), "daemon.lock") }
 func (l Layout) DaemonLog() string    { return filepath.Join(l.Var(), "daemon.log") }
 
+// ActorRoster is what the tooling knows about names at this site: which exist, and when
+// each was last heard from. It is never committed and never leaves the machine.
+func (l Layout) ActorRoster() string { return filepath.Join(l.Var(), "actors.yaml") }
+
+// Mailboxes is where an actor's messages are delivered, one file per message.
+func (l Layout) Mailboxes() string { return filepath.Join(l.Var(), "msg") }
+
+// Mailbox is one actor's mailbox at this site.
+func (l Layout) Mailbox(actor string) string { return filepath.Join(l.Mailboxes(), actor) }
+
 // DaemonConfig is where this site says how its daemon should behave — above all, where
 // it accepts peers. It is site-local and never committed, like everything else that
 // says how to reach this machine.

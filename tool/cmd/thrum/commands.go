@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/status"
 	"github.com/multiagentworkspace/thrum/tool/internal/validate"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
@@ -65,39 +64,30 @@ func newVerifyCmd() *cobra.Command {
 	}
 }
 
-// printRunning is the running world: what this site started and still supervises, and
-// which of the sites the roster declares answer right now. Reachability is a question
-// about the present and is never cached.
-func printRunning(cmd *cobra.Command, l workspace.Layout) {
+// printActors is what the tooling knows about names, and who answers: the roster, and
+// which sites this one can reach right now. Reachability is a question about the
+// present and is never cached.
+func printActors(cmd *cobra.Command, l workspace.Layout) {
 	out := cmd.OutOrStdout()
+	entries, reports := rosterEverywhere(l)
 
-	fmt.Fprintln(out, "running")
-	resp, running, err := askDaemon(l, daemon.Request{Verb: daemon.VerbStatus})
-	switch {
-	case err != nil || !running:
-		fmt.Fprintln(out, "  (nothing here is supervised)")
-	default:
-		var data daemon.StatusData
-		if err := decode(resp, &data); err == nil {
-			if len(data.Actors) == 0 {
-				fmt.Fprintln(out, "  (nothing)")
-			}
-			for _, a := range data.Actors {
-				state := "alive"
-				if !a.Alive() {
-					state = "gone"
-				}
-				fmt.Fprintf(out, "  %-14s %-28s pid %-7d %s\n", a.Actor, a.Job, a.PID, state)
-			}
+	fmt.Fprintln(out, "actors")
+	if len(entries) == 0 {
+		fmt.Fprintln(out, "  (no names yet: an actor exists as soon as it does something)")
+	}
+	for _, e := range entries {
+		job := ""
+		if e.Job != "" {
+			job = "  on " + e.Job
 		}
+		fmt.Fprintf(out, "  %-16s %-14s last seen %s%s\n", e.Name, e.Site, e.LastSeen, job)
 	}
 
 	fmt.Fprintln(out, "sites")
-	report := daemon.NewPeers(l).Report()
-	if len(report) == 0 {
+	if len(reports) == 0 {
 		fmt.Fprintln(out, "  (the roster declares no sites)")
 	}
-	for _, p := range report {
+	for _, p := range reports {
 		state := "unreachable"
 		if p.Reachable {
 			state = "reachable"
@@ -125,9 +115,9 @@ func newStatusCmd() *cobra.Command {
 				return err
 			}
 			report.Print(cmd.OutOrStdout())
-			// The daemon is not a command a person runs, so what only it knows is
-			// printed here: what this site is running, and which sites answer.
-			printRunning(cmd, l)
+			// Names and reachability are questions about the present, so they are
+			// answered here rather than in a file.
+			printActors(cmd, l)
 			return nil
 		},
 	}

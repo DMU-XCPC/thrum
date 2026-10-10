@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/binary"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -85,21 +84,12 @@ type sshClient struct {
 }
 
 func (c *sshClient) Do(req Request) (Response, error) {
-	payload, err := json.Marshal(req)
-	if err != nil {
+	// The same framing as the local socket, and the same code: a peer and a command on
+	// this machine must not speak two dialects of one protocol.
+	if err := write(c.stdin, req); err != nil {
 		return Response{}, err
 	}
-	if _, err := c.stdin.Write(append(payload, '\n')); err != nil {
-		return Response{}, err
-	}
-	var resp Response
-	if err := json.NewDecoder(c.stdout).Decode(&resp); err != nil {
-		return Response{}, err
-	}
-	if !resp.OK {
-		return resp, fmt.Errorf("%s", resp.Error)
-	}
-	return resp, nil
+	return read(c.stdout)
 }
 
 func (c *sshClient) Close() error {

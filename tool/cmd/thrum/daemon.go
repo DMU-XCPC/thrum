@@ -15,23 +15,27 @@ import (
 
 // The daemon is an implementation detail, and nothing a person types names it.
 //
-// It exists for two things a file cannot do: supervising an actor, and acting later on
-// behalf of a job that is waiting. An operation that needs either asks for one here —
-// the tool starts it, detached, and it leaves on its own once nothing is running and
-// nothing is waiting. The two commands below are hidden because they are for the tool
-// itself, for an operator who wants it under systemd, and for a system sshd that names
-// `thrum daemon exec` as a forced command.
+// It exists because a site has to be *reachable*: to answer a peer's question about
+// who is on a job, to hold a lease another site asks for, and to take delivery of a
+// message addressed to an actor here. Everything on one machine works without it — a
+// mailbox is a directory and a roster is a file — so it is started when this site says
+// it accepts peers, and it stays until it is stopped.
+//
+// The commands here are hidden because they are for the tool itself, for an operator
+// who wants it under systemd, and for a system sshd that names `thrum daemon exec` as
+// a forced command.
 func newDaemonCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    "daemon",
-		Short:  "The implementation detail behind `start`, `stop` and being woken",
+		Short:  "The implementation detail that makes this site reachable",
 		Hidden: true,
 	}
 
 	var sshListen string
+
 	run := &cobra.Command{
 		Use:    "run",
-		Short:  "Take the site's lock and serve until asked to stop, or until there is nothing left to do",
+		Short:  "Take the site's lock and serve until asked to stop",
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -49,6 +53,20 @@ func newDaemonCmd() *cobra.Command {
 	run.Flags().StringVar(&sshListen, "ssh-listen", "",
 		"where to accept peers, host:port or unix:<path> (default: var/daemon.yaml)")
 
+	stop := &cobra.Command{
+		Use:    "stop",
+		Short:  "Ask the daemon here to leave",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := daemon.Stop(layout()); err != nil {
+				return err
+			}
+			fmt.Println("stopping")
+			return nil
+		},
+	}
+
 	// exec is what a peer runs: the same handler as the socket's, one request in, one
 	// response out, and no shell.
 	execCmd := &cobra.Command{
@@ -61,43 +79,31 @@ func newDaemonCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(run, execCmd)
+	cmd.AddCommand(run, stop, execCmd)
 	return cmd
 }
 
 // askDaemon sends one request to the daemon here, if there is one. No daemon is not an
-// error: it means this site is running nothing, and most operations do not care.
+// error: most operations do not need one.
 func askDaemon(l workspace.Layout, req daemon.Request) (daemon.Response, bool, error) {
 	return daemon.Local(l, req)
 }
 
-// needDaemon sends one request, starting a daemon when there is none — because the
-// operation asked for something that has to be alive, and refusing to run is how a
-// workspace stays stuck.
-func needDaemon(l workspace.Layout, req daemon.Request) (daemon.Response, error) {
-	if resp, running, err := daemon.Local(l, req); err == nil && running {
-		return resp, nil
-	}
-	if err := startDaemon(l); err != nil {
-		return daemon.Response{}, err
-	}
-	resp, running, err := daemon.Local(l, req)
-	if err != nil {
-		return resp, err
-	}
-	if !running {
-		return resp, fmt.Errorf("the daemon did not answer; see %s", l.DaemonLog())
-	}
-	return resp, nil
-}
-
-// startDaemonIfNeeded starts one only when there is none: an operation that needs
-// something alive should not restart a daemon that is already there.
-func startDaemonIfNeeded(l workspace.Layout) error {
-	if _, running, err := daemon.Local(l, daemon.Request{Verb: daemon.VerbStatus}); err == nil && running {
+// ensureServing starts this site's daemon when the site says it accepts peers and
+// nothing is listening.
+//
+// A site that says it accepts nobody needs no daemon, and starting one anyway would be
+// a background process nobody asked for. A site that does accept them needs something
+// there to accept them, because a message that arrives at a quiet site is a message
+// that is refused.
+func ensureServing(l workspace.Layout) error {
+	if daemon.ListenSpec(l) == "" {
 		return nil
 	}
-	return startDaemon(l)
+	if _, running, err := askDaemon(l, daemon.Request{Verb: daemon.VerbStatus}); err == nil && running {
+		return nil
+	}
+	return startDaemonWithin(l, 3*time.Second)
 }
 
 // startDaemon runs this site's daemon in the background and waits for it to answer.
@@ -106,6 +112,13 @@ func startDaemonIfNeeded(l workspace.Layout) error {
 // var/daemon.log — which is the only place a person can find out why it refused
 // something.
 func startDaemon(l workspace.Layout) error {
+	return startDaemonWithin(l, 10*time.Second)
+}
+
+// startDaemonWithin is the same, with the patience the caller has. A command that does
+// not need a daemon should not wait long for one: the site will be reachable a moment
+// later, and the operator can look at the log.
+func startDaemonWithin(l workspace.Layout, patience time.Duration) error {
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -129,29 +142,14 @@ func startDaemon(l workspace.Layout) error {
 	// The child is meant to outlive this command, so it is not waited for.
 	_ = cmd.Process.Release()
 
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(patience)
 	for time.Now().Before(deadline) {
-		if _, running, err := daemon.Local(l, daemon.Request{Verb: daemon.VerbStatus}); err == nil && running {
+		if _, running, err := askDaemon(l, daemon.Request{Verb: daemon.VerbStatus}); err == nil && running {
 			return nil
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	return fmt.Errorf("the daemon did not come up; see %s", l.DaemonLog())
-}
-
-// announce tells everyone who cares that a job is no longer something to wait for: the
-// daemon here, if one is running, and every peer directly.
-//
-// Peers are told over SSH rather than through a daemon here, because there may not be
-// one — and because the site that has to wake something is the site that is waiting.
-func announce(l workspace.Layout, job, actor string) []string {
-	req := daemon.Request{
-		Verb: daemon.VerbNotify,
-		Args: daemon.Args(map[string]string{"job": job, "actor": actor}),
-	}
-	_, _, _ = daemon.Local(l, req) // the daemon here wakes its own waiters
-	told, _ := daemon.NewPeers(l).Broadcast(req)
-	return told
 }
 
 // decode reads a response body into the caller's own structure.
@@ -160,4 +158,14 @@ func decode(resp daemon.Response, into any) error {
 		return nil
 	}
 	return json.Unmarshal(resp.Data, into)
+}
+
+// printJSON is how a command hands its answer to other tooling rather than to a person.
+func printJSON(cmd *cobra.Command, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	return nil
 }

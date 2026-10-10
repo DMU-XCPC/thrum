@@ -39,6 +39,10 @@ type OpenOptions struct {
 	Base string
 	// Summary is the commit's summary.
 	Summary string
+	// Body is the brief's body: the goal, the scope and the acceptance criteria. Empty
+	// means the template's headings with nothing under them, which is a brief that says
+	// nothing.
+	Body []byte
 }
 
 // Open records a job: the brief, the branch, and a labelled working directory.
@@ -64,6 +68,12 @@ func Open(l workspace.Layout, o OpenOptions) (string, error) {
 	} else if materialised && held != "" {
 		return "", fmt.Errorf("worktree %q already holds job %s", o.Label, held)
 	}
+	// A job branches from the project's history. With no history there is no branch,
+	// and git will make one that resolves to nothing — so this says so now, rather than
+	// leaving the first handoff to fail with something about common ancestors.
+	if _, err := gitx.Run(l.CodeRepo(), "rev-parse", "--verify", "HEAD"); err != nil {
+		return "", fmt.Errorf("the code repository has no commits yet: a job branches from the project's history, and there is none to branch from")
+	}
 
 	brief := format.Brief{
 		Job:        o.Job,
@@ -74,7 +84,7 @@ func Open(l workspace.Layout, o OpenOptions) (string, error) {
 		DependsOn:  o.DependsOn,
 		Keep:       o.Keep,
 	}
-	if err := workspace.WriteBrief(l, brief); err != nil {
+	if err := workspace.WriteBrief(l, brief, o.Body); err != nil {
 		return "", err
 	}
 	// The payload's shape is the design's, and it exists from the moment the job does:
@@ -94,6 +104,18 @@ func Open(l workspace.Layout, o OpenOptions) (string, error) {
 		_ = os.RemoveAll(l.TaskDir(o.Job))
 		_ = os.RemoveAll(l.JobDir(o.Job))
 		return "", fmt.Errorf("materialising worktree %s: %w", o.Label, err)
+	}
+
+	// Whoever opens a job with an owner is on it: the claim is what says so, and a
+	// person working by hand should not have to remember a second command to be
+	// believed.
+	if o.Owner != "" {
+		if err := occupancy.Occupy(l, o.Job, o.Owner, false, time.Now().UTC()); err != nil {
+			_ = worktrees.Remove(l, o.Label)
+			_ = os.RemoveAll(l.TaskDir(o.Job))
+			_ = os.RemoveAll(l.JobDir(o.Job))
+			return "", err
+		}
 	}
 
 	summary := o.Summary
@@ -345,7 +367,10 @@ func BaseFor(l workspace.Layout, job string) (string, error) {
 	}
 	out, err := gitx.Run(l.CodeRepo(), "merge-base", "job/"+job, def)
 	if err != nil {
-		return "", fmt.Errorf("the branch for %s has no common ancestor with %s: %w", job, def, err)
+		// A branch with no commits of its own has no common ancestor to find. Opening a
+		// job refuses a project with no history, so reaching here means the job was
+		// opened before there was any, and saying that is more use than what git says.
+		return "", fmt.Errorf("the branch for %s has no commits and shares no ancestor with %s: this job was opened before the project had any history", job, def)
 	}
 	return strings.TrimSpace(out), nil
 }
