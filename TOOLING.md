@@ -36,7 +36,7 @@ So each site may run the same daemon, in the same role. **There is no hub and no
 
 - **The roster is a declaration, not a service.** Which sites exist is `doc/resource/site.yaml`, so it travels by git like every other record, is auditable, and needs no quorum to be readable. It also closes the last machine fact this design was missing: a site's `capacity` is how many jobs that host runs at once.
 - **A resource is leased where it is, never where it is used.** A lease is taken at the resource's home site — the machine that physically holds the thing — so exclusion stays site-local and needs no consensus. This costs no new exposure, because reaching the resource already meant reaching that machine.
-- **Transport is symmetric.** Peers serve their repositories to each other, so an external git remote becomes useful rather than necessary. Payload bundles travel directly between peers.
+- **Transport is symmetric, and nothing relays.** Peers serve their repositories to each other, so an external git remote becomes useful rather than necessary, and payload bundles travel directly between peers. A request goes to the site that can answer it and comes back: no daemon forwards for another, which is what keeps an answer from becoming a search. The consequence is deliberate too — a site that cannot be reached is **refused, not proxied**, so a full mesh is not required and a partial one is legitimate. Mutual reachability is required exactly between the sites that have to share a claim or a lease, because that is where exclusion has to hold.
 - **The actor roster is a service, not a declaration.** Each daemon knows the names its own site has seen and learns the rest from its peers, because which actors exist is the tooling's knowledge and never a file. The sites themselves are the other case, and stay a declaration.
 
 ### Why this topology
@@ -162,6 +162,7 @@ The parts:
 | `verify` | Runs the whole validation list. | Reports; it does not repair. |
 | `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. |
 | `clean` | The guarded clean of untracked files. | Never a bare `git clean` at the workspace root, which would delete `.bare/` and the entire source history with it. |
+| `join` | Makes this machine another site of a workspace that already exists: takes the shared line from the coordination repository, and fills in what a repository cannot carry — the ignore rules, the empty directories, the site's own name, and its own copies of the code and asset repositories. | Commits nothing: joining does not begin a history, and a second first commit would be a second workspace. Refuses a site the roster does not declare, rather than half-joining one. |
 | `sync` | Pushes the coordination repository, and at a job move the branch too, at the moments records have to travel: a handoff, a close, a promotion, a job moving. Fetches when a record has to arrive. | A floor rather than a ceiling — pushing more often only makes the backup fresher. Nothing requires a fetch in order to start work. |
 
 ## Actors
@@ -256,4 +257,5 @@ Merging a job's branch, starting and stopping services, running tests, running a
 ## Still open
 
 - **How an instantiated workspace receives updates to the template.** Its ignore rules and its templates come from outside itself.
+- **How a site discovers the others.** Today the roster is a git declaration, each site enters its own reach by hand, and keys are exchanged once; that is enough for a workspace whose sites are known to each other. A discovery protocol is not designed, and is not needed for a site to be added reliably — `join` and the roster are the whole of it.
 - **Whether a stored copy of a peer's state is ever needed** for a site that is offline for a long time, and if so whose.

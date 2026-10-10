@@ -42,6 +42,55 @@ func newCreateCmd() *cobra.Command {
 	return cmd
 }
 
+// newJoinCmd makes this machine another site of a workspace that already exists.
+//
+// Creating and joining are different acts: a new site takes the shared line rather than
+// beginning a history of its own, because a second first commit would be a second
+// workspace.
+func newJoinCmd() *cobra.Command {
+	var (
+		remote string
+		site   string
+		code   string
+		store  string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "join <dir> --remote <url> --site <name>",
+		Short: "Make this machine another site of a workspace that already exists",
+		Long: "The records come from the shared line, so nothing is committed here: this fetches,\n" +
+			"checks out, and fills in what a repository cannot carry — the ignore rules, the\n" +
+			"empty directories, this site's name, and its own copies of the code and asset\n" +
+			"repositories. The roster has to declare the site first, because the roster is what\n" +
+			"the other sites read to decide who exists.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l, err := workspace.Join(workspace.JoinOptions{
+				Root:   args[0],
+				Remote: remote,
+				Site:   site,
+				Code:   code,
+				Store:  store,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("joined %s as site %s\n", l.Root, site)
+			if code == "" {
+				fmt.Println("no --code was given, so the code repository here is empty: point it at the project's, or start one")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&remote, "remote", "", "the coordination repository to join (required)")
+	cmd.Flags().StringVar(&site, "site", "", "the name of this site (required)")
+	cmd.Flags().StringVar(&code, "code", "", "the code repository to clone here")
+	cmd.Flags().StringVar(&store, "store", "", "the asset repository to clone here")
+	_ = cmd.MarkFlagRequired("remote")
+	_ = cmd.MarkFlagRequired("site")
+	return cmd
+}
+
 func newVerifyCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "verify",

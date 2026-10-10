@@ -53,11 +53,6 @@ func Create(opts CreateOptions) (Layout, error) {
 			return l, err
 		}
 	}
-	for _, sub := range JobSubdirs {
-		if err := os.MkdirAll(filepath.Join(l.Jobs(), sub), 0o755); err != nil {
-			return l, err
-		}
-	}
 
 	// The coordination repository. Only doc/ and handoff/ are ever tracked.
 	if err := gitx.OK(l.Root, "init", "-b", "main", "--quiet"); err != nil {

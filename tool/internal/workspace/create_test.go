@@ -39,10 +39,10 @@ func TestCreateLeavesBehindWhatTheDesignNames(t *testing.T) {
 			t.Errorf("%s: %v", p, err)
 		}
 	}
-	for _, sub := range workspace.JobSubdirs {
-		if _, err := os.Stat(filepath.Join(l.Root, "job", sub)); err != nil {
-			t.Errorf("job/%s: %v", sub, err)
-		}
+	// A job's payload directories belong to a job, and opening one makes them. The
+	// workspace only creates the directory they live in.
+	if _, err := os.Stat(filepath.Join(l.Root, "job")); err != nil {
+		t.Errorf("job/: %v", err)
 	}
 
 	site, err := workspace.ReadSite(l)

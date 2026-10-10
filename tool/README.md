@@ -22,7 +22,17 @@ and build caches. If the module proxy is unreachable, the Makefile already uses
 ```sh
 ./.gocache/thrum create /tmp/demo --site build-01
 cd /tmp/demo && .../thrum verify
+
+# Or, on a second machine, join a workspace that already exists. Declare the site in
+# doc/resource/site.yaml at a site that is already in it first: the roster is what the
+# others read to decide who exists.
+./.gocache/thrum join /tmp/lab --remote <coordination-url> --site lab-02 --code <code-url>
 ```
+
+Joining commits nothing: it takes the shared line and fills in what a repository cannot
+carry. The reach between two sites is entered on **both** sides, and nothing relays — a
+site that cannot be reached is refused, not proxied — so mutual reachability is required
+exactly between sites that have to share a claim or a lease.
 
 ## An actor is a name
 
@@ -79,11 +89,16 @@ thrum purge <id>                     # nothing collects messages for you
 
 On one machine none of this needs anything running: a mailbox is a directory.
 
+**The local socket** is how a command finds out whether this site is being served, and the
+way in for anything local that wants to ask; every other question is answered by reading
+the workspace or by dialling the site that can answer it.
+
 ## The command surface, and the operation it implements
 
 | `TOOLING.md` | Here |
 | --- | --- |
 | `create` | `thrum create <dir> [--site]` |
+| `join` | `thrum join <dir> --remote <url> --site <name> [--code <url>] [--store <url>]` |
 | `verify` | `thrum verify` |
 | `status` | `thrum status` |
 | `clean` | `thrum clean [--dry-run]` |

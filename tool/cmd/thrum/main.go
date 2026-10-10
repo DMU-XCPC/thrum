@@ -76,6 +76,7 @@ func newRootCmd() *cobra.Command {
 
 	root.AddCommand(
 		newCreateCmd(),
+		newJoinCmd(),
 		newVerifyCmd(),
 		newStatusCmd(),
 		newSyncCmd(),
