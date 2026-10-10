@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/commit"
+	"github.com/multiagentworkspace/thrum/tool/internal/convention"
 	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/leases"
@@ -458,7 +459,20 @@ func newCollectCmd() *cobra.Command {
 			"every artifact it names, so a collected artifact is a detectable absence.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			outcomes, err := payload.Collect(layout(), payload.Options{
+			l := layout()
+			// The window is policy, and policy lives with the rule that uses it: the
+			// convention says how long a payload is kept, and --window overrides it once.
+			if !cmd.Flags().Changed("window") {
+				values, _, err := convention.Read(l)
+				if err != nil {
+					return err
+				}
+				window, err = values.Duration("collect.window", payload.DefaultWindow)
+				if err != nil {
+					return err
+				}
+			}
+			outcomes, err := payload.Collect(l, payload.Options{
 				Window: &window,
 				DryRun: dryRun,
 			})
@@ -475,7 +489,8 @@ func newCollectCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().DurationVar(&window, "window", payload.DefaultWindow, "how long the larger half is kept after the close")
+	cmd.Flags().DurationVar(&window, "window", payload.DefaultWindow,
+		"how long the larger half is kept after the close (the collect.window convention, else 14 days)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would go without removing anything")
 	return cmd
 }

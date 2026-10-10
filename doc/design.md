@@ -471,6 +471,53 @@ doc/topic/<topic>/
 - **Promotion is deliberate.** Knowledge becomes a topic when it stops being specific to one job.
 - **Retiring a whole topic** moves the directory to `doc/archive/topic/<topic>/` and adds a notice to `overview.md` alone; the rest are retired by association, so one retirement gives one grep hit rather than one per file.
 
+### Convention — `doc/convention/<nn>-<slug>.md`
+
+A convention is a rule an agent must read. A topic describes; a convention instructs. They
+are read in number order, so the order is the priority, and the naming rules are what keep a
+retired number from being used again.
+
+A convention carries no front-matter. It states a rule rather than a record of state, and
+the one thing it has to say about itself — its number — is in its name. It has exactly one
+H1 title, so that it can be retired like any other document, and the retirement notice goes
+under that title.
+
+The body is the rule, in the imperative, with the reason it exists: a rule whose reason is
+missing is a rule that will be deleted by accident.
+
+**A convention is where a project's policy reaches the tooling.** Some rules need a value a
+tool has to act on — how long a job's payload is kept, for instance — and the value belongs
+with the rule that uses it rather than in a configuration file of its own, because everyone
+in the workspace should see the same one and a change to it should be auditable. So a
+convention may carry one fenced block, and its keys name the tool and the value:
+
+```values
+collect.window: 14d
+```
+
+- **The fence opens at the left margin.** An indented fence is what a fence inside a list
+  item looks like, which is how an example of one gets written — and an example must not
+  declare anything.
+- **The keys are the tooling's**, so they are dotted: `collect.window`, not `window`. A key
+  no tool reads is a key for the reader, and is allowed: a project may record a value it
+  intends a later version to read.
+- **Values are scalars.** A mapping or a list in a values block is a document in the wrong
+  place.
+- **One block per convention, and one convention per key.** Two conventions declaring one
+  key would have the workspace saying two things at once, and which of them a tool acted on
+  would depend on the order the files were read in.
+- **A value the tooling reads but cannot parse is an error rather than a default.** A policy
+  nobody can read is a policy nobody has, and falling back quietly would hide the mistake
+  that made it unreadable.
+
+Validation checks all of it, along with the file name and the one title.
+
+**The set is open, and starts from the template.** The template carries the conventions a
+workspace needs to be operable at all — how to take up a job, which files the tooling owns,
+what a commit is, where tools may write, how to hand over, what is collected, and how to
+write a convention. From the moment a workspace exists they are the project's: it adds its
+own after the highest number in use, and the tooling never rewrites one.
+
 ### Brief — `doc/task/<job-id>/brief.md`
 
 The brief states the intent of one job. It is a document like any other — editable, and committed whenever it changes — and its `status` is the one field in it that somebody has to decide rather than read.
@@ -821,6 +868,8 @@ A bundle carries whatever the job wrote — logs and inputs included — so it i
 
 `doc/template/` holds one copy-me file per record type that an actor writes by hand, named after it: `brief.md`, `handoff.md`, `manifest.md`. The tooling-written records — resources, leases, bundles — have no template, because nobody writes one from scratch. A template is a convenience and never the authority — this chapter is. When a format changes, its template changes in the same commit.
 
+The template also carries the starting set of conventions, which is the one part of `doc/` the tooling ships rather than the project writing: see `Convention` above. Once a workspace exists they are its own documents, and the tooling does not rewrite them.
+
 **The template is what the tooling carries, and a workspace materialises it once.** The ignore rules and the copy-me files come from the tooling rather than from git, and the empty directories cannot be carried by a repository at all. So the two can drift — the tooling learns to ignore something new, or grows a directory — and nothing in a repository would notice, because none of it is in one.
 
 **Nothing is stored to make that checkable.** The tooling carries the template, so what a workspace is missing is derived by comparing the two, rather than remembered in a version number that would go stale on every site separately. `verify` reports the difference, and one operation brings it up to date.
@@ -897,6 +946,5 @@ The workspace does not manage processes, evict caches or read secrets. It only s
 
 The following are left open deliberately rather than guessed at:
 
-- **The set and format of `doc/convention/`** — which conventions exist, how they are written, and how a rule exposes the values a tool has to read. The rules in this document reach an instantiated workspace only through them.
 - **The startup context given to an agent** — what an actor is told when it takes up a job, discussed together with the conventions because both are pushed to every agent. The base environment variables are no longer part of this: the tooling prints them for a job, and they name paths inside the workspace.
 - **How a site discovers the others.** Today the roster is a git declaration, each site enters its own reach by hand, and keys are exchanged once; that is enough for a site to be added reliably, which is what `Joining a site` describes. A discovery protocol is deliberately not designed, and nothing depends on one existing.

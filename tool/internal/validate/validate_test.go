@@ -27,6 +27,17 @@ func fixture(t *testing.T) workspace.Layout {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The template ships the conventions a workspace starts with, and these tests are
+	// about the checks rather than about that set, so they begin from an empty one.
+	entries, err := os.ReadDir(l.Convention())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if err := os.Remove(filepath.Join(l.Convention(), e.Name())); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return l
 }
 

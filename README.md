@@ -73,6 +73,10 @@ thrum handoff --job add-retry --status done --next none
 thrum close --job add-retry
 ```
 
+A new workspace arrives ready to hand to an agent: the conventions it needs to take up work
+are in `doc/convention/`, in number order, and `thrum verify` checks them along with
+everything else.
+
 Several sites of one workspace — the same records, on more than one machine — are joined
 with `thrum join`, and reach each other directly over SSH. `tool/README.md` has the whole
 command surface and the configuration that goes with it.

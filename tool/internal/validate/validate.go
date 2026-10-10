@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/convention"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
@@ -441,6 +442,15 @@ func (v *validator) checkConventions() {
 		}
 		seen[n] = name
 		v.checkH1File(where, path)
+	}
+
+	// The values a convention declares are how a project's policy reaches the tooling, so
+	// a block nobody can read — or two conventions saying different things about one key —
+	// is a rule that silently does not apply.
+	if _, problems, err := convention.Read(v.l); err == nil {
+		for _, p := range problems {
+			v.add(p.Where, "a convention declares what a tool reads in one values block of scalars", "%s", p.What)
+		}
 	}
 
 	archived, _ := filepath.Glob(filepath.Join(v.l.Archive(), "convention", "*.md"))

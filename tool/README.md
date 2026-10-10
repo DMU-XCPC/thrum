@@ -95,6 +95,23 @@ On one machine none of this needs anything running: a mailbox is a directory.
 way in for anything local that wants to ask; every other question is answered by reading
 the workspace or by dialling the site that can answer it.
 
+## Rules the tool reads
+
+A workspace's rules for its agents are the conventions, in `doc/convention/`, in number
+order. `thrum verify` is what checks them, and one of the things a convention can carry is
+a **value a tool has to act on**, in a fenced block whose keys name the tool and the value:
+
+```values
+collect.window: 14d
+```
+
+So the retention window lives with the rule that uses it rather than in a configuration file
+of its own, and everyone in the workspace reads the same one. The fence opens at the left
+margin, because an indented one is how an example is written and an example must not declare
+anything; values are scalars; one block belongs to one convention and one key to one
+convention. A value the tooling reads but cannot parse is an error rather than a default —
+a policy nobody can read is a policy nobody has.
+
 ## The command surface, and the operation it implements
 
 | the operation in `../doc/tooling.md` | Here |
@@ -121,7 +138,7 @@ the workspace or by dialling the site that can answer it.
 | `ingest`, `publish`, `materialise`, `withdraw`, `store` | `thrum asset ingest`, `publish`, `materialise`, `withdraw`, `store` |
 | `write handoff` | `thrum handoff --job <id> --status <s> [--artifact <path>] [--metric k=v]` |
 | `commit` | `thrum commit --summary <text> -- <path>…` |
-| `collect` | `thrum collect [--window] [--dry-run]` |
+| `collect` | `thrum collect [--window <d>] [--dry-run]` (the window comes from the `collect.window` convention, else 14 days) |
 | `export`, `import` | `thrum bundle export`, `thrum bundle import <bundle>` |
 | `coordinate` | part of `thrum lease take`: a resource is leased where it lives |
 | `serve` | the daemon serves this site's repositories to its peers |
