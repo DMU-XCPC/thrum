@@ -1,0 +1,3 @@
+# The Go caches are pinned into the tree by the Makefile, so they are build state
+# rather than anything anybody means to commit.
+.gocache/

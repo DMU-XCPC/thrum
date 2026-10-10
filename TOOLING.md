@@ -128,6 +128,30 @@ It needs two things and no more: the workspace root, which is where it was start
 
 Everything in *What the tooling must not do* below, and two more: it does not hold payloads except while carrying them, and it introduces no rule of its own. It exists so that "nobody is watching" and "several machines" can be true, and for nothing else.
 
+## Stack
+
+An implementation decision, not a design rule: nothing in `README.md` depends on any of it, and a workspace has to stay usable if the tool were rewritten in something else tomorrow.
+
+**Pure Go, with cgo disabled.** One statically linked binary per platform, built with `CGO_ENABLED=0`, so it can be dropped onto a machine that has nothing but `git` and work. Cross-compilation is then free, which matters because the tool is installed rather than copied and there is no package manager to lean on.
+
+The parts:
+
+| Concern | Choice |
+| --- | --- |
+| Command surface | `cobra`, one command per operation, with completion |
+| Structured files | `gopkg.in/yaml.v3`, used **only** on a front-matter block |
+| Git | the real `git`, always as a subprocess, with its version checked by `verify`: the usage here is unusual enough that git has to stay the authority |
+| Peer channel | `golang.org/x/crypto/ssh`, client and server, authenticated from `authorized_keys`; the serving side exposes a forced command with a small verb set rather than a shell |
+| Local IPC | JSON over a unix socket at `var/daemon.sock`, with `var/daemon.lock` held by the one daemon |
+| Atomicity | create-with-`O_EXCL` for locks, and write-temporary-then-`rename` for every replacement |
+| Static assets | `go:embed` for `workspace-template/` |
+| Tests | `go test`, golden files for every format, and one test that runs the whole validation list against a fixture workspace |
+| Packaging | `goreleaser`, plus a systemd unit for the daemon |
+
+**Front matter is edited textually.** The body of a document is copied through byte for byte and only the delimited front-matter block is decoded and re-encoded. That is why a YAML library without perfect comment round-tripping is good enough here: what must survive is the prose, and the prose never passes through the parser.
+
+**This choice closes one open question and one worry.** Embedding the template means the template version travels with the binary, which is where "how an instantiated workspace receives updates to the template" gets its answer. And because peers speak SSH, an embedded git server is not a thing that has to be built at all: the repositories are files at declared paths, and serving them is permitting a peer to read them.
+
 ## Workspace
 
 | Operation | Does | Refuses, or guarantees |

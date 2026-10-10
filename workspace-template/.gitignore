@@ -1,0 +1,14 @@
+# Copied into a workspace when it is created, and never tracked by its coordination
+# repository. The same list is written to .git/info/exclude, so one bad edit to a
+# tracked file cannot expose the source history.
+#
+# It lists itself, because an untracked file that shows up in git status is an
+# untracked file somebody eventually commits by accident.
+
+.gitignore
+
+/.bare/
+/store/
+/var/
+/job/
+/worktree/
