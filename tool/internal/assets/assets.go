@@ -20,10 +20,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/multiagentworkspace/ws/tool/internal/commit"
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/commit"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // Ingested is what putting bytes into the store produces.
@@ -53,7 +53,7 @@ func Ingest(l workspace.Layout, path string) (Ingested, error) {
 		return Ingested{}, fmt.Errorf("%s is not a repository", l.Store())
 	}
 
-	index, err := os.CreateTemp("", "ws-index-*")
+	index, err := os.CreateTemp("", "thrum-index-*")
 	if err != nil {
 		return Ingested{}, err
 	}
@@ -102,7 +102,7 @@ func Ingest(l workspace.Layout, path string) (Ingested, error) {
 	}
 	tree = strings.TrimSpace(tree)
 
-	args := gitx.IdentityArgs(l.Store(), "ws")
+	args := gitx.IdentityArgs(l.Store(), "thrum")
 	args = append(args, "commit-tree", tree, "-m", "ingest: "+filepath.Base(path))
 	commit, err := gitx.Run(l.Store(), args...)
 	if err != nil {

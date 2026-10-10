@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
-	"github.com/multiagentworkspace/ws/tool/internal/leases"
-	"github.com/multiagentworkspace/ws/tool/internal/occupancy"
-	"github.com/multiagentworkspace/ws/tool/internal/payload"
-	"github.com/multiagentworkspace/ws/tool/internal/resources"
-	"github.com/multiagentworkspace/ws/tool/internal/validate"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/leases"
+	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
+	"github.com/multiagentworkspace/thrum/tool/internal/payload"
+	"github.com/multiagentworkspace/thrum/tool/internal/resources"
+	"github.com/multiagentworkspace/thrum/tool/internal/validate"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // openJob writes a brief straight into doc/task/, which is what a live job looks like

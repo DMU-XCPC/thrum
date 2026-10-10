@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/multiagentworkspace/ws/tool/internal/status"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/status"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // What comes next is a fact about a job that is still meant to happen, so the board

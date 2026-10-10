@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/multiagentworkspace/ws/tool/internal/assets"
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
-	"github.com/multiagentworkspace/ws/tool/internal/validate"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/assets"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/validate"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 func fixture(t *testing.T) workspace.Layout {

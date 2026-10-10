@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // DefaultWindow is how long the expensive half of a payload is kept after a job

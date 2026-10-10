@@ -108,7 +108,7 @@ func IdentityArgs(dir, fallbackName string) []string {
 	}
 	name := fallbackName
 	if name == "" {
-		name = "ws"
+		name = "thrum"
 	}
 	return []string{"-c", "user.name=" + name, "-c", "user.email=" + name + "@localhost"}
 }

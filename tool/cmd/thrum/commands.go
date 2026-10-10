@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/multiagentworkspace/ws/tool/internal/status"
-	"github.com/multiagentworkspace/ws/tool/internal/validate"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/status"
+	"github.com/multiagentworkspace/thrum/tool/internal/validate"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
 

@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/jobs"
-	"github.com/multiagentworkspace/ws/tool/internal/worktrees"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/jobs"
+	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 	"github.com/spf13/cobra"
 )
 

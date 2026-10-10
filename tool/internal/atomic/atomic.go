@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
 )
 
 // Retries is how many times a contended change is attempted before giving up and

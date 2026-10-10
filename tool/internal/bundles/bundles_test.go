@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/multiagentworkspace/ws/tool/internal/bundles"
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
-	"github.com/multiagentworkspace/ws/tool/internal/validate"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/bundles"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/validate"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // source is a workspace with a job that has been worked in and handed over, and a

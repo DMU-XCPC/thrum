@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
 )
 
 // Template reads one of the copy-me files a workspace carries under doc/template/.

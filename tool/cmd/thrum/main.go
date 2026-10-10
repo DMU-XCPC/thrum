@@ -1,4 +1,4 @@
-// Command ws is the workspace tool: the operations a workspace needs, and the daemon
+// Command thrum is the workspace tool: the operations a workspace needs, and the daemon
 // that gives them liveness and peers.
 //
 // The command surface is not part of the design. What is part of it is that every
@@ -25,16 +25,16 @@ var (
 func main() {
 	cmd := newRootCmd()
 	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "ws:", err)
+		fmt.Fprintln(os.Stderr, "thrum:", err)
 		os.Exit(1)
 	}
 }
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "ws",
+		Use:   "thrum",
 		Short: "Operate a multi-agent workspace",
-		Long: "ws creates a workspace from the template and then does the work that has\n" +
+		Long: "thrum creates a workspace from the template and then does the work that has\n" +
 			"to be done by a tool rather than by hand: the operations that two actors must\n" +
 			"not both succeed at, the ones that span several files or repositories, the\n" +
 			"ones that compute something a hand gets wrong, and the ones that answer a\n" +
@@ -43,7 +43,7 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.PersistentFlags().StringVar(&rootDir, "root", ".", "the workspace root")
-	root.PersistentFlags().StringVar(&actor, "actor", defaultActor(), "who is running this (default: $WS_ACTOR, else $USER)")
+	root.PersistentFlags().StringVar(&actor, "actor", defaultActor(), "who is running this (default: $THRUM_ACTOR, else $USER)")
 
 	root.AddCommand(
 		newCreateCmd(),
@@ -70,7 +70,7 @@ func newRootCmd() *cobra.Command {
 }
 
 func defaultActor() string {
-	for _, candidate := range []string{os.Getenv("WS_ACTOR"), os.Getenv("USER"), os.Getenv("LOGNAME")} {
+	for _, candidate := range []string{os.Getenv("THRUM_ACTOR"), os.Getenv("USER"), os.Getenv("LOGNAME")} {
 		if s := slugify(candidate); s != "" {
 			return s
 		}

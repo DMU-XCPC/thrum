@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // Options is how a daemon is started. Neither field is a rule: one is where the local

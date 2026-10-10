@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/multiagentworkspace/ws/tool/internal/assets"
+	"github.com/multiagentworkspace/thrum/tool/internal/assets"
 	"github.com/spf13/cobra"
 )
 

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/occupancy"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // Actor is one thing this daemon is running.
@@ -147,9 +147,9 @@ func (r *Registry) running(l workspace.Layout, job string) *Actor {
 // ActorEnv is the environment an actor is started with.
 func ActorEnv(l workspace.Layout, job string) []string {
 	return []string{
-		"WS_ROOT=" + l.Root,
-		"WS_JOB=" + job,
-		"WS_JOBS=" + l.Jobs(),
+		"THRUM_ROOT=" + l.Root,
+		"THRUM_JOB=" + job,
+		"THRUM_JOBS=" + l.Jobs(),
 		// Pointed at the workspace, so that nothing a job runs lands where nothing
 		// collects or reviews it.
 		"TMPDIR=" + l.JobSub(job, "tmp"),

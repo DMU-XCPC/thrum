@@ -1,4 +1,4 @@
-module github.com/multiagentworkspace/ws
+module github.com/multiagentworkspace/thrum
 
 go 1.27
 

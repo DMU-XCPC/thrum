@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
-	"github.com/multiagentworkspace/ws/tool/internal/jobs"
-	"github.com/multiagentworkspace/ws/tool/internal/validate"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
-	"github.com/multiagentworkspace/ws/tool/internal/worktrees"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/jobs"
+	"github.com/multiagentworkspace/thrum/tool/internal/validate"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 )
 
 // fixture is a workspace with one declared working directory and a code repository

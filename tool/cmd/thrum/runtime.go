@@ -5,14 +5,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/commit"
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/leases"
-	"github.com/multiagentworkspace/ws/tool/internal/occupancy"
-	"github.com/multiagentworkspace/ws/tool/internal/payload"
-	"github.com/multiagentworkspace/ws/tool/internal/resources"
-	"github.com/multiagentworkspace/ws/tool/internal/status"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/commit"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/leases"
+	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
+	"github.com/multiagentworkspace/thrum/tool/internal/payload"
+	"github.com/multiagentworkspace/thrum/tool/internal/resources"
+	"github.com/multiagentworkspace/thrum/tool/internal/status"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
 

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // Get returns the note for a job, if there is one.

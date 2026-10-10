@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/daemon"
-	"github.com/multiagentworkspace/ws/tool/internal/leases"
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
+	"github.com/multiagentworkspace/thrum/tool/internal/leases"
 	"github.com/spf13/cobra"
 )
 
@@ -53,7 +53,7 @@ func newDaemonCmd() *cobra.Command {
 		Use:   "exec",
 		Short: "Answer one request from a peer, on standard input and output",
 		Long: "This is the forced command: one request in, one response out, and no shell. Point\n" +
-			"a system sshd at it with command=\"ws daemon exec\" in authorized_keys, or let the\n" +
+			"a system sshd at it with command=\"thrum daemon exec\" in authorized_keys, or let the\n" +
 			"daemon serve SSH itself.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -148,7 +148,7 @@ func newDaemonCmd() *cobra.Command {
 				return err
 			}
 			if !running {
-				return fmt.Errorf("no daemon is running here, and starting an actor is what the daemon is for: run `ws daemon run` first")
+				return fmt.Errorf("no daemon is running here, and starting an actor is what the daemon is for: run `thrum daemon run` first")
 			}
 			var a daemon.Actor
 			if err := decode(resp, &a); err != nil {

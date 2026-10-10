@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/jobs"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
-	"github.com/multiagentworkspace/ws/tool/internal/worktrees"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/jobs"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 )
 
 // Job is one line of the task board.

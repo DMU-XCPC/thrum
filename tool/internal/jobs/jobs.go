@@ -14,13 +14,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/commit"
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
-	"github.com/multiagentworkspace/ws/tool/internal/leases"
-	"github.com/multiagentworkspace/ws/tool/internal/occupancy"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
-	"github.com/multiagentworkspace/ws/tool/internal/worktrees"
+	"github.com/multiagentworkspace/thrum/tool/internal/commit"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/leases"
+	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 )
 
 // OpenOptions is what opening a job needs.

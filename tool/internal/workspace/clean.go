@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 )
 
 // Clean removes the untracked files the coordination repository neither tracks nor

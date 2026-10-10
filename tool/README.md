@@ -1,6 +1,6 @@
 # The workspace tool
 
-`ws` is the tooling `README.md` designs and `TOOLING.md` specifies. It is pure Go with
+`thrum` is the tooling `README.md` designs and `TOOLING.md` specifies. It is pure Go with
 cgo disabled, and it shells out to `git` rather than reimplementing it.
 
 It adds no rules of its own. Every command below is an operation from `TOOLING.md`, and
@@ -10,7 +10,7 @@ are right and this file is wrong.
 ## Build, test, try
 
 ```sh
-make build      # writes .gocache/ws
+make build      # writes .gocache/thrum
 make test       # every package, plus the end-to-end fixture
 make vet fmt tidy
 ```
@@ -20,42 +20,42 @@ module and build caches. If the module proxy is unreachable, the Makefile alread
 `goproxy.cn`; `make` is the only supported way to build for that reason.
 
 ```sh
-./.gocache/ws create /tmp/demo --site build-01
-cd /tmp/demo && .../ws verify
+./.gocache/thrum create /tmp/demo --site build-01
+cd /tmp/demo && .../thrum verify
 ```
 
 ## The command surface, and the operation it implements
 
 | `TOOLING.md` | Here |
 | --- | --- |
-| `create` | `ws create <dir> [--site]` |
-| `verify` | `ws verify` |
-| `status` | `ws status` |
-| `clean` | `ws clean [--dry-run]` |
-| `sync` | `ws sync [--job <id>] [--fetch]` |
-| `registry` | `ws actor registry` |
-| `ask` | `ws actor ask --job <id>` |
-| `start` | `ws daemon start --job <id> -- <command>…` |
-| `wake` | `ws daemon wake --job <id>` (also `notify`) |
-| `open` | `ws open --job <id> --label <label>` |
-| `claim` | `ws claim --job <id> [--owner <actor>]` |
-| `reassign`, `relinquish` | `ws claim --owner <actor>`, `ws relinquish` |
-| `close` | `ws close --job <id> [--abandoned]` |
-| `add worktree`, `release worktree` | `ws worktree add`, `ws worktree release` |
-| `occupy`, `vacate`, `sweep` | `ws occupancy occupy`, `vacate`, `sweep` |
-| `declare`, `remove`, `resources` | `ws resource declare`, `remove`, `list` |
-| `take lease`, `renew`, `release`, `leases` | `ws lease take`, `renew`, `release`, `list` |
-| `ingest`, `publish`, `materialise`, `withdraw`, `store` | `ws asset ingest`, `publish`, `materialise`, `withdraw`, `store` |
-| `write handoff` | `ws handoff --job <id> --status <s>` |
+| `create` | `thrum create <dir> [--site]` |
+| `verify` | `thrum verify` |
+| `status` | `thrum status` |
+| `clean` | `thrum clean [--dry-run]` |
+| `sync` | `thrum sync [--job <id>] [--fetch]` |
+| `registry` | `thrum actor registry` |
+| `ask` | `thrum actor ask --job <id>` |
+| `start` | `thrum daemon start --job <id> -- <command>…` |
+| `wake` | `thrum daemon wake --job <id>` (also `notify`) |
+| `open` | `thrum open --job <id> --label <label>` |
+| `claim` | `thrum claim --job <id> [--owner <actor>]` |
+| `reassign`, `relinquish` | `thrum claim --owner <actor>`, `thrum relinquish` |
+| `close` | `thrum close --job <id> [--abandoned]` |
+| `add worktree`, `release worktree` | `thrum worktree add`, `thrum worktree release` |
+| `occupy`, `vacate`, `sweep` | `thrum occupancy occupy`, `vacate`, `sweep` |
+| `declare`, `remove`, `resources` | `thrum resource declare`, `remove`, `list` |
+| `take lease`, `renew`, `release`, `leases` | `thrum lease take`, `renew`, `release`, `list` |
+| `ingest`, `publish`, `materialise`, `withdraw`, `store` | `thrum asset ingest`, `publish`, `materialise`, `withdraw`, `store` |
+| `write handoff` | `thrum handoff --job <id> --status <s>` |
 | `commit` | not a command: every operation commits its own one event |
-| `collect` | `ws collect [--window] [--dry-run]` |
-| `export`, `import` | `ws bundle export`, `ws bundle import <bundle>` |
-| `coordinate` | `ws daemon coordinate --resource <name> --job <id>` |
-| `serve` | `ws daemon run --ssh-listen <where>` (also `serve`) |
-| `peers` | `ws daemon peers` |
+| `collect` | `thrum collect [--window] [--dry-run]` |
+| `export`, `import` | `thrum bundle export`, `thrum bundle import <bundle>` |
+| `coordinate` | `thrum daemon coordinate --resource <name> --job <id>` |
+| `serve` | `thrum daemon run --ssh-listen <where>` (also `serve`) |
+| `peers` | `thrum daemon peers` |
 
 `--root` is a global flag, and defaults to where the command was run. `--actor` is
-global too and defaults to `$WS_ACTOR`, then `$USER`: an actor is a stable identity and
+global too and defaults to `$THRUM_ACTOR`, then `$USER`: an actor is a stable identity and
 not a per-command choice.
 
 ## With a daemon, and without one
@@ -64,11 +64,11 @@ Every command works with no daemon running, because each does its own work and r
 The daemon exists for the three things a file cannot do:
 
 ```sh
-ws daemon run                              # local socket only
-ws daemon run --ssh-listen 0.0.0.0:2222    # and answer peers
+thrum daemon run                              # local socket only
+thrum daemon run --ssh-listen 0.0.0.0:2222    # and answer peers
 ```
 
-- **Being alive.** `ws daemon start` runs an actor and supervises it. With no daemon it
+- **Being alive.** `thrum daemon start` runs an actor and supervises it. With no daemon it
   refuses and says so, rather than starting something nothing is watching.
 - **Waking something.** Writing `blocked` in a handoff records that a job is waiting;
   only a process can act on it when the wait ends.
@@ -85,9 +85,9 @@ How one site reaches another is the site's own business and lives in
 `var/config/<name>.yaml`, never in git:
 
 ```yaml
-reach: build-01.internal:22     # or user@host:port, or unix:/run/ws.sock
+reach: build-01.internal:22     # or user@host:port, or unix:/run/thrum.sock
 ssh_user: root                   # optional
-key: /etc/ws/id_ed25519          # optional; var/secrets/id_ed25519 is the default
+key: /etc/thrum/id_ed25519          # optional; var/secrets/id_ed25519 is the default
 ```
 
 Authentication is SSH's and nothing else: the daemon accepts a peer whose public key is
@@ -100,7 +100,7 @@ The daemon can serve SSH itself, or a system `sshd` can be pointed at it:
 
 ```sshconfig
 # authorized_keys on the serving side
-command="ws daemon exec",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA…
+command="thrum daemon exec",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA…
 ```
 
 Either way the protocol is the same one request, one response, and both are the same
@@ -141,5 +141,5 @@ way, and it never belongs in a handoff or a bundle.
 Each package tests its own rules. `internal/validate` has the checks, `internal/format`
 the formats, and `e2e` drives the built command through a whole job's life — create,
 declare, open, occupy, lease, hand off, publish, materialise, export, close, collect —
-and asserts after every step that the workspace still passes `ws verify`. The daemon's
+and asserts after every step that the workspace still passes `thrum verify`. The daemon's
 tests run two sites against each other over a real SSH channel.

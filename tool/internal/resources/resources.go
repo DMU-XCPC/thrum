@@ -11,9 +11,9 @@ import (
 	"os"
 	"sort"
 
-	"github.com/multiagentworkspace/ws/tool/internal/atomic"
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/atomic"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"gopkg.in/yaml.v3"
 )
 

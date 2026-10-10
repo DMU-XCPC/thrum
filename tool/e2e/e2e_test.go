@@ -15,16 +15,16 @@ import (
 	"testing"
 )
 
-// ws is the built command, shared by every test in this package.
-var ws string
+// thrum is the built command, shared by every test in this package.
+var thrum string
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "ws-e2e-")
+	dir, err := os.MkdirTemp("", "thrum-e2e-")
 	if err != nil {
 		panic(err)
 	}
-	ws = filepath.Join(dir, "ws")
-	build := exec.Command("go", "build", "-o", ws, "./cmd/ws")
+	thrum = filepath.Join(dir, "thrum")
+	build := exec.Command("go", "build", "-o", thrum, "./cmd/thrum")
 	build.Dir = ".."
 	build.Stdout = os.Stderr
 	build.Stderr = os.Stderr
@@ -41,7 +41,7 @@ func run(t *testing.T, args ...string) string {
 	t.Helper()
 	out, err := try(t, args...)
 	if err != nil {
-		t.Fatalf("ws %s: %v\n%s", strings.Join(args, " "), err, out)
+		t.Fatalf("thrum %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return out
 }
@@ -49,8 +49,8 @@ func run(t *testing.T, args ...string) string {
 // try runs the command and returns what it said, and whether it refused.
 func try(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	cmd := exec.Command(ws, args...)
-	cmd.Env = append(os.Environ(), "WS_ACTOR=fixture-actor")
+	cmd := exec.Command(thrum, args...)
+	cmd.Env = append(os.Environ(), "THRUM_ACTOR=fixture-actor")
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -60,7 +60,7 @@ func refuses(t *testing.T, want string, args ...string) {
 	t.Helper()
 	out, err := try(t, args...)
 	if err == nil {
-		t.Fatalf("ws %s should have been refused, and it said:\n%s", strings.Join(args, " "), out)
+		t.Fatalf("thrum %s should have been refused, and it said:\n%s", strings.Join(args, " "), out)
 	}
 	if want != "" && !strings.Contains(out, want) {
 		t.Errorf("the refusal should mention %q, and it said:\n%s", want, out)

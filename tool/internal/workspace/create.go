@@ -9,8 +9,8 @@ import (
 
 	"io"
 
-	root "github.com/multiagentworkspace/ws"
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
+	root "github.com/multiagentworkspace/thrum"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 )
 
 // CreateOptions are what creating a workspace needs to know.

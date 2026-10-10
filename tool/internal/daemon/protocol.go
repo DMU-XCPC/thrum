@@ -13,7 +13,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // Verb is what a request asks for.

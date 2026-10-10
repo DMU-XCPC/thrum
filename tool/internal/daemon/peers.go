@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // PeerRef is one site in the roster: the half that travels, and the half that does not.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/multiagentworkspace/ws/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
 )
 
 // ReadResources returns the entries a registry declares for one kind.

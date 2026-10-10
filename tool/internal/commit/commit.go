@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/multiagentworkspace/ws/tool/internal/gitx"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // Kind is the first word of a coordination commit's subject.
@@ -51,7 +51,7 @@ func Event(l workspace.Layout, kind Kind, subject, summary string, paths ...stri
 		return "", fmt.Errorf("staging: %w", err)
 	}
 
-	commitArgs := gitx.IdentityArgs(l.Root, "ws")
+	commitArgs := gitx.IdentityArgs(l.Root, "thrum")
 	commitArgs = append(commitArgs, "commit", "--quiet", "-m", Subject(kind, subject, summary))
 	if _, err := gitx.Run(l.Root, commitArgs...); err != nil {
 		return "", err

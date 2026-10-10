@@ -1,9 +1,9 @@
-// Package ws holds the files a workspace is created from.
+// Package thrum holds the files a workspace is created from.
 //
 // This file sits at the repository root rather than under tool/ because go:embed
 // cannot name a path outside the directory its own source file lives in, and cannot
 // contain ".." at all.
-package ws
+package thrum
 
 import "embed"
 

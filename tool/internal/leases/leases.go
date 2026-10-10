@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/atomic"
-	"github.com/multiagentworkspace/ws/tool/internal/format"
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/atomic"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
 // Request is what taking or renewing a lease needs.

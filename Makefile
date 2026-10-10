@@ -13,10 +13,10 @@ export GOSUMDB    := sum.golang.google.cn
 
 # The binary lives with the rest of the build state, so that nothing has to be
 # installed to try it.
-BIN := $(ROOT)/.gocache/ws
+BIN := $(ROOT)/.gocache/thrum
 
 build:
-	cd tool && go build -o $(BIN) ./cmd/ws
+	cd tool && go build -o $(BIN) ./cmd/thrum
 	@echo built $(BIN)
 
 test:

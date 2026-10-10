@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/multiagentworkspace/ws/tool/internal/daemon"
-	"github.com/multiagentworkspace/ws/tool/internal/occupancy"
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
+	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +12,7 @@ import (
 //
 // The registry is not a file in the workspace, because the workspace records names and
 // this records processes. Starting and waking an actor are the daemon's, at
-// `ws daemon start` and `ws daemon wake`.
+// `thrum daemon start` and `thrum daemon wake`.
 func newActorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "actor",

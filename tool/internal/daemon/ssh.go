@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/multiagentworkspace/ws/tool/internal/workspace"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -24,7 +24,7 @@ import (
 // ForcedCommand is the one command a peer may ask for. A peer runs one command per
 // request, over the same channel it would use to use the resource, and there is no
 // shell on the other end of it.
-const ForcedCommand = "ws-daemon"
+const ForcedCommand = "thrum-daemon"
 
 // DialSSH opens a connection to a peer.
 func DialSSH(ref PeerRef, l workspace.Layout, site string) (*sshClient, error) {
@@ -121,7 +121,7 @@ func (c *sshClient) Close() error {
 func ServeSSH(l workspace.Layout, h Handler, ln net.Listener) error {
 	config, err := serverConfig(l)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ws daemon: cannot accept peers: %v\n", err)
+		fmt.Fprintf(os.Stderr, "thrum daemon: cannot accept peers: %v\n", err)
 		return err
 	}
 	for {
@@ -140,7 +140,7 @@ func handleSSH(conn net.Conn, config *ssh.ServerConfig, h Handler, l workspace.L
 	if err != nil {
 		// A peer that cannot get in is worth saying out loud: the alternative is a
 		// connection that fails somewhere else, for a reason nobody can see.
-		fmt.Fprintf(os.Stderr, "ws daemon: refused a peer: %v\n", err)
+		fmt.Fprintf(os.Stderr, "thrum daemon: refused a peer: %v\n", err)
 		return
 	}
 	defer server.Close()
@@ -239,7 +239,7 @@ func runGit(ch io.ReadWriter, verb, path string) uint32 {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "ws daemon: git %s %s: %v: %s\n", verb, path, err, strings.TrimSpace(stderr.String()))
+		fmt.Fprintf(os.Stderr, "thrum daemon: git %s %s: %v: %s\n", verb, path, err, strings.TrimSpace(stderr.String()))
 		return 1
 	}
 	return 0
@@ -386,9 +386,9 @@ func reachTarget(ref PeerRef) (network, address, user string, err error) {
 		user = ref.SSHUser
 	}
 	if user == "" {
-		// A DAEMON_SSH_USER is the one piece of a collective's local environment that
+		// A THRUM_SSH_USER is the one piece of a collective's local environment that
 		// the site-local half cannot supply, because it is about the other machine.
-		user = os.Getenv("DAEMON_SSH_USER")
+		user = os.Getenv("THRUM_SSH_USER")
 	}
 	if user == "" {
 		user = "root"
