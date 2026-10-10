@@ -13,12 +13,32 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
+// ListenSpec is where this site accepts peers, as written in var/daemon.yaml.
+//
+// It is site-local and never committed: it says how to reach this machine, which is the
+// machine's own business. A site that says nothing accepts nobody, which is the right
+// default for one that uses nothing remote.
+func ListenSpec(l workspace.Layout) string {
+	raw, err := os.ReadFile(l.DaemonConfig())
+	if err != nil {
+		return ""
+	}
+	var config struct {
+		Listen string `yaml:"listen"`
+	}
+	if err := format.DecodeLoose(raw, &config); err != nil {
+		return ""
+	}
+	return config.Listen
+}
+
 // Options is how a daemon is started. Neither field is a rule: one is where the local
 // socket goes, which the layout already answers, and the other is whether this site
 // answers peers at all.
 type Options struct {
-	// SSHListen is where to accept peers, as host:port, or empty for a site that uses
-	// nothing remote.
+	// SSHListen is where to accept peers: host:port, or unix:<path>. Empty means the
+	// site's own var/daemon.yaml has the answer, and an empty answer there means this
+	// site accepts nobody.
 	SSHListen string
 	// Ready is called once, after the daemon is listening.
 	Ready func(socket, sshAddress string)
@@ -55,15 +75,19 @@ func Run(l workspace.Layout, o Options) error {
 	service := NewService(l)
 	go func() { _ = Serve(service.Handle, local) }()
 
+	listen := o.SSHListen
+	if listen == "" {
+		listen = ListenSpec(l)
+	}
 	sshAddress := ""
-	if o.SSHListen != "" {
-		network, address := listenTarget(o.SSHListen)
+	if listen != "" {
+		network, address := listenTarget(listen)
 		peers, err := net.Listen(network, address)
 		if err != nil {
 			return err
 		}
 		defer peers.Close()
-		sshAddress = o.SSHListen
+		sshAddress = listen
 		go func() { _ = ServeSSH(l, service.Handle, peers) }()
 	}
 	if o.Ready != nil {
@@ -72,8 +96,23 @@ func Run(l workspace.Layout, o Options) error {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
-	return nil
+
+	// A daemon that nobody asked to run should not stay: it is started when an
+	// operation needs something alive, and this is where it decides it is no longer
+	// needed. Nothing is lost by leaving — the workspace is the state — except
+	// supervision, which is exactly what it has none of at this point.
+	tick := time.NewTicker(5 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-stop:
+			return nil
+		case <-tick.C:
+			if service.Idle() {
+				return nil
+			}
+		}
+	}
 }
 
 // listenTarget reads where to accept peers. The forms are the same ones a reach uses,

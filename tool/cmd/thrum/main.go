@@ -55,6 +55,8 @@ func newRootCmd() *cobra.Command {
 		newClaimCmd(),
 		newRelinquishCmd(),
 		newWorktreeCmd(),
+		newStartCmd(),
+		newStopCmd(),
 		newOccupancyCmd(),
 		newResourceCmd(),
 		newLeaseCmd(),

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // thrum is the built command, shared by every test in this package.
@@ -227,12 +228,29 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 		t.Errorf("the branch did not arrive:\n%s", out)
 	}
 
-	// And with no daemon, the running world is honestly reported as unknown.
-	if out := run(t, "--root", root, "actor", "ask", "--job", "add-retry"); !strings.Contains(out, "nobody") {
-		t.Errorf("with no daemon there is no live answer: %s", out)
+	// With nothing supervised here, the running world is honestly reported as a claim
+	// rather than a live answer.
+	if out := run(t, "--root", root, "actor", "ask", "--job", "add-retry"); !strings.Contains(out, "nobody") && !strings.Contains(out, "claim") {
+		t.Errorf("with nothing running there is no live answer: %s", out)
 	}
-	// Starting an actor is what the daemon is for, and saying so beats doing half of it.
-	refuses(t, "daemon", "--root", root, "daemon", "start", "--job", "add-retry", "--", "/bin/true")
+	// A job that has closed is not something to start an actor on.
+	refuses(t, "no longer meant to happen", "--root", root, "start", "--job", "add-retry", "--", "/bin/true")
+
+	// Starting one on a live job needs nothing a person has to know about: the tool
+	// starts what it needs, and it goes away again once there is nothing to do.
+	run(t, "--root", root, "open", "--job", "second-job", "--label", "uploader")
+	out := run(t, "--root", root, "start", "--job", "second-job", "--", "/bin/sh", "-c", "echo worked >> "+filepath.Join(root, "job", "second-job", "out", "log"))
+	if !strings.Contains(out, "started") {
+		t.Errorf("starting an actor said: %s", out)
+	}
+	waitForFile(t, filepath.Join(root, "job", "second-job", "out", "log"))
+	if out := run(t, "--root", root, "status"); !strings.Contains(out, "running") || !strings.Contains(out, "second-job") {
+		t.Errorf("status should say what this site is running:\n%s", out)
+	}
+	// And nothing anywhere named a daemon.
+	if out := run(t, "--root", root, "stop", "--job", "second-job"); !strings.Contains(out, "stopped") {
+		t.Errorf("stopping said: %s", out)
+	}
 }
 
 // A job that moves carries its records through git and its payload through a bundle.
@@ -317,6 +335,20 @@ func seedCode(t *testing.T, root string) {
 	git(t, clone, "add", "README.md")
 	git(t, clone, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "project: first commit")
 	git(t, clone, "push", "--quiet", "origin", "HEAD:refs/heads/main")
+}
+
+// waitForFile waits for an actor's own output to appear, which is the only proof that
+// something really ran.
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("%s never appeared", path)
 }
 
 // gitOut runs git and returns what it said.

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/commit"
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/leases"
 	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
@@ -259,7 +260,30 @@ func newLeaseCmd() *cobra.Command {
 		Short: "Take a unit of a resource until a time",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			lease, err := leases.Take(layout(), leases.Request{
+			l := layout()
+			where, err := leaseTarget(l, resource)
+			if err != nil {
+				return err
+			}
+			if where.remote != "" {
+				resp, err := daemon.NewPeers(l).Ask(where.ref, daemon.Request{
+					Verb: daemon.VerbLeaseTake,
+					Args: daemon.Args(map[string]any{
+						"resource": resource, "unit": unit, "occupant": actor,
+						"job": jobID, "ttl_seconds": int(ttl.Seconds()),
+					}),
+				})
+				if err != nil {
+					return err
+				}
+				var lease format.Lease
+				if err := decode(resp, &lease); err != nil {
+					return err
+				}
+				fmt.Printf("holding %s.%s at %s until %s\n", lease.Resource, lease.Unit, where.remote, lease.Expires)
+				return nil
+			}
+			lease, err := leases.Take(l, leases.Request{
 				Resource: resource, Unit: unit, Occupant: actor, Job: jobID, TTL: ttl,
 			}, time.Now().UTC())
 			if err != nil {
@@ -276,7 +300,30 @@ func newLeaseCmd() *cobra.Command {
 		Short: "Extend a lease you hold",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			lease, err := leases.Renew(layout(), leases.Request{
+			l := layout()
+			where, err := leaseTarget(l, resource)
+			if err != nil {
+				return err
+			}
+			if where.remote != "" {
+				resp, err := daemon.NewPeers(l).Ask(where.ref, daemon.Request{
+					Verb: daemon.VerbLeaseRenew,
+					Args: daemon.Args(map[string]any{
+						"resource": resource, "unit": unit, "occupant": actor,
+						"job": jobID, "ttl_seconds": int(ttl.Seconds()),
+					}),
+				})
+				if err != nil {
+					return err
+				}
+				var lease format.Lease
+				if err := decode(resp, &lease); err != nil {
+					return err
+				}
+				fmt.Printf("holding %s.%s at %s until %s\n", lease.Resource, lease.Unit, where.remote, lease.Expires)
+				return nil
+			}
+			lease, err := leases.Renew(l, leases.Request{
 				Resource: resource, Unit: unit, Occupant: actor, Job: jobID, TTL: ttl,
 			}, time.Now().UTC())
 			if err != nil {
@@ -293,7 +340,24 @@ func newLeaseCmd() *cobra.Command {
 		Short: "Release a lease you hold",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := leases.Release(layout(), resource, unit, actor); err != nil {
+			l := layout()
+			where, err := leaseTarget(l, resource)
+			if err != nil {
+				return err
+			}
+			if where.remote != "" {
+				if _, err := daemon.NewPeers(l).Ask(where.ref, daemon.Request{
+					Verb: daemon.VerbLeaseRelease,
+					Args: daemon.Args(map[string]string{
+						"resource": resource, "unit": unit, "occupant": actor,
+					}),
+				}); err != nil {
+					return err
+				}
+				fmt.Printf("released %s.%s at %s\n", resource, unit, where.remote)
+				return nil
+			}
+			if err := leases.Release(l, resource, unit, actor); err != nil {
 				return err
 			}
 			fmt.Printf("released %s.%s\n", resource, unit)

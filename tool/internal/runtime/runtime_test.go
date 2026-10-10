@@ -278,6 +278,49 @@ func TestCapacityAllowsSeveralHolders(t *testing.T) {
 	}
 }
 
+// A lease belongs to a job that is meant to happen. A closed job is not, so nothing is
+// taken for it — while a record a closed job left behind stays free for whoever comes
+// next, which is the other half of the same rule.
+func TestAClosedJobIsNotLeasedFor(t *testing.T) {
+	l := workspaceFor(t)
+	if err := resources.Declare(l, "gpu", resources.Entry{Name: "gpu", Purpose: "The only GPU"}); err != nil {
+		t.Fatal(err)
+	}
+	closed := "---\njob: old-job\nstatus: done\nbranch: job/old-job\nowned_paths: []\n---\n\n## Goal\n\n## Scope\n\n## Acceptance criteria\n"
+	if err := os.MkdirAll(l.ArchiveTask("old-job"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.ArchivedBrief("old-job"), []byte(closed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := leases.Take(l, leases.Request{
+		Resource: "gpu", Occupant: "one", Job: "old-job", TTL: time.Hour,
+	}, time.Now().UTC()); err == nil {
+		t.Error("a lease for a closed job should be refused")
+	}
+
+	// But a record that closed job left behind is free for a live one.
+	openJob(t, l, "live-job")
+	if _, err := leases.Take(l, leases.Request{
+		Resource: "gpu", Occupant: "one", Job: "live-job", TTL: time.Hour,
+	}, time.Now().UTC()); err != nil {
+		t.Fatalf("a live job should be able to take it: %v", err)
+	}
+	// Move the live job to the archive, and its lease is free for the next one.
+	if err := os.MkdirAll(filepath.Join(l.Archive(), "task"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(l.TaskDir("live-job"), l.ArchiveTask("live-job")); err != nil {
+		t.Fatal(err)
+	}
+	openJob(t, l, "next-job")
+	if _, err := leases.Take(l, leases.Request{
+		Resource: "gpu", Occupant: "two", Job: "next-job", TTL: time.Hour,
+	}, time.Now().UTC()); err != nil {
+		t.Fatalf("a closed job's lease should be free: %v", err)
+	}
+}
+
 func TestALeaseDiesWithItsJob(t *testing.T) {
 	l := workspaceFor(t)
 	if err := resources.Declare(l, "gpu", resources.Entry{Name: "gpu", Purpose: "the only GPU"}); err != nil {

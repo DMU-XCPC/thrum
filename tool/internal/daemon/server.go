@@ -184,6 +184,33 @@ func (s *Service) Handle(req Request) Response {
 		}
 		return resp
 
+	case VerbLeaseRenew:
+		var args struct {
+			Resource string `json:"resource"`
+			Unit     string `json:"unit"`
+			Occupant string `json:"occupant"`
+			Job      string `json:"job"`
+			TTL      int    `json:"ttl_seconds"`
+		}
+		if err := req.DecodeArgs(&args); err != nil {
+			return Fail(err)
+		}
+		lease, err := leases.Renew(s.L, leases.Request{
+			Resource: args.Resource,
+			Unit:     args.Unit,
+			Occupant: args.Occupant,
+			Job:      args.Job,
+			TTL:      time.Duration(args.TTL) * time.Second,
+		}, time.Now().UTC())
+		if err != nil {
+			return Fail(err)
+		}
+		resp, err := Payload(lease)
+		if err != nil {
+			return Fail(err)
+		}
+		return resp
+
 	case VerbLeaseRelease:
 		var args struct {
 			Resource string `json:"resource"`
@@ -273,6 +300,51 @@ func (s *Service) status() Response {
 		return Fail(err)
 	}
 	return resp
+}
+
+// Idle reports whether this site has nothing left that needs something alive.
+//
+// A daemon exists for two reasons: to supervise an actor, and to act later on behalf of
+// a job that is waiting. When it has neither, it has no reason to exist, and a daemon
+// nobody asked to run is worse than no daemon at all.
+//
+// The grace period covers the one race that matters: a daemon started in order to serve
+// a request that has not arrived yet must not decide it is idle and leave.
+func (s *Service) Idle() bool {
+	if time.Since(s.Started) < 10*time.Second {
+		return false
+	}
+	if s.Registry.AnyAlive() {
+		return false
+	}
+	jobs, err := liveJobs(s.L)
+	if err != nil {
+		return false // unsure is not idle
+	}
+	for _, job := range jobs {
+		if blocked(s.L, job) {
+			return false // something is waiting, and only this can wake it
+		}
+	}
+	return true
+}
+
+// blocked reports whether a job's latest handoff says it is waiting on another.
+func blocked(l workspace.Layout, job string) bool {
+	paths, _ := filepath.Glob(filepath.Join(l.HandoffDir(job), "*.md"))
+	if len(paths) == 0 {
+		return false
+	}
+	sort.Strings(paths)
+	front, _, err := format.LoadDocument(paths[len(paths)-1])
+	if err != nil {
+		return false
+	}
+	var h format.Handoff
+	if err := format.Decode(front, &h); err != nil {
+		return false
+	}
+	return h.Status == format.HandoffBlocked && len(h.BlockedBy) > 0
 }
 
 // Serve answers connections on a listener until it is closed. The socket and the SSH

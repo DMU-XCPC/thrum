@@ -33,10 +33,10 @@ cd /tmp/demo && .../thrum verify
 | `status` | `thrum status` |
 | `clean` | `thrum clean [--dry-run]` |
 | `sync` | `thrum sync [--job <id>] [--fetch]` |
-| `registry` | `thrum actor registry` |
+| `registry` | `thrum actor registry`, and the `running` section of `thrum status` |
 | `ask` | `thrum actor ask --job <id>` |
-| `start` | `thrum daemon start --job <id> -- <command>…` |
-| `wake` | `thrum daemon wake --job <id>` (also `notify`) |
+| `start` | `thrum start --job <id> -- <command>…` |
+| `wake` | not a command: closing a job, or handing it over as `done`, tells whoever is waiting. Writing a handoff as `blocked` is what starts something that can act on it |
 | `open` | `thrum open --job <id> --label <label>` |
 | `claim` | `thrum claim --job <id> [--owner <actor>]` |
 | `reassign`, `relinquish` | `thrum claim --owner <actor>`, `thrum relinquish` |
@@ -50,34 +50,51 @@ cd /tmp/demo && .../thrum verify
 | `commit` | not a command: every operation commits its own one event |
 | `collect` | `thrum collect [--window] [--dry-run]` |
 | `export`, `import` | `thrum bundle export`, `thrum bundle import <bundle>` |
-| `coordinate` | `thrum daemon coordinate --resource <name> --job <id>` |
-| `serve` | `thrum daemon run --ssh-listen <where>` (also `serve`) |
-| `peers` | `thrum daemon peers` |
+| `coordinate` | part of `thrum lease take`: a resource is leased where it lives, so the request goes to the site that holds it |
+| `serve` | the daemon serves this site's repositories to its peers, for the same reason it answers the forced command |
+| `peers` | the `sites` section of `thrum status` |
 
 `--root` is a global flag, and defaults to where the command was run. `--actor` is
 global too and defaults to `$THRUM_ACTOR`, then `$USER`: an actor is a stable identity and
 not a per-command choice.
 
-## With a daemon, and without one
+## The daemon is not a command
 
-Every command works with no daemon running, because each does its own work and returns.
-The daemon exists for the three things a file cannot do:
+Nothing a person types names it. Every operation works without one, because each does its
+own work and returns; the daemon exists for the two things a file cannot do — supervising
+an actor, and acting later on behalf of a job that is waiting.
+
+So `thrum` starts one when an operation needs something alive, and the daemon leaves on
+its own once nothing is running and nothing is waiting:
+
+- `thrum start` needs something to supervise it, and starts a daemon if there is none.
+- Writing a handoff as `blocked` needs something that can wake the job when the wait
+  ends, so that starts one too.
+- Closing a job, or handing it over as `done`, tells the daemon here and every peer
+  directly over SSH — no daemon required on the side that is telling.
+- When no actor is alive and no live job is waiting, the daemon exits. There is nothing
+  left for it to do, and a daemon nobody asked to run is worse than none.
+
+Two commands are hidden, because they are for the tool itself, for an operator who wants
+it under systemd, and for a system `sshd`:
 
 ```sh
-thrum daemon run                              # local socket only
-thrum daemon run --ssh-listen 0.0.0.0:2222    # and answer peers
+thrum daemon run     # foreground; also what `thrum` runs detached for itself
+thrum daemon exec    # the forced command a peer runs
 ```
 
-- **Being alive.** `thrum daemon start` runs an actor and supervises it. With no daemon it
-  refuses and says so, rather than starting something nothing is watching.
-- **Waking something.** Writing `blocked` in a handoff records that a job is waiting;
-  only a process can act on it when the wait ends.
-- **Across machines.** A lease is taken at the site the resource lives on. The site
-  holding it is found by asking, and a peer that cannot be reached is reported rather
-  than assumed.
+One daemon per site, enforced by `var/daemon.lock`, which names the process holding it. A
+lock left behind by a process that is gone is taken over by whoever runs next. What it
+says goes to `var/daemon.log`, which is the only place to find out why it refused
+something, and where it accepts peers comes from `var/daemon.yaml`:
 
-One daemon per site, enforced by `var/daemon.lock`, which names the process holding it.
-A lock left behind by a process that is gone is taken over by whoever runs next.
+```yaml
+# var/daemon.yaml — never committed: how to reach this machine is its own business.
+listen: unix:/run/thrum.sock     # or 0.0.0.0:2222; absent means it accepts nobody
+```
+
+`thrum status` prints what only the daemon and the network know: what this site is
+running, and which sites answer right now.
 
 ## Reaching a peer
 

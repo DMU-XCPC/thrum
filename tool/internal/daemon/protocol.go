@@ -40,6 +40,7 @@ const (
 	VerbAsk Verb = "ask"
 	// VerbLease takes or releases a unit at the site the resource lives on.
 	VerbLeaseTake    Verb = "lease.take"
+	VerbLeaseRenew   Verb = "lease.renew"
 	VerbLeaseRelease Verb = "lease.release"
 	// VerbPeers reports the roster and which peers are reachable.
 	VerbPeers Verb = "peers"

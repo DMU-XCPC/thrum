@@ -241,6 +241,27 @@ func TestOneJobIsWorkedByOneActor(t *testing.T) {
 	}
 }
 
+// A job that has closed is not something to start an actor on: the work is over, and an
+// actor on it would be work nobody asked for.
+func TestAClosedJobIsNotStartedAgain(t *testing.T) {
+	l := site(t, "build-01")
+	serve(t, l)
+
+	closed := "---\njob: job-a\nstatus: done\nbranch: job/job-a\nowned_paths: []\n---\n\n## Goal\n\n## Scope\n\n## Acceptance criteria\n"
+	if err := os.WriteFile(l.Brief("job-a"), []byte(closed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resp := ask(t, l, daemon.VerbStart, map[string]any{
+		"job": "job-a", "actor": "claude-opus", "command": []string{"/bin/sleep", "30"},
+	})
+	if resp.OK {
+		t.Fatal("a closed job should not be started")
+	}
+	if !strings.Contains(resp.Error, "no longer meant to happen") {
+		t.Errorf("the refusal should say why: %s", resp.Error)
+	}
+}
+
 func TestWaitingIsReadFromTheRecordAndWokenOnce(t *testing.T) {
 	l := site(t, "build-01")
 	serve(t, l)

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/leases"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
@@ -307,8 +308,41 @@ func (p *Peers) Home(resource string) ([]string, error) {
 			holders = append(holders, a.name)
 		}
 	}
+
+	// Nobody claims it, and the roster names no other machine: then there is nowhere
+	// else it could be, and a declared resource is this machine's. That is the ordinary
+	// case of a workspace on one computer, and it is why a resource with nothing on disk
+	// — a borrowed machine, a shared dependency — needs no file to say so until there is
+	// a second site to say it against.
+	if len(holders) == 0 && p.declares(resource) && !p.hasOthers() {
+		holders = append(holders, p.Site())
+	}
+
 	sort.Strings(holders)
 	return holders, nil
+}
+
+// declares reports whether the workspace declares a resource at all. A name that
+// resolves to no entry is a name with no referent, and no site holds it.
+func (p *Peers) declares(resource string) bool {
+	// Asking for its capacity is the same question: a name with no entry has none.
+	_, err := leases.Capacity(p.l, resource)
+	return err == nil
+}
+
+// hasOthers reports whether the roster declares a site other than this one, reachable or
+// not: an unreachable site is still a place the resource might be.
+func (p *Peers) hasOthers() bool {
+	declared, err := workspace.ReadResources(p.l, "site")
+	if err != nil {
+		return false
+	}
+	for name := range declared {
+		if name != p.Site() {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedResources(m map[string]format.Resource) []string {

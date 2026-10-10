@@ -84,6 +84,12 @@ func (l Layout) OccupyFile(job string) string {
 }
 func (l Layout) DaemonSocket() string { return filepath.Join(l.Var(), "daemon.sock") }
 func (l Layout) DaemonLock() string   { return filepath.Join(l.Var(), "daemon.lock") }
+func (l Layout) DaemonLog() string    { return filepath.Join(l.Var(), "daemon.log") }
+
+// DaemonConfig is where this site says how its daemon should behave — above all, where
+// it accepts peers. It is site-local and never committed, like everything else that
+// says how to reach this machine.
+func (l Layout) DaemonConfig() string { return filepath.Join(l.Var(), "daemon.yaml") }
 
 // A job's payload.
 func (l Layout) Jobs() string             { return filepath.Join(l.Root, "job") }

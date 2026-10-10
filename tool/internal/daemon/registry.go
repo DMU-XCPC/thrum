@@ -67,8 +67,15 @@ func (r *Registry) Start(l workspace.Layout, actor, job string, command []string
 	if len(command) == 0 {
 		return Actor{}, fmt.Errorf("nothing to run for %s", job)
 	}
-	if _, _, err := workspace.ReadBrief(l, job); err != nil {
+	brief, _, err := workspace.ReadBrief(l, job)
+	if err != nil {
 		return Actor{}, err
+	}
+	// A job that is done or abandoned is no longer meant to happen, so nothing is
+	// started on it: an actor working a closed job is work nobody asked for, and
+	// nobody is waiting for it.
+	if brief.Status != format.StatusActive {
+		return Actor{}, fmt.Errorf("%s is %s, and nothing is started on a job that is no longer meant to happen", job, brief.Status)
 	}
 	// One job is worked by one actor. A second one on the same job is not a helper,
 	// it is two writers and one claim.
@@ -180,6 +187,21 @@ func (r *Registry) Stop(l workspace.Layout, job string) error {
 		}
 	}
 	return nil
+}
+
+// AnyAlive reports whether anything this site started is still going.
+//
+// The ledger keeps a record of everything it ever started; this is the question that
+// decides whether the daemon still has a reason to exist.
+func (r *Registry) AnyAlive() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, a := range r.actors {
+		if a.Alive() {
+			return true
+		}
+	}
+	return false
 }
 
 // Actors lists what is running, in a stable order.

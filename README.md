@@ -828,6 +828,8 @@ A lease cannot be replaced that way, and that is the entire reason it exists: wh
 | `config/<name>.yaml` | The site-local half of a resource declaration | Never committed; declared by this site, for this site |
 | `site` | Which site this machine is, by name | A one-line site-local fact: a site that cannot name itself cannot find its own half of a declaration |
 | `secrets/` | Machine-local credentials | Prefer outside the workspace; never in git, never in a handoff |
+| `daemon.lock`, `daemon.sock`, `daemon.log` | The daemon's own: the process holding this site, the socket commands reach it on, and what it has said | Written and cleared by the daemon; the log is the only place it explains a refusal |
+| `daemon.yaml` | Where this site accepts peers, if it accepts any | Never committed: how to reach this machine is this machine's own business, and a site that says nothing accepts nobody |
 
 The workspace does not manage processes, evict caches or read secrets. It only says where those things go.
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/jobs"
@@ -97,6 +98,22 @@ func newHandoffCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("recorded %s (%s)\n", jobID, short(id))
+
+			l := layout()
+			switch state {
+			case format.HandoffBlocked:
+				// Something is waiting, so something has to be alive to wake it when
+				// the wait ends. This is the only reason a daemon is started without
+				// being asked for, and it leaves once nothing is waiting.
+				if err := startDaemonIfNeeded(l); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: nothing here can wake %s when %s finishes: %v\n",
+						jobID, strings.Join(list(blockedBy), ", "), err)
+				}
+			case format.HandoffDone:
+				if told := announce(l, jobID, actor); len(told) > 0 {
+					fmt.Printf("told %d site(s) that %s is done: %s\n", len(told), jobID, strings.Join(told, ", "))
+				}
+			}
 			return nil
 		},
 	}
@@ -133,11 +150,16 @@ func newCloseCmd() *cobra.Command {
 			if abandoned {
 				state = format.StatusAbandoned
 			}
-			id, err := jobs.Close(layout(), jobID, state, summary)
+			l := layout()
+			id, err := jobs.Close(l, jobID, state, summary)
 			if err != nil {
 				return err
 			}
 			fmt.Printf("closed %s as %s (%s)\n", jobID, state, short(id))
+			// Whatever was waiting on it can stop waiting.
+			if told := announce(l, jobID, actor); len(told) > 0 {
+				fmt.Printf("told %d site(s) that %s is done: %s\n", len(told), jobID, strings.Join(told, ", "))
+			}
 			return nil
 		},
 	}

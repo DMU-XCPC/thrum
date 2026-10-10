@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/status"
 	"github.com/multiagentworkspace/thrum/tool/internal/validate"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
@@ -64,6 +65,51 @@ func newVerifyCmd() *cobra.Command {
 	}
 }
 
+// printRunning is the running world: what this site started and still supervises, and
+// which of the sites the roster declares answer right now. Reachability is a question
+// about the present and is never cached.
+func printRunning(cmd *cobra.Command, l workspace.Layout) {
+	out := cmd.OutOrStdout()
+
+	fmt.Fprintln(out, "running")
+	resp, running, err := askDaemon(l, daemon.Request{Verb: daemon.VerbStatus})
+	switch {
+	case err != nil || !running:
+		fmt.Fprintln(out, "  (nothing here is supervised)")
+	default:
+		var data daemon.StatusData
+		if err := decode(resp, &data); err == nil {
+			if len(data.Actors) == 0 {
+				fmt.Fprintln(out, "  (nothing)")
+			}
+			for _, a := range data.Actors {
+				state := "alive"
+				if !a.Alive() {
+					state = "gone"
+				}
+				fmt.Fprintf(out, "  %-14s %-28s pid %-7d %s\n", a.Actor, a.Job, a.PID, state)
+			}
+		}
+	}
+
+	fmt.Fprintln(out, "sites")
+	report := daemon.NewPeers(l).Report()
+	if len(report) == 0 {
+		fmt.Fprintln(out, "  (the roster declares no sites)")
+	}
+	for _, p := range report {
+		state := "unreachable"
+		if p.Reachable {
+			state = "reachable"
+		}
+		note := ""
+		if p.Note != "" {
+			note = "  " + p.Note
+		}
+		fmt.Fprintf(out, "  %-20s %-12s %-24s%s\n", p.Name, state, p.Reach, note)
+	}
+}
+
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
@@ -73,11 +119,15 @@ func newStatusCmd() *cobra.Command {
 			"holds which branch, and var/ says who is on what here.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			report, err := status.Gather(layout())
+			l := layout()
+			report, err := status.Gather(l)
 			if err != nil {
 				return err
 			}
 			report.Print(cmd.OutOrStdout())
+			// The daemon is not a command a person runs, so what only it knows is
+			// printed here: what this site is running, and which sites answer.
+			printRunning(cmd, l)
 			return nil
 		},
 	}

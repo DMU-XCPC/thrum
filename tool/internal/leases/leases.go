@@ -37,8 +37,15 @@ func Take(l workspace.Layout, r Request, now time.Time) (format.Lease, error) {
 	if r.Job == "" {
 		return format.Lease{}, fmt.Errorf("a lease always belongs to a job")
 	}
-	if _, _, err := workspace.ReadBrief(l, r.Job); err != nil {
+	brief, _, err := workspace.ReadBrief(l, r.Job)
+	if err != nil {
 		return format.Lease{}, fmt.Errorf("no job %q: a lease always belongs to a job the workspace knows", r.Job)
+	}
+	// A job that is done or abandoned is no longer meant to happen, so nothing is held
+	// for it. A record left behind by such a job is still free for others — its holder
+	// is gone — but that is a different thing from leasing for a job that is over.
+	if brief.Status != format.StatusActive {
+		return format.Lease{}, fmt.Errorf("%s is %s, and nothing is leased for a job that is no longer meant to happen", r.Job, brief.Status)
 	}
 	if r.TTL <= 0 {
 		return format.Lease{}, fmt.Errorf("a lease needs a time to run until")
