@@ -101,6 +101,7 @@ the workspace or by dialling the site that can answer it.
 | --- | --- |
 | `create` | `thrum create <dir> [--site]` |
 | `join` | `thrum join <dir> --remote <url> --site <name> [--code <url>] [--store <url>]` |
+| `update` | `thrum update [--dry-run] [--adopt-template] [--narrow]` |
 | `verify` | `thrum verify` |
 | `status` | `thrum status` |
 | `clean` | `thrum clean [--dry-run]` |

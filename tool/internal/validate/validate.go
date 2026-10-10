@@ -87,6 +87,29 @@ func (v *validator) run() {
 	v.checkConventions()
 	v.checkTopics()
 	v.checkWorktreeDirs()
+	v.checkSkeleton()
+}
+
+// checkSkeleton reports the unversioned skeleton the tooling carries: the directories a
+// workspace is made of, and the ignore rules that keep build state out of the source
+// history.
+//
+// Neither is in a repository, so neither can be checked against a record — which is
+// exactly why both are what drifts when the tooling moves on, and why this check exists
+// rather than being left to the tooling that wrote them.
+func (v *validator) checkSkeleton() {
+	drift, err := workspace.Compare(v.l)
+	if err != nil {
+		return
+	}
+	for _, dir := range drift.MissingDirs {
+		v.add(dir, "the workspace has every directory the template defines", "the directory is not there")
+	}
+	if len(drift.IgnoreMissing) > 0 {
+		v.add("", "the ignore rules are the tooling's list, in both copies",
+			"these rules are not ignored in .gitignore or .git/info/exclude, so build state could be committed: %s",
+			strings.Join(drift.IgnoreMissing, " "))
+	}
 }
 
 // readResources loads every registry, checking as it goes that a kind file's key

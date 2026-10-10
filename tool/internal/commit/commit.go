@@ -26,6 +26,7 @@ const (
 	KindAsset      Kind = "asset"
 	KindResource   Kind = "resource"
 	KindRetire     Kind = "retire"
+	KindTemplate   Kind = "template"
 )
 
 // Subject builds the subject line. A kind whose subject is omitted — a resource
@@ -102,6 +103,13 @@ func Infer(path string) (Kind, string, error) {
 			return "", "", err
 		}
 		return KindHandoff, job, nil
+
+	case strings.HasPrefix(path, "doc/template/"):
+		name, err := trimExtension(strings.TrimPrefix(path, "doc/template/"))
+		if err != nil || name == "" || strings.Contains(name, "/") {
+			return "", "", fmt.Errorf("%q is not a template: a template is doc/template/<name>.md", path)
+		}
+		return KindTemplate, name, nil
 
 	case strings.HasPrefix(path, "doc/topic/"):
 		rest := strings.TrimPrefix(path, "doc/topic/")

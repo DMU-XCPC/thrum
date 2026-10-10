@@ -152,14 +152,15 @@ The parts:
 
 **Front matter is edited textually.** The body of a document is copied through byte for byte and only the delimited front-matter block is decoded and re-encoded. That is why a YAML library without perfect comment round-tripping is good enough here: what must survive is the prose, and the prose never passes through the parser.
 
-**This choice closes one open question and one worry.** Embedding the template means the template version travels with the binary, which is where "how an instantiated workspace receives updates to the template" gets its answer. And because peers speak SSH, an embedded git server is not a thing that has to be built at all: the repositories are files at declared paths, and serving them is permitting a peer to read them.
+**This choice closes one open question and one worry.** Embedding the template is what makes an update derivable: the current template is in the binary, so what a workspace is missing is found by comparing the two rather than remembered, and `update` is what acts on the comparison. And because peers speak SSH, an embedded git server is not a thing that has to be built at all: the repositories are files at declared paths, and serving them is permitting a peer to read them.
 
 ## Workspace
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
 | `create` | Instantiates a workspace from the template: the two bare repositories, the empty runtime directories, the ignore rules in both `.gitignore` and `.git/info/exclude`, this site's own name in `var/site`, and the first coordination commit. | Never a plain file copy. The repositories have to be initialised, not duplicated. |
-| `verify` | Runs the whole validation list. | Reports; it does not repair. |
+| `update` | Brings the unversioned skeleton up to date with the template the tooling carries: the empty directories, and the ignore rules in both copies. Reports the copy-me files under `doc/template/` that differ, and writes them only when a person asks, leaving them uncommitted to be recorded. | Never touches a versioned file on its own initiative, and never removes a directory. Restores a rule the workspace has lost, and keeps a rule the tooling no longer has until `--narrow` says otherwise |
+| `verify` | Runs the whole validation list, including the unversioned skeleton: a directory the template defines that is not there, and an ignore rule the tooling carries that this workspace has lost in either copy. | Reports; it does not repair. |
 | `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. |
 | `clean` | The guarded clean of untracked files. | Never a bare `git clean` at the workspace root, which would delete `.bare/` and the entire source history with it. |
 | `join` | Makes this machine another site of a workspace that already exists: takes the shared line from the coordination repository, and fills in what a repository cannot carry — the ignore rules, the empty directories, the site's own name, and its own copies of the code and asset repositories. | Commits nothing: joining does not begin a history, and a second first commit would be a second workspace. Refuses a site the roster does not declare, rather than half-joining one. |
@@ -257,7 +258,6 @@ Merging a job's branch, starting and stopping services, running tests, running a
 
 ## Still open
 
-- **How an instantiated workspace receives updates to the template.** Its ignore rules and its templates come from outside itself.
 - **How a site discovers the others.** Today the roster is a git declaration, each site enters its own reach by hand, and keys are exchanged once; that is enough for a workspace whose sites are known to each other. A discovery protocol is not designed, and is not needed for a site to be added reliably — `join` and the roster are the whole of it.
 - **Whether a site ever needs its records to be reconciled rather than published or withdrawn.** Today the answer is no, by construction: an event that cannot go into the line is taken back out and re-recorded. The cost is a round trip per event at a site with a remote.
 - **Whether a stored copy of a peer's state is ever needed** for a site that is offline for a long time, and if so whose.

@@ -4,9 +4,12 @@ This is the design of a workspace: what it is made of, what rules hold it togeth
 why. It is the authority for everything else in this repository — the tooling implements
 it, and where an implementation and this document disagree, this document is right.
 
-It describes **a workspace created from the template**, not this repository. Four words
-are used throughout, and they are defined at the start because everything else is built
-on them.
+It describes **a workspace created from the template**, not this repository. The
+operations a workspace needs its tooling to provide are in [`tooling.md`](tooling.md),
+which is derived from this document and adds no rule of its own.
+
+Four words are used throughout, and they are defined at the start because everything else
+is built on them.
 
 ## The designed workspace
 
@@ -89,6 +92,7 @@ The code repository's commit conventions are the project's own business, and not
 | `convention` | file name without `.md` | `convention 03-naming: numbered conventions are never reused` |
 | `asset` | `name@version` | `asset uploader-baseline@2026-10-09: published from a production sample` |
 | `resource` | omitted | `resource: declared the uploader and spike-gc worktrees, the latter one-off` |
+| `template` | file name without `.md` | `template brief: added the question a brief has to answer` |
 | `retire` | path relative to `doc/`, without the extension | `retire topic/upload/old-retry: superseded by topic/upload/retry` |
 
 - One message describes one event, matching the commit granularity above.
@@ -817,6 +821,14 @@ A bundle carries whatever the job wrote — logs and inputs included — so it i
 
 `doc/template/` holds one copy-me file per record type that an actor writes by hand, named after it: `brief.md`, `handoff.md`, `manifest.md`. The tooling-written records — resources, leases, bundles — have no template, because nobody writes one from scratch. A template is a convenience and never the authority — this chapter is. When a format changes, its template changes in the same commit.
 
+**The template is what the tooling carries, and a workspace materialises it once.** The ignore rules and the copy-me files come from the tooling rather than from git, and the empty directories cannot be carried by a repository at all. So the two can drift — the tooling learns to ignore something new, or grows a directory — and nothing in a repository would notice, because none of it is in one.
+
+**Nothing is stored to make that checkable.** The tooling carries the template, so what a workspace is missing is derived by comparing the two, rather than remembered in a version number that would go stale on every site separately. `verify` reports the difference, and one operation brings it up to date.
+
+**What may be written follows from who owns it, and that splits the template in two.** The unversioned skeleton — the empty directories, and the ignore rules in both `.gitignore` and `.git/info/exclude` — belongs to the tooling, so bringing it up to date loses nothing. `doc/template/` belongs to the project: it is versioned, in the shared line, and a workspace may keep a different one on purpose, so a difference there is reported and written only when a person asks for it, and what is written is left uncommitted to be recorded as the event it is. Adopting it at one site is enough: from there it travels like any other record.
+
+**Widening what is ignored happens on its own; narrowing it is a decision.** A rule the tooling has and the workspace has lost is restored, because a rule that is gone is a file that could be committed. A rule the workspace has and the tooling does not is kept and reported until somebody decides otherwise. A machine that needs rules of its own uses git's own `core.excludesFile`, which is that machine's business and never travels.
+
 ## Runtime
 
 `var/` holds what a workspace needs while it runs, and nothing it needs to remember. It carries no decision, so losing it loses coordination rather than knowledge: a lease is taken again, an environment is rebuilt, a cache is recomputed. Most of it is a **materialisation rather than a recipe**: the environment under `env/<label>/` is built from the project's own setup, and it is never portable — a virtualenv embeds absolute paths, a dependency tree may hold native builds, a compiler cache belongs to one architecture — so it is rebuilt per site rather than copied between them. The two entries that are not produced by building anything are `lease/`, which is occupancy, and `config/`, which is the site-local half of a declaration.
@@ -888,4 +900,3 @@ The following are left open deliberately rather than guessed at:
 - **The set and format of `doc/convention/`** — which conventions exist, how they are written, and how a rule exposes the values a tool has to read. The rules in this document reach an instantiated workspace only through them.
 - **The startup context given to an agent** — what an actor is told when it takes up a job, discussed together with the conventions because both are pushed to every agent. The base environment variables are no longer part of this: the tooling prints them for a job, and they name paths inside the workspace.
 - **How a site discovers the others.** Today the roster is a git declaration, each site enters its own reach by hand, and keys are exchanged once; that is enough for a site to be added reliably, which is what `Joining a site` describes. A discovery protocol is deliberately not designed, and nothing depends on one existing.
-- **The tooling** — its operations, the shape they take across machines, and the stack they are built on are all in `tooling.md`. An instantiated workspace receives updates to the template from the tooling rather than through git, because the template is what the tooling carries. The actor roster is not part of it either. What the tooling knows about names — who exists, where each was last heard from, and what has been said to whom — is the daemon's, and lives under `var/` where nothing is committed: the workspace's records name actors and record claims, and say nothing else about them.

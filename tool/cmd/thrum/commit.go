@@ -53,6 +53,15 @@ func newCommitCmd() *cobra.Command {
 				paths = append(paths, filepath.ToSlash(rel))
 			}
 
+			// Nothing to record is an answer rather than a failure: it happens whenever
+			// an actor names a file that is already what the line has, and git's own
+			// "nothing to commit" reads like a fault.
+			if nothing, err := commit.Nothing(l, paths...); err != nil {
+				return err
+			} else if nothing {
+				fmt.Printf("nothing to record: %s is already what the line has\n", strings.Join(paths, ", "))
+				return nil
+			}
 			if err := commit.Current(l); err != nil {
 				return err
 			}

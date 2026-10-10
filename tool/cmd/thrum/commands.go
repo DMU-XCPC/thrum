@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/status"
 	"github.com/multiagentworkspace/thrum/tool/internal/validate"
@@ -88,6 +89,85 @@ func newJoinCmd() *cobra.Command {
 	cmd.Flags().StringVar(&store, "store", "", "the asset repository to clone here")
 	_ = cmd.MarkFlagRequired("remote")
 	_ = cmd.MarkFlagRequired("site")
+	return cmd
+}
+
+// newUpdateCmd brings this workspace up to date with the template the tooling carries.
+//
+// The two halves are treated differently, and that is the whole design of this command.
+// The unversioned skeleton — the empty directories, and the ignore rules in both copies —
+// is the tooling's, so bringing it up to date loses nothing. `doc/template/` is the
+// project's: it is versioned, in the shared line, and a workspace may keep a different
+// one on purpose, so a difference there is reported and only written when asked for.
+func newUpdateCmd() *cobra.Command {
+	var (
+		dryRun        bool
+		adoptTemplate bool
+		narrow        bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Bring this workspace up to date with the template the tooling carries",
+		Long: "A workspace materialises the template once, and after that the two can drift: the\n" +
+			"tooling learns to ignore something new, or grows a directory, and nothing notices,\n" +
+			"because none of it is in a repository. This compares the two.\n\n" +
+			"Directories and the ignore rules are the tooling's, so they are brought up to date\n" +
+			"here. Rules this workspace has and the tooling does not are kept unless --narrow is\n" +
+			"given: widening what is ignored is safe on its own, and narrowing it is a decision.\n\n" +
+			"doc/template/ is the project's, so a difference is reported rather than written.\n" +
+			"With --adopt-template the tooling's copies are written over this workspace's and\n" +
+			"left uncommitted, so that git diff shows exactly what would change; committing or\n" +
+			"reverting them is then a person's decision, recorded as the event it is.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := layout()
+			res, err := workspace.Update(l, workspace.UpdateOptions{
+				DryRun:        dryRun,
+				AdoptTemplate: adoptTemplate,
+				Narrow:        narrow,
+			})
+			if err != nil {
+				return err
+			}
+			prefix := ""
+			if dryRun {
+				prefix = "would: "
+			}
+			for _, dir := range res.DirsCreated {
+				fmt.Printf("%screate %s\n", prefix, dir)
+			}
+			if res.IgnoreWritten {
+				fmt.Printf("%srewrite .gitignore and .git/info/exclude from the tooling's list\n", prefix)
+			}
+			for _, rule := range res.IgnoreKept {
+				fmt.Printf("kept the rule %q, which this workspace had and the tooling does not: --narrow drops it\n", rule)
+			}
+			for _, t := range res.Templates {
+				state := "differs from the tooling's"
+				if len(t.Workspace) == 0 {
+					state = "is missing"
+				}
+				fmt.Printf("doc/template/%s %s\n", strings.TrimPrefix(t.Path, "doc/template/"), state)
+			}
+			for _, path := range res.TemplatesAdopted {
+				fmt.Printf("wrote %s from the tooling's copy, uncommitted\n", path)
+			}
+			if len(res.TemplatesAdopted) > 0 {
+				fmt.Printf("record it when you are content with it: thrum commit --summary %q -- %s\n",
+					"adopted the tooling's template", strings.Join(res.TemplatesAdopted, " "))
+			} else if len(res.Templates) > 0 && !adoptTemplate {
+				fmt.Println("the tooling's copy is not written on its own initiative: --adopt-template writes it, uncommitted")
+			}
+			if len(res.DirsCreated) == 0 && !res.IgnoreWritten && len(res.Templates) == 0 {
+				fmt.Println("up to date: the directories and the ignore rules are the tooling's")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would change, and write nothing")
+	cmd.Flags().BoolVar(&adoptTemplate, "adopt-template", false, "also write the tooling's doc/template/ files, uncommitted, for a person to record")
+	cmd.Flags().BoolVar(&narrow, "narrow", false, "also drop ignore rules the tooling no longer has")
 	return cmd
 }
 

@@ -285,6 +285,13 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	if out := gitOut(t, root, "log", "-1", "--pretty=%s"); !strings.Contains(out, "topic uploader: added the retry contract") {
 		t.Errorf("the commit message should name the event: %s", out)
 	}
+	// Recording a file that is already what the line has is an answer rather than a
+	// fault, because it is what happens when somebody names the wrong file.
+	if out := run(t, "--root", root, "commit", "--summary", "nothing new",
+		"--", filepath.Join("doc", "topic", "uploader", "overview.md")); !strings.Contains(out, "nothing to record") {
+		t.Errorf("committing an unchanged file should say so: %s", out)
+	}
+
 	// One commit is one event, so two documents of different events are refused.
 	refuses(t, "different event", "--root", root, "commit", "--summary", "mixed",
 		"--", filepath.Join("doc", "topic", "uploader", "overview.md"), filepath.Join("doc", "resource", "worktree.yaml"))
