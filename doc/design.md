@@ -512,11 +512,16 @@ collect.window: 14d
 
 Validation checks all of it, along with the file name and the one title.
 
-**The set is open, and starts from the template.** The template carries the conventions a
-workspace needs to be operable at all — how to take up a job, which files the tooling owns,
-what a commit is, where tools may write, how to hand over, what is collected, and how to
-write a convention. From the moment a workspace exists they are the project's: it adds its
-own after the highest number in use, and the tooling never rewrites one.
+**A workspace starts with no conventions at all.** `doc/convention/` exists and is empty,
+and everything in it is the project's: a rule that belongs to this project, or a value a tool
+has to read. A new convention takes the highest number in use plus one, and the tooling never
+writes or rewrites one.
+
+**What an agent is told is not this.** The rules here are the workspace's, and an agent
+reaches them through the workspace itself. How a particular agent or team works is an
+agreement between that agent and whoever runs it, and where it is written down is their
+business — the code repository may ship an `AGENTS.md` of its own, and it is not this
+workspace's.
 
 ### Brief — `doc/task/<job-id>/brief.md`
 
@@ -756,7 +761,7 @@ Nothing here is irreplaceable. Whatever must survive is either reproducible or h
 | `tmp/`, `cache/`, `ckpt/` | On close |
 | `log/`, `data/`, `state/`, `out/` | After the retention window, measured from the close |
 
-The window defaults to 14 days from the close, and `keep: true` is the only per-job override. There is no size limit by default. The value is policy rather than machine fact — everyone in the workspace should see the same one, and a change to it should be auditable — so it lives with the rule that uses it, in `doc/convention/`. Collection never makes a record false: a handoff keeps the raw `sha256` of every artifact it names, so a collected artifact is a detectable absence rather than a silent one. That is also why `out/` is not a delivery mechanism — a result that has to survive is published to `store/` and referenced under `assets`.
+The window defaults to 14 days from the close, and `keep: true` is the only per-job override. There is no size limit by default. The value is policy rather than machine fact — everyone in the workspace should see the same one, and a change to it should be auditable — so a project that wants a different one states it where a tool can read it, in a convention beside the rule that uses it, rather than in a configuration file of its own. Collection never makes a record false: a handoff keeps the raw `sha256` of every artifact it names, so a collected artifact is a detectable absence rather than a silent one. That is also why `out/` is not a delivery mechanism — a result that has to survive is published to `store/` and referenced under `assets`.
 
 ### Resources
 
@@ -868,8 +873,6 @@ A bundle carries whatever the job wrote — logs and inputs included — so it i
 
 `doc/template/` holds one copy-me file per record type that an actor writes by hand, named after it: `brief.md`, `handoff.md`, `manifest.md`. The tooling-written records — resources, leases, bundles — have no template, because nobody writes one from scratch. A template is a convenience and never the authority — this chapter is. When a format changes, its template changes in the same commit.
 
-The template also carries the starting set of conventions, which is the one part of `doc/` the tooling ships rather than the project writing: see `Convention` above. Once a workspace exists they are its own documents, and the tooling does not rewrite them.
-
 **The template is what the tooling carries, and a workspace materialises it once.** The ignore rules and the copy-me files come from the tooling rather than from git, and the empty directories cannot be carried by a repository at all. So the two can drift — the tooling learns to ignore something new, or grows a directory — and nothing in a repository would notice, because none of it is in one.
 
 **Nothing is stored to make that checkable.** The tooling carries the template, so what a workspace is missing is derived by comparing the two, rather than remembered in a version number that would go stale on every site separately. `verify` reports the difference, and one operation brings it up to date.
@@ -946,5 +949,5 @@ The workspace does not manage processes, evict caches or read secrets. It only s
 
 The following are left open deliberately rather than guessed at:
 
-- **The startup context given to an agent** — what an actor is told when it takes up a job, discussed together with the conventions because both are pushed to every agent. The base environment variables are no longer part of this: the tooling prints them for a job, and they name paths inside the workspace.
+- **The startup context given to an agent** — what an actor is told when it takes up a job. The workspace's half is settled: two facts, the root and a job id, and everything else is derived from what is in the workspace, including the rules. The base environment variables are not part of it either: the tooling prints them for a job. What is left open is whether the tooling should assemble and hand over that context itself, rather than leaving it to whoever starts the agent.
 - **How a site discovers the others.** Today the roster is a git declaration, each site enters its own reach by hand, and keys are exchanged once; that is enough for a site to be added reliably, which is what `Joining a site` describes. A discovery protocol is deliberately not designed, and nothing depends on one existing.

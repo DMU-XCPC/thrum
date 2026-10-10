@@ -73,9 +73,9 @@ thrum handoff --job add-retry --status done --next none
 thrum close --job add-retry
 ```
 
-A new workspace arrives ready to hand to an agent: the conventions it needs to take up work
-are in `doc/convention/`, in number order, and `thrum verify` checks them along with
-everything else.
+A new workspace arrives ready to hand to an agent: it carries the record templates, an empty
+`doc/convention/` for whatever the project decides, and a tool that refuses the things an
+agent would otherwise have to be told not to do.
 
 Several sites of one workspace — the same records, on more than one machine — are joined
 with `thrum join`, and reach each other directly over SSH. `tool/README.md` has the whole
@@ -106,7 +106,9 @@ verbatim: the ignore rules, and the record templates under `doc/template/`.
    authority for every rule the tooling enforces.
 2. **`doc/tooling.md`** — the operations a workspace needs, and what each one is for. It
    adds no rules of its own.
-3. **`tool/README.md`** — building the tooling, its command surface, how sites reach each
+3. **`doc/agent.md`** — handing a workspace to an agent: the two facts it is given, what it
+   derives, and which rules the tooling refuses on its own so nobody has to be told.
+4. **`tool/README.md`** — building the tooling, its command surface, how sites reach each
    other, and what it refuses.
 
 A behaviour change starts as a change to `doc/design.md`. Where an implementation and the

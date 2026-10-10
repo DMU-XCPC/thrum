@@ -97,9 +97,11 @@ the workspace or by dialling the site that can answer it.
 
 ## Rules the tool reads
 
-A workspace's rules for its agents are the conventions, in `doc/convention/`, in number
-order. `thrum verify` is what checks them, and one of the things a convention can carry is
-a **value a tool has to act on**, in a fenced block whose keys name the tool and the value:
+A workspace's own rules for its agents are the conventions, in `doc/convention/`, in number
+order — and a workspace **starts with none of them**: they are the project's, and the
+tooling never writes one. `thrum verify` is what checks them, and one of the things a
+convention can carry is a **value a tool has to act on**, in a fenced block whose keys name
+the tool and the value:
 
 ```values
 collect.window: 14d
