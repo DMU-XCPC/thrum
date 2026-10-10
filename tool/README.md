@@ -1,11 +1,13 @@
 # The workspace tool
 
-`thrum` is the tooling `README.md` designs and `TOOLING.md` specifies. It is pure Go
+`thrum` is the tooling [`../doc/design.md`](../doc/design.md) designs and
+[`../doc/tooling.md`](../doc/tooling.md) specifies. It is pure Go
 with cgo disabled, and it shells out to `git` rather than reimplementing it.
 
-It adds no rules of its own. Every command below is an operation from `TOOLING.md`, and
-every rule it enforces is one from `README.md`; where this file and those disagree, they
-are right and this file is wrong.
+It adds no rules of its own. Every command below is an operation from
+[`../doc/tooling.md`](../doc/tooling.md), and every rule it enforces is one from
+[`../doc/design.md`](../doc/design.md); where this file and those disagree, they are right
+and this file is wrong.
 
 ## Build, test, try
 
@@ -95,7 +97,7 @@ the workspace or by dialling the site that can answer it.
 
 ## The command surface, and the operation it implements
 
-| `TOOLING.md` | Here |
+| the operation in `../doc/tooling.md` | Here |
 | --- | --- |
 | `create` | `thrum create <dir> [--site]` |
 | `join` | `thrum join <dir> --remote <url> --site <name> [--code <url>] [--store <url>]` |

@@ -1,6 +1,6 @@
 # Workspace tooling
 
-`README.md` is the design and the authority. This file is derived from it: the operations a workspace needs its tooling to provide. Nothing here adds a rule, and where the two disagree the design wins.
+[`design.md`](design.md) is the design and the authority. This file is derived from it: the operations a workspace needs its tooling to provide. Nothing here adds a rule, and where the two disagree the design wins.
 
 ## What needs the tooling at all
 
@@ -132,7 +132,7 @@ Everything in *What the tooling must not do* below, and two more: it does not ho
 
 ## Stack
 
-An implementation decision, not a design rule: nothing in `README.md` depends on any of it, and a workspace has to stay usable if the tool were rewritten in something else tomorrow.
+An implementation decision, not a design rule: nothing in `design.md` depends on any of it, and a workspace has to stay usable if the tool were rewritten in something else tomorrow.
 
 **Pure Go, with cgo disabled.** One statically linked binary per platform, built with `CGO_ENABLED=0`, so it can be dropped onto a machine that has nothing but `git` and work. Cross-compilation is then free, which matters because the tool is installed rather than copied and there is no package manager to lean on.
 
@@ -178,7 +178,7 @@ An actor is a name: nothing is started, and nothing is bound to a process. Which
 
 ## Messages
 
-Actors reach each other through the tooling rather than through the records: a message is process information, never committed and never validated. The format is in `README.md`; what matters here is that `id` and `subject` are separate, that a reply names what it answers, and that a message may carry bytes.
+Actors reach each other through the tooling rather than through the records: a message is process information, never committed and never validated. The format is in [`design.md`](design.md); what matters here is that `id` and `subject` are separate, that a reply names what it answers, and that a message may carry bytes.
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
