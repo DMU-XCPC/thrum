@@ -106,9 +106,7 @@ verbatim: the ignore rules, and the record templates under `doc/template/`.
    authority for every rule the tooling enforces.
 2. **`doc/tooling.md`** — the operations a workspace needs, and what each one is for. It
    adds no rules of its own.
-3. **`doc/agent.md`** — handing a workspace to an agent: the two facts it is given, what it
-   derives, and which rules the tooling refuses on its own so nobody has to be told.
-4. **`tool/README.md`** — building the tooling, its command surface, how sites reach each
+3. **`tool/README.md`** — building the tooling, its command surface, how sites reach each
    other, and what it refuses.
 
 A behaviour change starts as a change to `doc/design.md`. Where an implementation and the
