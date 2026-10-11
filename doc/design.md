@@ -875,11 +875,13 @@ expires: 2026-10-09T12:00:00Z
 
 One file per unit, named `<resource>.<unit>.yaml`. The dot separates the two because a resource name is a slug and a slug never contains a dot, so the name is unambiguous and reversible. The unit is quoted because YAML would otherwise read `2` as a number and `01` as octal.
 
-**The job is what holds it.** Which actor happens to be working that job is the claim at `var/occupy/` — site-local, and changing with every stretch — so a name written here as well would be a second record of one fact, and the two would disagree the first time a stretch ended without releasing. Everything done to a lease is therefore done by the job that holds it: taking it, renewing it, releasing it.
+**The job is what holds it.** Which actor happens to be working that job is the claim at `var/occupy/` — site-local, and changing with every stretch — so a name written here as well would be a second record of one fact, and the two would disagree the first time a stretch ended without releasing. Everything done to a lease is therefore done by the job that holds it: taking it, renewing it, releasing it — **and by nothing else**. A release for a unit nobody holds is refused rather than reported as done, because a job that holds nothing has nothing to give back, and saying a lease was released when it was not is the one answer that is certainly wrong.
 
 **Expiry is reclaim that works without anyone remembering.** A lease is held across commands rather than for the life of one process, so nothing can release it when the actor working it stops. A record whose `expires` has passed is free; taking it means overwriting the record, and releasing early means deleting the file.
 
 **A lease dies with its job**, so a lease whose job is `done` or `abandoned` is as free as an expired one. Without that rule, a finished job would keep its unit out of reach until the expiry passed.
+
+**Where a resource lives is not a guess, and it is not a default.** A lease is taken where the resource is, so a resource that no site claims is refused rather than leased somewhere convenient: a claim that cannot be established is refused, not assumed. And a site that was asked and did not answer has not said that it holds nothing — *cannot be established* is not the same as *no*, the distinction this design already draws about who is on a job.
 
 A lease whose `resource` names nothing in `doc/resource/` is not valid. That is how *everything unversioned must be anchored by something versioned* is checked mechanically, and it is the reason the declarations exist at all.
 

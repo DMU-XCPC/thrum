@@ -15,7 +15,7 @@ export GOSUMDB    := sum.golang.google.cn
 # installed to try it.
 BIN := $(ROOT)/.gocache/thrum
 
-# CGO_ENABLED=0 is the design's rule rather than a preference: one statically linked binary
+# CGO_ENABLED=0 is the tooling's rule rather than a preference (tooling.md: one statically linked binary
 # per platform, droppable onto a machine that has nothing but git. Without it, a host that
 # has a C toolchain links the binary against its own libc, and the result does not run on a
 # musl machine at all — the loader says "no such file or directory", which reads like a

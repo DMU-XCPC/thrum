@@ -1,3 +1,6 @@
 # The Go caches are pinned into the tree by the Makefile, so they are build state
 # rather than anything anybody means to commit.
 .gocache/
+
+# A harness is tested with its packages linked in place, and those are never committed.
+harness/*/node_modules/

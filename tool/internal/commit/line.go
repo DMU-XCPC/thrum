@@ -119,7 +119,7 @@ func clash(l workspace.Layout, ahead int, up string) error {
 	if shared := Clashes(l, up); len(shared) > 0 {
 		where = fmt.Sprintf(": %s changed on both sides", strings.Join(shared, ", "))
 	}
-	return fmt.Errorf("this site's %d unpublished record(s) do not go together with what was published elsewhere%s, and nothing was changed here or merged, because dropping a record is worse than stopping. To get out of it: read what the other site published with `git show %s:<path>`, then `thrum sync --withdraw` takes this site's records back out of the line and leaves what they wrote in the working tree, and from there the file can be put right and the event recorded again. Do not reach for `git reset --hard`: the thing it destroys is exactly the file in question",
+	return fmt.Errorf("this site's %d unpublished record(s) do not go together with what was published elsewhere%s, and nothing was changed here or merged, because dropping a record is worse than stopping. To get out of it: read what the other site published with `git show %s:<path>`, then this site's own unpublished records can be taken back out of the line — what they wrote stays in the working tree — and the file put right before the event is recorded again. Do not reach for `git reset --hard`: the thing it destroys is exactly the file in question",
 		ahead, where, up)
 }
 
@@ -153,6 +153,20 @@ func Clashes(l workspace.Layout, up string) []string {
 	return shared
 }
 
+// withdraw takes this event's own commit back out of the line, and nothing else.
+//
+// The design is explicit that an event is published or withdrawn, never kept: an event that
+// cannot go into the line must not be left in it, or the site holds a record that will never
+// be in the line while its files say otherwise. What it must not take with it is the site's
+// other unpublished records — a backlog is a backlog — so the undo drops exactly one commit,
+// its own, wherever that commit sits.
+func withdraw(l workspace.Layout, id string, cause error) (string, error) {
+	if _, err := gitx.Run(l.Root, "reset", "--mixed", "--quiet", "HEAD^"); err != nil {
+		return id, fmt.Errorf("%w (and taking this event back out of the line failed too: %v)", cause, err)
+	}
+	return id, cause
+}
+
 // publishOrUndo puts the event in the line, or takes it back out.
 //
 // A rejected push is a race that was lost, and the event never reached the line, so
@@ -164,7 +178,7 @@ func publishOrUndo(l workspace.Layout, paths []string, message, id string) (stri
 	}
 	branch, err := branchOf(l)
 	if err != nil {
-		return id, err
+		return withdraw(l, id, err)
 	}
 	up := "origin/" + branch
 
@@ -179,22 +193,22 @@ func publishOrUndo(l workspace.Layout, paths []string, message, id string) (stri
 			return id, nil
 		}
 		if _, err := gitx.Run(l.Root, "fetch", "--quiet", "origin"); err != nil {
-			return id, err
+			return withdraw(l, id, err)
 		}
 		if !gitx.Resolves(l.Root, up) {
-			return id, fmt.Errorf("the record line vanished while this event was being written")
+			return withdraw(l, id, fmt.Errorf("the record line vanished while this event was being written"))
 		}
 
 		ahead, err := count(l, up+"..HEAD")
 		if err != nil {
-			return id, err
+			return withdraw(l, id, err)
 		}
 		if ahead != 1 {
-			return id, fmt.Errorf("the line moved while this event was being written, and this site has %d records of its own that are not in it: publish those first, and nothing here was merged", ahead)
+			return withdraw(l, id, fmt.Errorf("the line moved while this event was being written, and this site has %d records of its own that are not in it: publish those first, and this event was taken back out rather than left in the line — what it wrote is in the working tree, uncommitted", ahead))
 		}
 		moved, err := gitx.Run(l.Root, "diff", "--name-only", "HEAD^", up)
 		if err != nil {
-			return id, err
+			return withdraw(l, id, err)
 		}
 		if clash := overlaps(moved, paths); clash != "" {
 			// Refusing is not enough: the event's own commit has to come back out too,
@@ -213,13 +227,16 @@ func publishOrUndo(l workspace.Layout, paths []string, message, id string) (stri
 			return id, err
 		}
 		if err := prepare(l, paths); err != nil {
-			return id, err
+			return withdraw(l, id, err)
 		}
 		if id, err = commitNow(l, message); err != nil {
-			return id, err
+			return withdraw(l, id, err)
 		}
 	}
-	return id, fmt.Errorf("the record line moved four times while this event was being written: nothing was put in it, and what this event wrote is in the working tree, uncommitted")
+	// Four rounds of "fetch, redo, push" and the line moved every time. This event is not in
+	// it, and the last round left it in HEAD: out it comes, or the site is left holding a
+	// record that will never be in the line.
+	return withdraw(l, id, fmt.Errorf("the record line moved four times while this event was being written: nothing was put in it, and what this event wrote is in the working tree, uncommitted"))
 }
 
 // overlaps names the first path of the event that somebody else moved, judging by whole

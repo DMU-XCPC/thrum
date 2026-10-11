@@ -29,7 +29,7 @@ func unrecorded(l workspace.Layout, kind string) string {
 	if err != nil || nothing {
 		return ""
 	}
-	return fmt.Sprintf(", and that declaration is not in the line yet: `thrum commit --summary \"declared %s\" -- %s` records it", kind, rel)
+	return fmt.Sprintf(", and that declaration is not in the line yet: %s is committed here and not published, so a site that has not fetched would not see it", rel)
 }
 
 // Entry is what declaring a resource needs.

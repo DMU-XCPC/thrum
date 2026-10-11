@@ -720,7 +720,9 @@ func TestRecordsThatDoNotGoTogetherSayTheWayOut(t *testing.T) {
 	if err == nil {
 		t.Fatalf("records that cannot go together should be refused, and it said:\n%s", out)
 	}
-	for _, want := range []string{"doc/resource/gpu.yaml", "--withdraw", "reset --hard"} {
+	// The refusal describes the way out; the command that takes it is in tool/README.md,
+	// where a command belongs. What it must not do is leave the reader without one.
+	for _, want := range []string{"doc/resource/gpu.yaml", "taken back out", "working tree", "reset --hard"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the refusal should mention %q, and says:\n%s", want, out)
 		}
@@ -767,6 +769,75 @@ func TestRecordsThatDoNotGoTogetherSayTheWayOut(t *testing.T) {
 	}
 	if out := run(t, "--root", second, "verify"); strings.TrimSpace(out) != "ok" {
 		t.Errorf("the site should validate, and said:\n%s", out)
+	}
+}
+
+// An event that cannot go into the line is taken back out of it rather than left in it: the
+// design says published or withdrawn, never kept, and a site left holding a commit that will
+// never be in the line is a record whose files say one thing and whose line says another.
+// A backlog of its own is how that is reached — the push is rejected, and the event cannot
+// simply be replayed on top, because the site has more than one record above the line.
+func TestAnEventThatCannotBePublishedIsTakenBackOut(t *testing.T) {
+	first := filepath.Join(t.TempDir(), "build-01")
+	second := filepath.Join(t.TempDir(), "lab-02")
+	records := filepath.Join(t.TempDir(), "records.git")
+
+	run(t, "create", first, "--site", "build-01")
+	git(t, first, "init", "--bare", "-b", "main", records)
+	git(t, first, "remote", "add", "origin", records)
+	run(t, "--root", first, "resource", "declare", "--kind", "site", "--name", "build-01", "--purpose", "build")
+	run(t, "--root", first, "resource", "declare", "--kind", "site", "--name", "lab-02", "--purpose", "lab")
+	run(t, "--root", first, "sync")
+	run(t, "join", second, "--remote", records, "--site", "lab-02")
+
+	// Alone, so this record is a backlog the line does not have.
+	git(t, second, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "not-there"))
+	run(t, "--root", second, "resource", "declare", "--kind", "gpu", "--name", "gpu", "--purpose", "the GPU")
+	git(t, second, "remote", "set-url", "origin", records)
+
+	// The line moves while the backlog is still here, and then it moves *again* between the
+	// next event being written and its push — which is what makes that event impossible to
+	// publish: it is not one record above the line, it is the backlog plus this one. The
+	// second move comes from a one-shot pre-push hook, because the window is a push wide.
+	run(t, "--root", first, "resource", "declare", "--kind", "dataset", "--name", "corpus", "--purpose", "the corpus")
+	run(t, "--root", first, "sync")
+
+	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
+	git(t, filepath.Dir(elsewhere), "clone", "--quiet", records, elsewhere)
+	if err := os.WriteFile(filepath.Join(elsewhere, "note.md"), []byte("somebody else's record\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, elsewhere, "add", "note.md")
+	git(t, elsewhere, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "somebody else's record")
+	hook := filepath.Join(second, ".git", "hooks", "pre-push")
+	script := "#!/bin/sh\n" +
+		"git -C " + elsewhere + " push --quiet " + records + " HEAD:refs/heads/main\n" +
+		"rm -f " + hook + "\n" +
+		"exit 1\n"
+	if err := os.WriteFile(hook, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	refuses(t, "taken back out", "--root", second, "resource", "declare", "--kind", "host", "--name", "h9", "--purpose", "the machine")
+
+	// One commit above the line, and it is the backlog; the refused event is not in the
+	// line, and what it wrote is left in the working tree.
+	if above := strings.TrimSpace(gitOut(t, second, "rev-list", "--count", "origin/main..HEAD")); above != "1" {
+		t.Errorf("only the backlog should be above the line, and %s commits are", above)
+	}
+	if subjects := gitOut(t, second, "log", "--pretty=%s", "origin/main..HEAD"); !strings.Contains(subjects, "declared gpu") {
+		t.Errorf("the backlog should still be here:\n%s", subjects)
+	}
+	if dirty := gitOut(t, second, "status", "--porcelain", "--", "doc/resource/host.yaml"); strings.TrimSpace(dirty) == "" {
+		t.Errorf("what the refused event wrote should be left in the working tree")
+	}
+
+	// And the backlog is still publishable, which is the point of leaving it alone.
+	if out := run(t, "--root", second, "sync"); !strings.Contains(out, "published") {
+		t.Errorf("the backlog should publish, and sync said:\n%s", out)
+	}
+	if out := run(t, "--root", second, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the site should validate afterwards, and said:\n%s", out)
 	}
 }
 
