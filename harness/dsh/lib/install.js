@@ -164,6 +164,27 @@ export function install(ctx, config, deps) {
 
   ctx.effect(() => {
     const unregister = ctx.tools.register(tool)
+    // A watch lives in this process, so a host that has restarted has none — while the
+    // session that asked still believes it is arranged. The bindings are what say which
+    // mailboxes this host is responsible for, so they are picked up again here. A root that
+    // is not there is skipped rather than forgotten: a workspace can live on a volume that
+    // has not been mounted yet, and a binding costs nothing to keep.
+    let carried = 0
+    let absent = 0
+    for (const { root, actor } of bindings.entries()) {
+      if (!isWorkspace(root)) {
+        absent++
+        continue
+      }
+      startFeed(root, actor)
+      carried++
+    }
+    if (carried > 0 || absent > 0) {
+      log(
+        `watching ${carried} mailbox(es) carried over from before` +
+          (absent > 0 ? `, ${absent} skipped because their workspace is not there` : ''),
+      )
+    }
     return () => {
       unregister()
       for (const feed of feeds.values()) feed.stop()

@@ -105,14 +105,48 @@ plugin is one deployment's answer, not the format's.
 
 It is an ordinary cordis plugin package: the entry exports `apply`, `name` and `inject`.
 
+Three things about installing it are easy to get wrong, and all three were checked against
+a real `dsh` boot rather than against cordis alone:
+
+**It is an insert, not a patch.** A bare `- id: … / name: …` entry in a patch layer targets
+an *existing* entry, so a new one is dropped with `patch: entry "thrum-mailbox" not found`.
+A new plugin is appended with `insert:`, as above.
+
+**`name` is a module specifier or a file, never a directory.** `file:///…/harness/dsh` fails
+with `ERR_UNSUPPORTED_DIR_IMPORT` — the loader imports the entry as an ES module, and ES
+modules do not do directory imports — and the harness reports it only as `failed to import`,
+without the cause. Install the package into the profile (`dsh plugin --profile web add
+/path/to/harness/dsh`) and name it, or point the name at the entry file itself
+(`'…/harness/dsh/index.js'`).
+
+**The profile has to provide `sessionController`.** The `web` profile does; `headless` and
+`tui` do not, and there the plugin is not broken so much as never reached: cordis holds it at
+`pending (waiting for service: sessionController)`, and the boot log says exactly that and
+nothing else. There is no wake without a session to wake.
+
 ```yaml
-- id: thrum-mailbox
-  name: '/path/to/MultiAgentWorkspace/harness/dsh'   # or the package name, once published
-  config:
-    thrum: thrum        # the command to run, if it is not on PATH
-    dshHome: ~/.dsh     # where the bindings are kept
+- insert:
+    - id: thrum-mailbox
+      name: 'thrum-mailbox-dsh'   # installed into the profile; see below
+      config:
+        thrum: thrum        # the command to run, if it is not on PATH
+        dshHome: ~/.dsh     # where the bindings are kept
 ```
 
 Mount it where the sessions live (a profile's bundle or `cordis.patch.yml`), not per agent:
 it holds the bindings for every actor on this host, and the tool it registers is what ties a
 session to one of them.
+
+## What a restart does
+
+A watch lives in the host process, so a host that has restarted has none — while the session
+that asked still believes it is arranged. The bindings are what say which mailboxes this host
+is responsible for, so mounting picks them up again: every recorded `(workspace, actor)` whose
+workspace is still there gets its watch back, and a recorded one whose workspace is not there
+is skipped and reported rather than forgotten, because a workspace can live on a volume that
+has not been mounted yet.
+
+What that costs is one child process per binding, so a host that has been used for a long time
+starts as many as there are mailboxes it has ever watched for. `thrum_watch` in a session is
+what adds one, and nothing prunes them yet: a binding is dropped only if somebody writes the
+file without it.

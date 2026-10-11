@@ -12,6 +12,7 @@ import { PassThrough } from 'node:stream'
 import test from 'node:test'
 
 import { install } from '../lib/install.js'
+import { Bindings, statePath } from '../lib/state.js'
 
 // The tool refuses a root that is not a workspace, so the fixtures are workspaces: enough
 // of one to be recognised, which is all this unit is about.
@@ -217,4 +218,40 @@ test('unloading the plugin stops every watch', async () => {
   }
   w.dispose()
   assert.ok(stopped, 'an unloaded plugin should leave no watch running')
+})
+
+// A watch lives in the host process and dies with it, while the binding it was made for
+// does not. A host that mounts with bindings already recorded has to pick them up again,
+// or the session that asked to be woken is never woken and nothing says so.
+test('a host that mounts with bindings recorded starts watching them again', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'thrum-mailbox-'))
+  const recorded = Bindings.load(statePath(home))
+  recorded.bind(WS, 'alice', 's-1')
+  recorded.bind(OTHER, 'bob', 's-2')
+
+  const w = mount({ dshHome: home })
+  w.session('s-1', `${WS}`)
+
+  assert.equal(w.spawned.length, 2, 'both recorded mailboxes are watched again')
+  assert.deepEqual(
+    w.spawned.map((s) => s.args[3]).sort(),
+    ['alice', 'bob'],
+    'and each is watched for the actor it was bound for',
+  )
+
+  // And the wake works from there, without the tool being called again in this process.
+  w.children[0].say({ id: 'm-1', from: 'carol', sent: '2026-10-11T00:00:00Z', subject: 'hello' })
+  await settle()
+  assert.equal(w.woken.length, 1, 'the session the binding names is woken')
+})
+
+// A binding whose workspace is not there is skipped, not watched: there is no mailbox to
+// watch, and a workspace on an unmounted volume is not a binding to throw away.
+test('a binding whose workspace is missing is skipped', () => {
+  const home = mkdtempSync(join(tmpdir(), 'thrum-mailbox-'))
+  const recorded = Bindings.load(statePath(home))
+  recorded.bind('/definitely/not/a/workspace', 'alice', 's-1')
+
+  const w = mount({ dshHome: home })
+  assert.equal(w.spawned.length, 0)
 })
