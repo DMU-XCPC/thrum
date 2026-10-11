@@ -262,6 +262,52 @@ func TestAMessageIsDeliveredToTheActorsSite(t *testing.T) {
 	}
 }
 
+// A daemon says what it answers, and everything it says it answers is answered. That is what
+// lets a peer leave a site to do what it knows instead of guessing from a refusal.
+func TestADaemonSaysWhatItAnswers(t *testing.T) {
+	l := site(t, "build-01")
+	serve(t, l)
+
+	resp := ask(t, l, daemon.VerbStatus, map[string]any{})
+	if !resp.OK {
+		t.Fatalf("status: %s", resp.Error)
+	}
+	var body struct {
+		Verbs []string `json:"verbs"`
+	}
+	if err := json.Unmarshal(resp.Data, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Verbs) == 0 {
+		t.Fatal("a daemon should say what it answers")
+	}
+	for _, verb := range body.Verbs {
+		if !daemon.Answers(daemon.Verb(verb)) {
+			t.Errorf("%s is advertised and this build does not know it", verb)
+		}
+		// Asked with nothing, it may refuse for want of an argument — but not because it
+		// is a verb it has never heard of.
+		if got := ask(t, l, daemon.Verb(verb), map[string]any{}); got.Code == daemon.CodeUnknownVerb {
+			t.Errorf("%s is advertised and not answered", verb)
+		}
+	}
+}
+
+// A verb this site does not answer is refused with a code as well as a sentence: "that site is
+// a different version" is something a caller acts on.
+func TestAnUnknownVerbCarriesACode(t *testing.T) {
+	l := site(t, "build-01")
+	serve(t, l)
+
+	resp := ask(t, l, daemon.Verb("no.such.verb"), map[string]any{})
+	if resp.OK {
+		t.Fatal("a verb this daemon does not answer should be refused")
+	}
+	if resp.Code != daemon.CodeUnknownVerb {
+		t.Errorf("the refusal should carry the code, and carries %q (%s)", resp.Code, resp.Error)
+	}
+}
+
 func mustRoster(t *testing.T, l workspace.Layout) []roster.Entry {
 	t.Helper()
 	entries, err := roster.Local(l)

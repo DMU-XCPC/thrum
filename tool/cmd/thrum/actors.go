@@ -61,9 +61,9 @@ func newActorCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := layout()
-			entry, ok, silent := findActor(l, args[0])
+			entry, ok, silent, older := findActor(l, args[0])
 			if !ok {
-				return noSuchName(args[0], silent, "the question")
+				return noSuchName(args[0], silent, older, "the question")
 			}
 			fmt.Printf("name       %s\n", entry.Name)
 			fmt.Printf("site       %s\n", entry.Site)
@@ -168,19 +168,22 @@ func newEnvCmd() *cobra.Command {
 //
 // It returns the sites that could not be asked at all, which is the same thing as not
 // answering: a site with no address entered here cannot say anything either.
-func findActor(l workspace.Layout, name string) (roster.Entry, bool, []string) {
+func findActor(l workspace.Layout, name string) (roster.Entry, bool, []string, []string) {
 	if local, err := roster.Local(l); err == nil {
 		if entry, ok := roster.Find(name, local); ok {
-			return entry, true, nil
+			return entry, true, nil, nil
 		}
 	}
 
 	peers := daemon.NewPeers(l)
 	refs, err := peers.Refs()
 	if err != nil {
-		return roster.Entry{}, false, nil
+		return roster.Entry{}, false, nil, nil
 	}
-	var silent []string
+	// Two ways a site can fail to answer a question, and they are not the same: it said
+	// nothing, or it said it does not know the question — which is a different version of
+	// the tooling rather than a site that is down.
+	var silent, older []string
 	var lists [][]roster.Entry
 	for _, ref := range refs {
 		if ref.Name == peers.Site() || ref.Stale {
@@ -193,7 +196,15 @@ func findActor(l workspace.Layout, name string) (roster.Entry, bool, []string) {
 			continue
 		}
 		resp, err := peers.Ask(ref, daemon.Request{Verb: daemon.VerbRoster})
-		if err != nil || !resp.OK {
+		if err != nil {
+			silent = append(silent, ref.Name)
+			continue
+		}
+		if resp.Code == daemon.CodeUnknownVerb {
+			older = append(older, ref.Name)
+			continue
+		}
+		if !resp.OK {
 			silent = append(silent, ref.Name)
 			continue
 		}
@@ -207,9 +218,9 @@ func findActor(l workspace.Layout, name string) (roster.Entry, bool, []string) {
 		lists = append(lists, body.Actors)
 	}
 	if entry, ok := roster.Find(name, roster.Merge(peers.Site(), lists...)); ok {
-		return entry, true, silent
+		return entry, true, silent, older
 	}
-	return roster.Entry{}, false, silent
+	return roster.Entry{}, false, silent, older
 }
 
 // annotateOccupants adds what each occupant last said about itself.
@@ -230,9 +241,16 @@ func annotateOccupants(l workspace.Layout, report *status.Report) {
 
 // noSuchName is the refusal for a name every site that could be asked has never seen, and the
 // different one for a name a silent site might have.
-func noSuchName(name string, silent []string, what string) error {
-	if len(silent) > 0 {
-		return fmt.Errorf("%s did not answer, so where %q is cannot be established: %s failed, and nothing was queued — try again when that site is up", strings.Join(silent, ", "), name, what)
+func noSuchName(name string, silent, older []string, what string) error {
+	switch {
+	case len(silent) > 0:
+		said := ""
+		if len(older) > 0 {
+			said = fmt.Sprintf(" (and %s answers too little to be asked: a different version of the tooling)", strings.Join(older, ", "))
+		}
+		return fmt.Errorf("%s did not answer, so where %q is cannot be established: %s failed, and nothing was queued — try again when that site is up%s", strings.Join(silent, ", "), name, what, said)
+	case len(older) > 0:
+		return fmt.Errorf("%s does not answer the question, so where %q is cannot be established: %s failed, and it is worth updating that site first", strings.Join(older, ", "), name, what)
 	}
 	return fmt.Errorf("no site has seen an actor named %q: check the name, or let them act first", name)
 }

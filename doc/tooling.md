@@ -35,11 +35,19 @@ so this is what they are today rather than what they ought to be:
 | `msg.deliver` | Put a message into one of this site's mailboxes |
 | `exec` | Run one of the git verbs allowed inside a served repository |
 
+The `status` answer carries `verbs`: the list of requests this daemon understands. That is the
+whole handshake — a peer decides what to ask from it, and a site that does not list a request is
+left to do what it does know instead of being reported as failing. A request a site does not
+answer comes back with `code: "unknown-verb"`, so *it did not answer* and *it does not answer
+this* are told apart by the caller rather than by reading the sentence.
+
 The names are half one shape and half another: `lease.take` and `msg.deliver` say noun and verb,
 while `job`, `occupy`, `holds` and `roster` are bare. Renaming them is a wire change and is not
 done here, because **a rename breaks a pair of sites that are not the same version** — an old
 site asking with the old name is refused by a new one, and the other way round — and nothing
-versions this wire. The sites are one collective's own machines and are updated together, which
+versions this wire. What the list above changes is that the refusal is now explicit (`unknown-verb`)
+and the one feature that can degrade, learning the roster, simply skips a peer that does not know
+it. The sites are one collective's own machines and are updated together, which
 is the assumption this rests on rather than a guarantee it makes.
 
 **Renaming one of these breaks a pair of sites that are not the same version** — an old site

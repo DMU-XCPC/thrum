@@ -37,6 +37,9 @@ func Site(l workspace.Layout) string { return roster.Site(l) }
 // Handle is the whole surface. Each verb is one operation from the design, and the
 // daemon answers it the same way whoever asks.
 func (s *Service) Handle(req Request) Response {
+	if !Answers(req.Verb) {
+		return unknown(req.Verb)
+	}
 	switch req.Verb {
 	case VerbStatus:
 		return s.status()
@@ -183,7 +186,16 @@ func (s *Service) Handle(req Request) Response {
 	case VerbDeliver:
 		return s.deliver(req)
 	}
-	return Fail(fmt.Errorf("unknown verb %q", req.Verb))
+	return unknown(req.Verb)
+}
+
+// unknown is a verb this daemon does not answer, said in a way a caller can act on rather than
+// only read: a code, because "the other site is a different version" is a fact about the pair
+// and not a failure of the request.
+func unknown(verb Verb) Response {
+	resp := Fail(fmt.Errorf("this site does not answer %q", string(verb)))
+	resp.Code = CodeUnknownVerb
+	return resp
 }
 
 // leaseArgs is one shape for the three lease verbs, because they differ only in what
@@ -266,6 +278,10 @@ type StatusData struct {
 	Occupy []OccupantNote `json:"occupancy"`
 	Actors []roster.Entry `json:"actors"`
 	Peers  []PeerReport   `json:"peers,omitempty"`
+	// Verbs is what this daemon answers, so that a peer can tell whether a request is
+	// understood instead of learning it from a refusal. Nothing else is negotiated and
+	// nothing versions the wire: a site that cannot do something does not do it.
+	Verbs []string `json:"verbs"`
 }
 
 // OccupantNote is one site-local claim, as the status verb reports it.
@@ -280,6 +296,7 @@ func (s *Service) status() Response {
 		Site:   Site(s.L),
 		Root:   s.L.Root,
 		Uptime: time.Since(s.Started).Round(time.Second).String(),
+		Verbs:  knownVerbs,
 	}
 	if held, err := leases.Held(s.L); err == nil {
 		data.Held = held

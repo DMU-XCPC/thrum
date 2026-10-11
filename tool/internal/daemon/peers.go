@@ -32,6 +32,28 @@ type PeerRef struct {
 	Stale bool `json:"stale,omitempty"`
 }
 
+// knownVerbs is what a daemon answers, and it is what it says it answers.
+//
+// A switch cannot be asked what it handles, so the list is written here — but Handle refuses
+// anything that is not on it, which makes "handled but not advertised" impossible rather than
+// merely unlikely, and a test checks the other direction: everything advertised is answered.
+// `exec` is not here on purpose: it is the forced command git runs, not something a peer
+// negotiates.
+var knownVerbs = []string{
+	"status", "roster", "roster.learn", "job", "occupy", "vacate", "holds",
+	"lease.take", "lease.renew", "lease.release", "msg.deliver",
+}
+
+// Answers says whether this daemon understands a verb.
+func Answers(verb Verb) bool {
+	for _, v := range knownVerbs {
+		if v == string(verb) {
+			return true
+		}
+	}
+	return false
+}
+
 // PeerReport is a peer and whether it answered just now.
 type PeerReport struct {
 	Name      string `json:"name"`
@@ -39,6 +61,10 @@ type PeerReport struct {
 	Reachable bool   `json:"reachable"`
 	Stale     bool   `json:"stale,omitempty"`
 	Note      string `json:"note,omitempty"`
+	// Verbs is what that site says it answers. A peer that does not list one cannot be
+	// asked for it, which is not the same as a peer that refused: it is a site that is a
+	// different version, and it should be left to do what it does know.
+	Verbs []string `json:"verbs,omitempty"`
 }
 
 // Peers is the roster and the site-local halves put together.
@@ -175,6 +201,12 @@ func (p *Peers) Report() []PeerReport {
 					out[i].Note = resp.Error
 				default:
 					out[i].Reachable = true
+					var body struct {
+						Verbs []string `json:"verbs"`
+					}
+					if err := json.Unmarshal(resp.Data, &body); err == nil {
+						out[i].Verbs = body.Verbs
+					}
 				}
 			}
 		}(i, ref)

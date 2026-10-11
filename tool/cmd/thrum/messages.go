@@ -355,9 +355,9 @@ func newPurgeCmd() *cobra.Command {
 // typo that silently goes nowhere is worse than an error: the roster is exactly the
 // knowledge that makes this check possible.
 func deliver(l workspace.Layout, m messages.Message, body string, files map[string][]byte) (string, error) {
-	entry, ok, silent := findActor(l, m.To)
+	entry, ok, silent, older := findActor(l, m.To)
 	if !ok {
-		return "", noSuchName(m.To, silent, "the send")
+		return "", noSuchName(m.To, silent, older, "the send")
 	}
 	if err := roster.Seen(l, m.From, m.Job, now()); err != nil {
 		return "", err
@@ -399,6 +399,9 @@ func deliver(l workspace.Layout, m messages.Message, body string, files map[stri
 	})
 	if err != nil {
 		return "", fmt.Errorf("%s did not take the message for %s, so the send failed rather than being queued: %w", entry.Site, m.To, err)
+	}
+	if resp.Code == daemon.CodeUnknownVerb {
+		return "", fmt.Errorf("%s does not answer %s, so it is a different version of the tooling: the send failed, and nothing was queued", entry.Site, daemon.VerbDeliver)
 	}
 	if !resp.OK {
 		return "", fmt.Errorf("%s refused the message for %s, so the send failed rather than being queued: %s", entry.Site, m.To, resp.Error)

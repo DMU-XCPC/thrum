@@ -52,14 +52,27 @@ func (r *rosterSync) once() {
 	}
 
 	peers := NewPeers(r.l)
-	refs, err := peers.Refs()
-	if err != nil {
-		return
+	// One probe per peer answers both questions this needs: is it there, and does it know
+	// the two verbs. A site that does not know them is a different version, and it is left
+	// to do what it does know rather than being reported as failing.
+	report := map[string]PeerRef{}
+	for _, rep := range peers.Report() {
+		if rep.Name == peers.Site() || rep.Stale || !rep.Reachable || rep.Reach == "" {
+			continue
+		}
+		if !lists(rep.Verbs, string(VerbRoster)) || !lists(rep.Verbs, string(VerbRosterLearn)) {
+			continue
+		}
+		ref, err := peers.Lookup(rep.Name)
+		if err != nil {
+			continue
+		}
+		report[rep.Name] = ref
 	}
 	failed := map[string]bool{}
-	for _, ref := range r.peers(peers, refs) {
+	for name, ref := range report {
 		if err := r.pull(peers, ref); err != nil {
-			failed[ref.Name] = true
+			failed[name] = true
 		}
 	}
 
@@ -68,9 +81,9 @@ func (r *rosterSync) once() {
 	if err != nil {
 		return
 	}
-	for _, ref := range r.peers(peers, refs) {
+	for name, ref := range report {
 		if err := r.push(peers, ref, local); err != nil {
-			failed[ref.Name] = true
+			failed[name] = true
 		}
 	}
 
@@ -78,19 +91,6 @@ func (r *rosterSync) once() {
 	if len(failed) == 0 {
 		r.digest = roster.Digest(local)
 	}
-}
-
-// peers are the ones worth talking to: not this site, not one the roster no longer declares,
-// and not one with no address entered here.
-func (r *rosterSync) peers(p *Peers, refs []PeerRef) []PeerRef {
-	out := make([]PeerRef, 0, len(refs))
-	for _, ref := range refs {
-		if ref.Name == p.Site() || ref.Reach == "" || ref.Stale {
-			continue
-		}
-		out = append(out, ref)
-	}
-	return out
 }
 
 // pull takes what a peer has seen and merges it here.
@@ -143,4 +143,14 @@ func (e errPeerRefused) Error() string {
 		return e.site + " refused the roster"
 	}
 	return e.site + " refused the roster: " + e.why
+}
+
+// lists reports whether a list names one thing.
+func lists(list []string, want string) bool {
+	for _, have := range list {
+		if have == want {
+			return true
+		}
+	}
+	return false
 }

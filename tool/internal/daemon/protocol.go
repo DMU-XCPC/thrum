@@ -69,10 +69,17 @@ type Request struct {
 
 // Response is one answer. Data is the verb's own structure, encoded.
 type Response struct {
-	OK    bool            `json:"ok"`
-	Error string          `json:"error,omitempty"`
-	Data  json.RawMessage `json:"data,omitempty"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+	// Code is a refusal a caller can act on rather than only read, because a sentence is for
+	// a person and some refusals are about the pair of sites rather than the request.
+	Code string          `json:"code,omitempty"`
+	Data json.RawMessage `json:"data,omitempty"`
 }
+
+// CodeUnknownVerb is the refusal of a verb this site does not answer: the peer is a different
+// version, and what it does know still works.
+const CodeUnknownVerb = "unknown-verb"
 
 // Fail turns an error into a response.
 func Fail(err error) Response {
