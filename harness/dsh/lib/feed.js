@@ -81,7 +81,7 @@ export function watchMailbox({
     child.on('exit', (code, signal) => {
       if (stopped) return
       const why = signal ? `signal ${signal}` : `status ${code}`
-      onError(new Error(`${command} inbox --watch stopped (${why})${complaint ? `: ${complaint.trim()}` : ''}`))
+      onError(new Error(`${command} message list --watch stopped (${why})${complaint ? `: ${complaint.trim()}` : ''}`))
       timer = setTimeout(start, restartMs)
       restartMs = Math.min(restartMs * 2, maxRestartMs)
     })
