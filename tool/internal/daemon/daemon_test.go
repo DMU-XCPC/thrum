@@ -367,7 +367,7 @@ func TestAResourceIsLeasedWhereItLives(t *testing.T) {
 	writeReach(t, build, "lab-02", socket)
 
 	peers := daemon.NewPeers(build)
-	holders, err := peers.Home("gpu")
+	holders, _, err := peers.Home("gpu")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -524,7 +524,7 @@ func TestALocalHalfThatIsNotASiteIsNotAPeer(t *testing.T) {
 
 func TestAResourceNobodyHoldsIsRefused(t *testing.T) {
 	l := site(t, "build-01")
-	holders, err := daemon.NewPeers(l).Home("nothing-declares-this")
+	holders, _, err := daemon.NewPeers(l).Home("nothing-declares-this")
 	if err != nil {
 		t.Fatal(err)
 	}

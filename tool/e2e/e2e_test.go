@@ -145,6 +145,11 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 		"--actor", "somebody-else")
 	refuses(t, "held for", "--root", root, "lease", "take", "--resource", "gpu", "--job", "add-retry", "--ttl", "1h")
 
+	// Releasing a unit nobody holds is refused rather than reported as done: a release is
+	// by the job that holds the lease, and a job holding nothing has nothing to give back.
+	refuses(t, "is not held", "--root", root, "lease", "release", "--resource", "gpu", "--unit", "2", "--job", "add-retry")
+	refuses(t, "is not held", "--root", root, "lease", "renew", "--resource", "gpu", "--unit", "2", "--job", "add-retry", "--ttl", "1h")
+
 	// A stretch of work, recorded where the next actor will look for it.
 	run(t, "--root", root, "handoff", "--job", "add-retry", "--status", "partial",
 		"--next", "compare against the baseline", "--started", "2026-10-09T02:10:00Z",

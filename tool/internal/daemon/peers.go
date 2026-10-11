@@ -282,19 +282,23 @@ func localHalfPath(l workspace.Layout, name string) string {
 // machine the thing is physically on. That a resource has exactly one home is assumed
 // rather than enforced, so two sites that both claim one are reported instead of being
 // picked between.
-func (p *Peers) Home(resource string) ([]string, error) {
+func (p *Peers) Home(resource string) ([]string, []string, error) {
 	var holders []string
+	// Sites that were asked and did not answer. A peer that does not answer means the
+	// answer cannot be established, which is not the same as nobody holding it.
+	var unanswered []string
 	if p.Holds(resource) {
 		holders = append(holders, p.Site())
 	}
 
 	refs, err := p.Refs()
 	if err != nil {
-		return holders, err
+		return holders, unanswered, err
 	}
 	type answer struct {
-		name  string
-		holds bool
+		name        string
+		holds       bool
+		unreachable bool
 	}
 	answers := make(chan answer, len(refs))
 	asked := 0
@@ -309,14 +313,14 @@ func (p *Peers) Home(resource string) ([]string, error) {
 				Args: Args(map[string]string{"resource": resource}),
 			})
 			if err != nil || !resp.OK {
-				answers <- answer{name: ref.Name}
+				answers <- answer{name: ref.Name, unreachable: true}
 				return
 			}
 			var body struct {
 				Holds bool `json:"holds"`
 			}
 			if err := json.Unmarshal(resp.Data, &body); err != nil {
-				answers <- answer{name: ref.Name}
+				answers <- answer{name: ref.Name, unreachable: true}
 				return
 			}
 			answers <- answer{name: ref.Name, holds: body.Holds}
@@ -326,6 +330,8 @@ func (p *Peers) Home(resource string) ([]string, error) {
 		a := <-answers
 		if a.holds {
 			holders = append(holders, a.name)
+		} else if a.unreachable {
+			unanswered = append(unanswered, a.name)
 		}
 	}
 
@@ -339,7 +345,8 @@ func (p *Peers) Home(resource string) ([]string, error) {
 	}
 
 	sort.Strings(holders)
-	return holders, nil
+	sort.Strings(unanswered)
+	return holders, unanswered, nil
 }
 
 // declares reports whether the workspace declares a resource at all. A name that

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
@@ -29,7 +30,15 @@ func leaseTarget(l workspace.Layout, resource string) (target, error) {
 	}
 
 	var t target
+	// Sites that were asked and did not answer. The design is explicit that this is not the
+	// same as their not holding it, and a lease that cannot be established is refused rather
+	// than assumed, so they are kept to say so in the refusal.
+	var unanswered []string
 	for _, h := range holders {
+		if h.Unknown {
+			unanswered = append(unanswered, h.Site)
+			continue
+		}
 		if h.Local {
 			t.local = true
 			continue
@@ -49,6 +58,10 @@ func leaseTarget(l workspace.Layout, resource string) (target, error) {
 		return t, nil
 	}
 	if !t.local {
+		if len(unanswered) > 0 {
+			return target{}, fmt.Errorf("no site that answered holds %s, and %s did not answer: where it lives cannot be established, and this is not the same as nobody holding it",
+				resource, strings.Join(unanswered, ", "))
+		}
 		return target{}, fmt.Errorf("no site says it holds %s: a resource is leased where it lives, and where that is has to be said by the machine that has it", resource)
 	}
 	return t, nil

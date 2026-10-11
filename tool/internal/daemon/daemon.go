@@ -214,18 +214,24 @@ func processAlive(pid int) bool {
 type Holding struct {
 	Site  string `json:"site"`
 	Local bool   `json:"local"`
+	// Unknown is a site that was asked and did not answer, so whether it holds the resource
+	// cannot be established — which is not the same as its not holding it.
+	Unknown bool `json:"unknown,omitempty"`
 }
 
 // Held reports where a resource lives, from this site's point of view.
 func Held(l workspace.Layout, resource string) ([]Holding, error) {
 	peers := NewPeers(l)
-	sites, err := peers.Home(resource)
+	sites, unanswered, err := peers.Home(resource)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Holding, 0, len(sites))
+	out := make([]Holding, 0, len(sites)+len(unanswered))
 	for _, site := range sites {
 		out = append(out, Holding{Site: site, Local: site == peers.Site()})
+	}
+	for _, site := range unanswered {
+		out = append(out, Holding{Site: site, Unknown: true})
 	}
 	return out, nil
 }

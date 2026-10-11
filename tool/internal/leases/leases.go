@@ -157,8 +157,11 @@ func Release(l workspace.Layout, resource, unit, job string) error {
 	}
 	path := l.LeaseFile(resource, unit)
 	return atomic.Replace(path, func(current []byte) ([]byte, error) {
+		// Nothing held is not "released": a release is by the job that holds the lease and
+		// by no other, and a job that holds nothing has nothing to give back. Saying it was
+		// released is the one answer that is certainly wrong.
 		if current == nil {
-			return nil, nil
+			return nil, fmt.Errorf("%s.%s is not held, so there is nothing for %s to release", resource, unit, job)
 		}
 		var held format.Lease
 		if err := format.DecodeLoose(current, &held); err != nil {
