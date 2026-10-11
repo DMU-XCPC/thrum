@@ -27,9 +27,11 @@ id or convention number taken at another site while your event was being written
 moved, so the event is refused rather than duplicated. What it costs is a round trip per recorded
 event at a site that has a remote.
 
-Push at the moments another site depends on the record: a handoff, a close, a promotion, a job
-moving. That is a floor and not a ceiling — pushing more often only makes the backup fresher, and
-nothing requires a fetch in order to start work. `thrum sync` does it.
+Publish at the moments another site depends on the record: a handoff, a close, a promotion, a job
+moving. That is a floor and not a ceiling — publishing more often only makes the backup fresher,
+and nothing requires a fetch in order to start work. `thrum sync` does it, and it is also what
+publishes a **backlog**: a site that recorded while it was alone has records the line does not, so
+sync brings the site up to date and puts them on top rather than refusing them.
 
 ## Messages — `var/msg/<actor>/`
 

@@ -210,6 +210,13 @@ the same file moved as well, the event is refused and what you wrote stays in th
 uncommitted, for you to look at and record again. `sites.md` has the whole of it — including why
 a refused event is not a lost one.
 
+**On one machine, one writer at a time.** If another actor here is recording, your event waits
+for theirs and then records on top, so two commands running at once do not collide or report a
+failure that did not happen. An event records exactly the paths it staged: a change that arrives
+while an event is being recorded belongs to the next event rather than to this one, and a change
+you staged but did not record is never swept into somebody else's event — if it is in the way,
+the event is refused and says which paths are.
+
 ## Commit messages
 
 One commit describes one coordination event, and its subject names the event:

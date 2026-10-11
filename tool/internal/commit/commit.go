@@ -47,11 +47,18 @@ func Event(l workspace.Layout, kind Kind, subject, summary string, paths ...stri
 	if len(paths) == 0 {
 		return "", fmt.Errorf("a commit needs at least one path")
 	}
-	if err := stage(l, paths); err != nil {
-		return "", fmt.Errorf("staging: %w", err)
+	// A record write holds the coordination lock from before it reads anything until the
+	// event is published, so a second writer waits rather than colliding with it. An
+	// operation calls Current first, which takes the lock; this is for a caller that did
+	// not, and taking it twice in one process is not a deadlock.
+	if err := acquire(l); err != nil {
+		return "", err
+	}
+	if err := prepare(l, paths); err != nil {
+		return "", err
 	}
 	message := Subject(kind, subject, summary)
-	id, err := commitNow(l, paths, message)
+	id, err := commitNow(l, message)
 	if err != nil {
 		return "", err
 	}

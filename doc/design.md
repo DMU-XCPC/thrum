@@ -212,6 +212,8 @@ The records are one line, and that is a property of how an event is recorded rat
 
 **Records made while a site is alone are published when it is not.** They are put on top of what was published meanwhile, by the same rule: they were never in the line. If they cannot go together with it, nothing is published and nothing is merged, and the site says so.
 
+**On one machine, one writer at a time.** Two actors recording at once is a race the tooling settles rather than reports: the second waits for the first, and an event records exactly the paths it changed rather than whatever happens to be in the working tree when it commits. A change that arrives while an event is being recorded therefore belongs to the next event rather than to this one, which is what keeps one commit one event when two hands are at work on one machine.
+
 What this buys is one line with no merges and nothing rewritten that has been seen, and it is also what makes *a name is used once* hold between sites rather than only within one: a job id, an asset version or a convention number taken at another site while this event was being written is a file that moved, so the event is refused and taken back out. What it costs is a round trip per recorded event at a site that has a remote, and it is why a workspace whose sites are never connected is still a workspace with one line — its own.
 
 ### Joining a site

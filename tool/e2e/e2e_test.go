@@ -583,6 +583,136 @@ func TestAJobMovesToAnotherSite(t *testing.T) {
 	}
 }
 
+// A site that recorded while it was alone has records the line does not, and sync is the
+// command that publishes them: it brings the site up to date first and puts the backlog on
+// top, rather than refusing because the line moved meanwhile.
+func TestASiteThatRecordedAlonePublishesItsBacklog(t *testing.T) {
+	first := filepath.Join(t.TempDir(), "build-01")
+	second := filepath.Join(t.TempDir(), "lab-02")
+	records := filepath.Join(t.TempDir(), "records.git")
+
+	run(t, "create", first, "--site", "build-01")
+	git(t, first, "init", "--bare", "-b", "main", records)
+	git(t, first, "remote", "add", "origin", records)
+	run(t, "--root", first, "resource", "declare", "--kind", "site", "--name", "build-01", "--purpose", "build")
+	run(t, "--root", first, "resource", "declare", "--kind", "site", "--name", "lab-02", "--purpose", "lab")
+	run(t, "--root", first, "sync")
+	run(t, "join", second, "--remote", records, "--site", "lab-02")
+
+	// The second site is alone for a while: the remote is not there, and it records
+	// anyway. That is what a backlog is.
+	git(t, second, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "not-there"))
+	run(t, "--root", second, "resource", "declare", "--kind", "gpu", "--name", "gpu", "--purpose", "the GPU")
+	git(t, second, "remote", "set-url", "origin", records)
+
+	// Meanwhile the line moves, so publishing means going on top of what moved.
+	run(t, "--root", first, "resource", "declare", "--kind", "dataset", "--name", "corpus", "--purpose", "the corpus")
+	run(t, "--root", first, "sync")
+
+	out := run(t, "--root", second, "sync")
+	if !strings.Contains(out, "published") {
+		t.Errorf("sync should publish the backlog, and said:\n%s", out)
+	}
+	line := gitOut(t, second, "log", "--pretty=%s", "origin/main")
+	for _, want := range []string{"declared gpu", "declared corpus"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the line should hold %q:\n%s", want, line)
+		}
+	}
+	if merges := gitOut(t, second, "rev-list", "--merges", "--all"); strings.TrimSpace(merges) != "" {
+		t.Errorf("publishing a backlog must not merge:\n%s", merges)
+	}
+	if out := run(t, "--root", second, "sync"); !strings.Contains(out, "nothing to publish") {
+		t.Errorf("a second sync has nothing to do, and said:\n%s", out)
+	}
+	if out := run(t, "--root", second, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the site should still validate, and said:\n%s", out)
+	}
+}
+
+// Two actors recording at once on one machine is a race the tooling settles rather than
+// reports: both events land, each holds exactly its own file, and the refusal an actor
+// sees is the tooling's rather than git's index lock.
+func TestTwoActorsRecordingAtOnceBothLand(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+	topic := filepath.Join(root, "doc", "topic", "race")
+	if err := os.MkdirAll(topic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range map[string]string{
+		"overview.md": "# Race\n\nTwo writers, one topic.\n",
+		"one.md":      "# One\n\nstart\n",
+		"two.md":      "# Two\n\nstart\n",
+	} {
+		if err := os.WriteFile(filepath.Join(topic, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git(t, root, "add", "-A", "--", "doc/topic/race")
+	git(t, root, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "topic race: start")
+
+	// Each writer changes its own file, so neither event has anything to do with the
+	// other except the moment they are recorded.
+	writers := []struct {
+		args []string
+		body string
+	}{
+		{[]string{"--root", root, "commit", "--summary", "one", "--", "doc/topic/race/one.md"}, "# One\n\nwritten\n"},
+		{[]string{"--root", root, "commit", "--summary", "two", "--", "doc/topic/race/two.md"}, "# Two\n\nwritten\n"},
+	}
+	for _, w := range writers {
+		path := filepath.Join(root, filepath.FromSlash(w.args[len(w.args)-1]))
+		if err := os.WriteFile(path, []byte(w.body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	outputs := make([]string, len(writers))
+	errs := make([]error, len(writers))
+	done := make(chan int)
+	for i, w := range writers {
+		go func(i int, args []string) {
+			cmd := exec.Command(thrum, args...)
+			cmd.Env = append(os.Environ(), "THRUM_ACTOR=fixture-actor")
+			out, err := cmd.CombinedOutput()
+			outputs[i], errs[i] = string(out), err
+			done <- i
+		}(i, w.args)
+	}
+	for range writers {
+		<-done
+	}
+
+	for i := range writers {
+		if errs[i] != nil {
+			t.Errorf("both writers should have recorded, and one said:\n%s", outputs[i])
+		}
+		if strings.Contains(outputs[i], "index.lock") {
+			t.Errorf("a refusal should be the tooling's, not git's:\n%s", outputs[i])
+		}
+	}
+	// Each event is one commit holding exactly its own file, and nothing is left over.
+	for _, name := range []string{"one", "two"} {
+		id := strings.TrimSpace(gitOut(t, root, "log", "--pretty=%H", "--grep", "^topic race: "+name+"$", "-1"))
+		if id == "" {
+			t.Errorf("the event %q never reached the line", name)
+			continue
+		}
+		files := strings.Fields(gitOut(t, root, "show", "--pretty=format:", "--name-only", id))
+		want := "doc/topic/race/" + name + ".md"
+		if len(files) != 1 || files[0] != want {
+			t.Errorf("event %q should hold exactly %s, and holds %v", name, want, files)
+		}
+	}
+	if left := strings.TrimSpace(gitOut(t, root, "status", "--porcelain")); left != "" {
+		t.Errorf("nothing should be left uncommitted:\n%s", left)
+	}
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the workspace should still validate, and said:\n%s", out)
+	}
+}
+
 // seedCode gives the code repository one commit, which is what a project has before any
 // job exists. It is bare, so the commit is made in a clone and pushed.
 func seedCode(t *testing.T, root string) {

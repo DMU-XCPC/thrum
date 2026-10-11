@@ -85,7 +85,13 @@ func (l Layout) OccupyFile(job string) string {
 }
 func (l Layout) DaemonSocket() string { return filepath.Join(l.Var(), "daemon.sock") }
 func (l Layout) DaemonLock() string   { return filepath.Join(l.Var(), "daemon.lock") }
-func (l Layout) DaemonLog() string    { return filepath.Join(l.Var(), "daemon.log") }
+
+// RecordsLock is the advisory lock a coordination write holds, so that two actors
+// recording at once on one machine wait for each other instead of colliding over git's
+// index. It is a lock file rather than a record: it lives under var/, and nothing
+// commits it.
+func (l Layout) RecordsLock() string { return filepath.Join(l.Var(), "records.lock") }
+func (l Layout) DaemonLog() string   { return filepath.Join(l.Var(), "daemon.log") }
 
 // ActorRoster is what the tooling knows about names at this site: which exist, and when
 // each was last heard from. It is never committed and never leaves the machine.

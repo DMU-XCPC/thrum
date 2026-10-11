@@ -26,6 +26,12 @@ import (
 // rewrites nothing anyone else has seen. If that cannot be done without a conflict, this
 // does nothing at all and says so.
 func Current(l workspace.Layout) error {
+	// The lock is taken here because this is where a record write begins: what follows
+	// reads the workspace and decides what to record, and all of it has to happen with
+	// no other writer in between.
+	if err := acquire(l); err != nil {
+		return err
+	}
 	if !hasRemote(l) {
 		// A workspace nobody else has cannot diverge from anybody.
 		return nil
@@ -128,10 +134,10 @@ func publishOrUndo(l workspace.Layout, paths []string, message, id string) (stri
 		if _, err := gitx.Run(l.Root, "reset", "--mixed", "--quiet", up); err != nil {
 			return id, err
 		}
-		if err := stage(l, paths); err != nil {
+		if err := prepare(l, paths); err != nil {
 			return id, err
 		}
-		if id, err = commitNow(l, paths, message); err != nil {
+		if id, err = commitNow(l, message); err != nil {
 			return id, err
 		}
 	}
@@ -197,12 +203,75 @@ func stage(l workspace.Layout, paths []string) error {
 	return err
 }
 
-func commitNow(l workspace.Layout, paths []string, message string) (string, error) {
-	// The paths are named on the commit as well as on the add, so that a file another
-	// actor on this machine has staged cannot ride along in this event.
+// prepare stages one event's paths, and refuses when the index holds anything else.
+//
+// Naming the paths on the commit as well as on the add is not enough to keep an event to
+// its own changes: git takes the working tree's content for a named path, so a hand edit
+// that arrived after the event staged its paths would be recorded as part of it. Committing
+// the index instead records the bytes that were staged — which only holds if the index is
+// exactly this event's paths, and that is what this checks.
+func prepare(l workspace.Layout, paths []string) error {
+	if err := stage(l, paths); err != nil {
+		return fmt.Errorf("staging: %w", err)
+	}
+	foreign, err := foreignStaged(l, paths)
+	if err != nil {
+		return err
+	}
+	if len(foreign) > 0 {
+		return fmt.Errorf("the index holds changes this event did not make — %s — and an event records exactly what it staged, so going on would put somebody else's change under this event's name: record them as their own event, or unstage them",
+			strings.Join(foreign, ", "))
+	}
+	anything, err := anythingStaged(l, paths)
+	if err != nil {
+		return err
+	}
+	if !anything {
+		return fmt.Errorf("nothing to record: %s is already what the line has", strings.Join(paths, ", "))
+	}
+	return nil
+}
+
+// foreignStaged names the staged changes that are not this event's.
+func foreignStaged(l workspace.Layout, paths []string) ([]string, error) {
+	out, err := gitx.Run(l.Root, "diff", "--cached", "--name-only")
+	if err != nil {
+		return nil, err
+	}
+	var foreign []string
+	for _, staged := range strings.Fields(out) {
+		if !coveredBy(paths, staged) {
+			foreign = append(foreign, staged)
+		}
+	}
+	return foreign, nil
+}
+
+// anythingStaged reports whether the index holds a change among these paths.
+func anythingStaged(l workspace.Layout, paths []string) (bool, error) {
+	args := append([]string{"diff", "--cached", "--name-only", "--"}, paths...)
+	out, err := gitx.Run(l.Root, args...)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
+// coveredBy reports whether a staged path is one of the event's paths, or inside one of
+// them — a directory an event owns covers the files under it.
+func coveredBy(paths []string, staged string) bool {
+	for _, mine := range paths {
+		mine = strings.TrimSuffix(mine, "/")
+		if staged == mine || strings.HasPrefix(staged, mine+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func commitNow(l workspace.Layout, message string) (string, error) {
 	args := gitx.IdentityArgs(l.Root, "thrum")
-	args = append(args, "commit", "--quiet", "-m", message, "--")
-	args = append(args, paths...)
+	args = append(args, "commit", "--quiet", "-m", message)
 	if _, err := gitx.Run(l.Root, args...); err != nil {
 		return "", err
 	}

@@ -161,7 +161,7 @@ a policy nobody can read is a policy nobody has.
 | `verify` | `thrum verify` |
 | `status` | `thrum status` |
 | `clean` | `thrum clean [--dry-run]` |
-| `sync` | `thrum sync [--job <id>] [--fetch]` |
+| `sync` | `thrum sync [--job <id>]` — brings this site up to date from the line, puts its own unpublished records on top, and publishes them |
 | `roster` | `thrum actor list`, `thrum actor show <name>` |
 | `ask` | `thrum actor ask --job <id>` |
 | `env` | `thrum env --job <id>` |
@@ -276,7 +276,11 @@ command="thrum daemon exec",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed
 - A handoff whose `next` disagrees with its status: `none` belongs to `done`, and every other stretch leaves a baton.
 - Sending to a name nobody has seen: the roster is what makes a typo an error rather than
   a message into an empty mailbox.
-- Committing two documents of different events together.
+- Committing two documents of different events together, and recording an event when the index
+  holds changes that event did not make.
+- Publishing a backlog that does not go together with what was published elsewhere: `sync`
+  refuses rather than merging, and says so when the remote cannot be reached instead of
+  reporting it as a failure to push.
 - `git clean` with `-x`, or with `-d`: the first would delete `.bare/` and the source
   history with it, the second would demolish the workspace's own empty directories.
 - Repairing anything in `verify`. It reports; a wrong repair costs more than a stale line.
@@ -284,7 +288,8 @@ command="thrum daemon exec",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed
 ## Where it writes
 
 Under `--root`, and nowhere else: `doc/`, `handoff/` and `store/` are the versioned half,
-`var/` is this site's runtime — including the actor roster and the mailboxes — and
+`var/` is this site's runtime — including `var/records.lock`, the advisory lock a record write
+holds so that two actors on one machine wait for each other — and — including the actor roster and the mailboxes — and
 `job/<job-id>/` is a job's payload. `AGENTS.md` and `.agents/` are the unversioned skeleton
 the tooling materialises, beside the empty directories and the ignore rules; the rules that
 keep them out of `git status` — and therefore out of `clean` — are written with the rest of
