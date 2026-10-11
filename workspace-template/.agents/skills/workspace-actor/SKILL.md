@@ -63,7 +63,7 @@ occupancy's `occupant`, a job's `owner`. Set your name before your first command
 every command of this session:
 
 ```sh
-export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
+export THRUM_ACTOR=agent-3        # or --actor <name> on every command
 ```
 
 - A slug: lowercase letters, digits and hyphens, like every other name here.
@@ -72,9 +72,11 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
   `--actor <name>` on each one, with the same value.
 - Without `--actor` or `$THRUM_ACTOR`, the tooling records `$USER`.
 - A later session may use a different name; every command of one session uses the same one.
-- **Not the name of your harness.** `deepseek-harness`, `dsh`, `claude-code` name where you are
-  running, not who is working; the harness changes and one harness hosts many actors, so the name
-  would go stale and merge them. `names.md` has the rule and its reason.
+- **It names the session, not what you are running in.** `deepseek-harness`, `dsh` and
+  `claude-code` name the harness; `deepseek-flash`, `gpt-5` and the like name the model. Both are
+  swapped under a session, and one harness hosts many sessions at once, so a name taken from either
+  goes stale and merges actors that are not the same one. Keep the name you were given, or pick one
+  you can keep for the whole session; `names.md` has the rule and its reason.
 
 ## What you may touch
 

@@ -39,7 +39,7 @@ job: add-retry-to-uploader
 status: active                   # active | done | abandoned; blocked is derived
 branch: job/add-retry-to-uploader
 owned_paths: ["src/upload/**", "tests/upload/**"]
-owner: claude-opus               # optional; absent means unowned
+owner: agent-3               # optional; absent means unowned
 depends_on: [fix-ci-timeouts]    # optional
 keep: false                      # optional; true protects this job's payload
 ---
@@ -102,7 +102,7 @@ The file name is the **start** of the stretch in UTC, with `:` replaced by `-`
 ```yaml
 ---
 job: add-retry-to-uploader
-agent: claude-opus
+agent: agent-3
 branch: job/add-retry-to-uploader
 base: 4f2a1c9d8e3b7f01c2a4e6b8d0f2a4c6e8b0d2f4
 head: 9be77d05a1c3e5f7b9d1e3f5a7c9b1d3e5f7a9c1

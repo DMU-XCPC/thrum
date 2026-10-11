@@ -48,7 +48,7 @@ Actors reach each other through the tooling, not through the records. A message 
 information**: not a record, never committed, never validated, and it does not travel by git.
 
 ```sh
-thrum send --to claude-opus --subject "the timeout is explained" --body "…" [--file report.csv]
+thrum send --to agent-3 --subject "the timeout is explained" --body "…" [--file report.csv]
 thrum inbox [--json]
 thrum read <id> [--json] [--out dir]
 thrum reply <id> --body "…"

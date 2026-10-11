@@ -8,11 +8,13 @@ yourself — `thrum work --job <new-id> --purpose '<what it is for>'`, with the 
 the brief's goal. Work that begins as "read this and find out" is still a job: the records are
 where the work has to be visible, and a stretch nobody can find is a stretch nobody can continue.
 
-**Set your actor name before your first command.** A handoff, an occupancy, a lease and a job's
-owner all record which actor did the work:
+**Set your actor name before your first command.** The name identifies **this working session** —
+the entity doing the work — and it stays the same for as long as the session runs: a model swapped,
+a context compacted, a host restarted, and the name on the records it already wrote is still the same
+one. A handoff, an occupancy, a lease and a job's owner all record it:
 
 ```sh
-export THRUM_ACTOR=claude-opus     # one slug, for every command in this session
+export THRUM_ACTOR=agent-3     # one slug, for every command in this session
 ```
 
 If you were given a name, that is your name. Without `--actor` or `$THRUM_ACTOR`, your work is
@@ -24,7 +26,10 @@ command instead, with the same value.
 **The name is yours, not the name of what you are running in.** `deepseek-harness`, `dsh` and
 `claude-code` name a harness — the thing hosting you, which changes while the work goes on, and
 which hosts several actors at once, so one of those names would merge their handoffs, occupancies
-and leases into one. Name the actor: `dana`, `agent-3`, `claude-opus`.
+and leases into one. Name the session: `agent-3`, `dana`, `ws-7` — not the harness, and **not the model**. An alias of
+whatever you happen to be running (`deepseek-flash`, `gpt-5`, a `claude-…`) is swapped under a
+session, and a name swapped with it turns one actor's records into several. If the person who
+dispatched you gave a name, that is the name; if not, pick one you can keep for the whole session.
 
 **This file is the workspace's; the project's `AGENTS.md` inside the working directory is the
 project's** — versioned with the code, and read beside this one. They govern different things: this
@@ -55,11 +60,10 @@ tell you.
 | **nothing under `var/`** | It is the tooling's — *including making a directory there*. An entry a hand invents is invisible to `thrum status` and `verify`, is never collected, and never travels; work left inside one is work the next actor will not find. |
 | **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. A tool run without `thrum env` writes there, where nothing collects what it leaves. Secrets go in none of these files: the only ones inside a workspace are the tooling's own, in `var/secrets/`. Reading is narrower than writing: the workspace holds what the task needs, and if you must look outside it — a tool's own documentation, a fact about this machine — say so in your handoff rather than going through the user's home for context (`~/.bash_history`, `~/.ssh/*`, another project's tree). |
 
-**Reading is not checking out.** A document on another branch, the brief of a job that has
-closed, a commit you are comparing against: `git -C .bare show <ref>:<path>` prints it, and
-`git -C .bare ls-tree` or `git -C .bare log` say what there is to read. A working directory is
-made by the tooling, under a declared label — never by a `git worktree add` of your own, and
-never inside `var/`.
+**Reading is not checking out.** A document on another branch, the brief of a job that has closed,
+a commit you are comparing against: read it with whatever you have at hand — that part is yours to
+choose. What must not happen is a working directory made by hand: one comes from the tooling, under
+a declared label, and never from a checkout of your own — and never inside `var/`.
 
 ## Where the answers are
 

@@ -26,7 +26,7 @@ stamp := YYYY "-" MM "-" DD "T" HH "-" MM "-" SS "Z"    # UTC, colons replaced b
 | Convention file | two digits + `-` + `slug` + `.md` | `01-placement.md` |
 | Topic | `slug` | `upload-protocol` |
 | Topic document | `slug` + `.md` | `retry.md` |
-| Actor | `slug` — one name for as long as that actor works | `claude-opus` |
+| Actor | `slug` — one name for as long as that actor works | `agent-3` |
 
 ## The rules, and why each one exists
 
@@ -72,7 +72,12 @@ or every manifest and every handoff naming it would silently repoint.
 
 **An actor name** is one name for as long as that actor is working — every command of one session
 uses the same one — because a handoff, an occupancy and a lease all record which actor did the
-work. A later session may choose another, and the roster simply stops hearing from the old one.
+work. A later session may choose another, and the roster simply stops hearing from the old one. **The
+name identifies the working session, not the machinery under it**: a model swapped mid-session, a
+context compacted, a host restarted — and the session goes on writing under the same name, because
+the records it already wrote are its own. That is also why neither a harness's name nor a model's
+name is one: both are swapped while the session continues, and one harness hosts many sessions at
+once.
 An actor may be a person or an agent. The first time a name is used it exists; nothing is
 registered, and nothing is refused because a name is missing — a name is not a permission.
 
