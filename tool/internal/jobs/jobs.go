@@ -43,6 +43,11 @@ type OpenOptions struct {
 	// means the template's headings with nothing under them, which is a brief that says
 	// nothing.
 	Body []byte
+	// Occupant is who is on the job at this site once it is opened. Empty means the owner,
+	// which is the convenience for an actor opening the job it is about to work: an actor
+	// taking up a job opened for somebody else passes itself, because the claim names the actor
+	// at the machine and the owner is only who the work is promised to.
+	Occupant string
 }
 
 // Open records a job: the brief, the branch, and a labelled working directory.
@@ -118,11 +123,16 @@ func Open(l workspace.Layout, o OpenOptions) (string, error) {
 		return "", fmt.Errorf("materialising worktree %s: %w", o.Label, err)
 	}
 
-	// Whoever opens a job with an owner is on it: the claim is what says so, and a
-	// person working by hand should not have to remember a second command to be
-	// believed.
-	if o.Owner != "" {
-		if err := occupancy.Occupy(l, o.Job, o.Owner, false, time.Now().UTC()); err != nil {
+	// Whoever opens a job is on it: the claim is what says so, and a person working by hand
+	// should not have to remember a second command to be believed. Opening with an owner and
+	// no occupant means the owner, since the usual case is an actor opening its own job; an
+	// actor taking up a job somebody else is promised passes itself as the occupant.
+	occupant := o.Occupant
+	if occupant == "" {
+		occupant = o.Owner
+	}
+	if occupant != "" {
+		if err := occupancy.Occupy(l, o.Job, occupant, false, time.Now().UTC()); err != nil {
 			_ = worktrees.Remove(l, o.Label)
 			_ = os.RemoveAll(l.TaskDir(o.Job))
 			_ = os.RemoveAll(l.JobDir(o.Job))

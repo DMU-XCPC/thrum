@@ -114,6 +114,7 @@ func newWorkCmd() *cobra.Command {
 				id, err := jobs.Open(l, jobs.OpenOptions{
 					Job:        jobID,
 					Owner:      owner,
+					Occupant:   actor,
 					DependsOn:  list(dependsOn),
 					OwnedPaths: list(ownedPaths),
 					Keep:       keep,

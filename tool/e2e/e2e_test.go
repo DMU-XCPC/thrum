@@ -1474,3 +1474,33 @@ func TestAHandoffBodyIsTheActorsOwn(t *testing.T) {
 		t.Errorf("the record should validate, and verify said:\n%s", out)
 	}
 }
+
+// A job opened for somebody else is taken up by whoever takes it up: `--owner` is who the work is
+// promised to, and the claim names the actor at the machine that holds the job.
+func TestTakingUpAJobOpenedForSomebodyElse(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "build-01")
+	run(t, "create", root, "--site", "build-01")
+
+	clone := filepath.Join(t.TempDir(), "seed")
+	git(t, filepath.Dir(clone), "clone", "--quiet", filepath.Join(root, ".bare"), clone)
+	if err := os.WriteFile(filepath.Join(clone, "README.md"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, clone, "add", ".")
+	git(t, clone, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "project: first")
+	git(t, clone, "push", "--quiet", "origin", "HEAD:refs/heads/main")
+
+	run(t, "--root", root, "--actor", "alice", "resource", "declare", "--kind", "worktree",
+		"--name", "area", "--purpose", "the area")
+	out := run(t, "--root", root, "--actor", "alice", "work", "--job", "j1", "--label", "area",
+		"--goal", "g", "--scope", "s", "--criteria", "c", "--owner", "carol")
+	if !strings.Contains(out, "work in") {
+		t.Errorf("taking up a job opened for somebody else should work, and it said:\n%s", out)
+	}
+	if show := run(t, "--root", root, "occupancy", "show"); !strings.Contains(show, "alice") {
+		t.Errorf("the actor at the machine is on the job, and occupancy says:\n%s", show)
+	}
+	if j := run(t, "--root", root, "job", "--job", "j1"); !strings.Contains(j, "carol") {
+		t.Errorf("the owner stays who the work is promised to, and the job says:\n%s", j)
+	}
+}
