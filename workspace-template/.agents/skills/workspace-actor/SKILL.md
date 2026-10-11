@@ -158,9 +158,9 @@ your own.
    the record's shape, its sections and what it refuses are `records.md`. When an event is refused,
    your record stays in the working tree uncommitted, to be recorded again once what it clashed with
    is settled — nothing is lost, and nothing is half-written.
-   Then `thrum handoff --job <job-id> --status <done|partial|blocked|aborted> --next '<first thing
+   Then `thrum job handoff <job-id> --status <done|partial|blocked|aborted> --next '<first thing
    next>'`. One handoff is one coordination event, and therefore one commit.
-10. **Close, or leave the baton.** `thrum close --job <job-id>` only when the acceptance criteria
+10. **Close, or leave the baton.** `thrum job close <job-id>` only when the acceptance criteria
     hold, and `thrum close --abandoned` when they will not. Closing merges nothing: the branch stays
     in the code repository for whoever integrates. Before closing, look for something to promote — a fact that outlives the job and does not depend on how it was solved, such
     as a platform's hard constraints or a toolchain's rules — to
@@ -175,7 +175,7 @@ act** when you are the one who will work it; `thrum open` is the same act withou
 which is what opening a job for somebody else looks like.
 
 ```sh
-thrum open --job add-retry-to-uploader --label uploader \
+thrum job open add-retry-to-uploader --label uploader \
     --goal 'retry the uploader instead of failing it' \
     --scope 'the uploader only' \
     --criteria 'a flaky upload succeeds on the second attempt' \

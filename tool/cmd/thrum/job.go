@@ -49,11 +49,13 @@ func newJobCmd() *cobra.Command {
 		Use:   "job",
 		Short: "The board, one job in full, and who is on it",
 		Long: "`job list` is every job with what the last handoff said about it; `job show <id>` is one\n" +
-			"job in full; `job occupy <id>` and `job vacate <id>` are the claim that somebody is on it,\n" +
-			"which is written where the job is so that one site decides.",
+			"job in full; `job open <id>` starts one and `job close <id>` ends it; `job handoff <id>`\n" +
+			"records a stretch of work; `job claim <id>` and `job relinquish <id>` are ownership; and\n" +
+			"`job occupy <id>` and `job vacate <id>` are the claim that somebody is on it, written\n" +
+			"where the job is so that one site decides.",
 	}
 	cmd.AddCommand(newJobListCmd(), newJobShowCmd(), newJobOccupyCmd(), newJobVacateCmd(),
-		newJobClaimCmd(), newJobRelinquishCmd())
+		newJobClaimCmd(), newJobRelinquishCmd(), newOpenCmd(), newHandoffCmd(), newCloseCmd())
 	return cmd
 }
 

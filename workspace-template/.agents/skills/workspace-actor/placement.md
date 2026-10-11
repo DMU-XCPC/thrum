@@ -35,7 +35,7 @@ convenience, and "I needed it nearby" is not one of the questions.
 
 **A working directory is made by the tooling, under a declared label.** The tooling checks the
 branch out into `worktree/<label>`: `thrum work --job <job-id> --label <label>` takes a job up
-and is the ordinary way, `thrum open --job <job-id> --label <label> --create-label` opens one for
+and is the ordinary way, `thrum job open <job-id> --label <label> --create-label` opens one for
 somebody else, and `thrum worktree add --label <label>` materialises a label on its own,
 detached, for comparison. The declaration is what says the label exists at all. Checking a branch
 out by hand anywhere else, into `var/` or `job/` or your home directory, registers a carrier the

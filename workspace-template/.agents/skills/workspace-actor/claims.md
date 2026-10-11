@@ -137,7 +137,7 @@ every act on a lease names the job: taking it, renewing it, releasing it.
   releasing early means deleting the file.
 - **A lease dies with its job.** A lease whose job is `done` or `abandoned` is as free as an
   expired one — otherwise a finished job would keep its unit out of reach until the expiry passed.
-  `thrum close --job <job-id>` is what releases the units the job still holds here, so a holder
+  `thrum job close <job-id>` is what releases the units the job still holds here, so a holder
   does not have to remember them (*The loop*, step 10, in `SKILL.md`).
 - **A lease whose `resource` names nothing in `doc/resource/` is not valid.** That is how
   "everything unversioned must be anchored by something versioned" is checked mechanically, and

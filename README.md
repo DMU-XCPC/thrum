@@ -64,8 +64,8 @@ eval "$(thrum env --job add-retry)"   # what it tells you to run, before anythin
 thrum job --job add-retry             # what the job is for, where it is, who is on it
 thrum verify                          # every structural rule, in one command
 
-thrum handoff --job add-retry --status done --next none
-thrum close --job add-retry
+thrum job handoff add-retry --status done --next none
+thrum job close add-retry
 ```
 
 A new workspace arrives ready to hand to an agent: it carries an entry point and the skill it

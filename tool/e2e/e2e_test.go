@@ -122,7 +122,7 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	refuses(t, "job", "--root", root, "lease", "take", "--resource", "gpu", "--job", "no-such-job", "--ttl", "1h")
 
 	// Open: the brief, the branch, and a labelled working directory, in one commit.
-	run(t, "--root", root, "open", "--job", "add-retry", "--label", "uploader",
+	run(t, "--root", root, "job", "open", "add-retry", "--label", "uploader",
 		"--owner", "fixture-actor", "--owned-paths", "src/upload/**",
 		"--goal", "Retry the uploader instead of failing it",
 		"--scope", "The uploader only",
@@ -160,12 +160,12 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	refuses(t, "is not held", "--root", root, "lease", "renew", "--resource", "gpu", "--unit", "2", "--job", "add-retry", "--ttl", "1h")
 
 	// A stretch of work, recorded where the next actor will look for it.
-	run(t, "--root", root, "handoff", "--job", "add-retry", "--status", "partial",
+	run(t, "--root", root, "job", "handoff", "add-retry", "--status", "partial",
 		"--next", "compare against the baseline", "--started", "2026-10-09T02:10:00Z",
 		"--worktrees", "uploader", "--summary", "the flaky timeout remains")
 	// The same start twice is a collision, not an edit. Everything else about this record is
 	// valid, so that the collision is what the refusal is about.
-	refuses(t, "already exists", "--root", root, "handoff", "--job", "add-retry", "--status", "partial",
+	refuses(t, "already exists", "--root", root, "job", "handoff", "add-retry", "--status", "partial",
 		"--next", "compare against the baseline", "--started", "2026-10-09T02:10:00Z")
 
 	// An asset: published, and unpacked into the payload rather than checked out
@@ -215,7 +215,7 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	}
 
 	// Close: the final status, the brief archived, the label released, the lease gone.
-	run(t, "--root", root, "close", "--job", "add-retry", "--summary", "acceptance criteria hold")
+	run(t, "--root", root, "job", "close", "add-retry", "--summary", "acceptance criteria hold")
 	if _, err := os.Stat(filepath.Join(root, "doc", "archive", "task", "add-retry", "brief.md")); err != nil {
 		t.Errorf("a closed brief belongs in the archive: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 		t.Errorf("closing a job leaves its label clean and detached:\n%s", idle)
 	}
 	// An id is taken forever.
-	refuses(t, "used before", "--root", root, "open", "--job", "add-retry", "--label", "uploader")
+	refuses(t, "used before", "--root", root, "job", "open", "add-retry", "--label", "uploader")
 
 	// Collection: the cheap half at once, the rest after the window.
 	if out := run(t, "--root", root, "collect"); !strings.Contains(out, "add-retry") {
@@ -285,7 +285,7 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	// A document written by hand still gets committed, and the event is read from where
 	// it lives.
 	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "second-area", "--purpose", "A second area")
-	run(t, "--root", root, "open", "--job", "second-job", "--label", "second-area")
+	run(t, "--root", root, "job", "open", "second-job", "--label", "second-area")
 	topicDir := filepath.Join(root, "doc", "topic", "uploader")
 	if err := os.MkdirAll(topicDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -326,7 +326,7 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	if err := os.WriteFile(artifact, []byte("the result\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, "--root", root, "handoff", "--job", "second-job", "--status", "done",
+	run(t, "--root", root, "job", "handoff", "second-job", "--status", "done",
 		"--started", "2026-10-10T02:10:00Z",
 		"--artifact", filepath.Join("job", "second-job", "out", "report.txt"))
 	handoff, err := os.ReadFile(filepath.Join(root, "handoff", "second-job", "2026-10-10T02-10-00Z.md"))
@@ -346,7 +346,7 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	// record the tooling used to write and its own verify then rejected.
 	refuses(t, "not one of them", "--root", root, "lease", "take", "--resource", "gpu",
 		"--job", "second-job", "--unit", "2", "--ttl", "1h")
-	refuses(t, "lies under", "--root", root, "handoff", "--job", "second-job", "--status", "partial",
+	refuses(t, "lies under", "--root", root, "job", "handoff", "second-job", "--status", "partial",
 		"--next", "carry on", "--started", "2026-10-09T05:00:00Z", "--artifact", "/etc/hostname")
 	run(t, "--root", root, "job", "claim", "second-job") // nobody owns it, so anybody may
 	refuses(t, "only its owner", "--root", root, "job", "claim", "second-job",
@@ -354,13 +354,13 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 
 	// The baton and the status are one rule with two directions, and the tooling refuses
 	// both rather than writing a record its own verify calls broken.
-	refuses(t, "exactly when the status is `done`", "--root", root, "handoff", "--job", "second-job",
+	refuses(t, "exactly when the status is `done`", "--root", root, "job", "handoff", "second-job",
 		"--status", "partial", "--next", "none", "--started", "2026-10-11T01:00:00Z")
-	refuses(t, "leaves a baton", "--root", root, "handoff", "--job", "second-job",
+	refuses(t, "leaves a baton", "--root", root, "job", "handoff", "second-job",
 		"--status", "aborted", "--started", "2026-10-11T02:00:00Z")
 
 	// And the job can be closed, which is the end of it.
-	run(t, "--root", root, "close", "--job", "second-job")
+	run(t, "--root", root, "job", "close", "second-job")
 	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
 		t.Errorf("the workspace should validate with everything in it, and said:\n%s", out)
 	}
@@ -373,8 +373,8 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	refuses(t, "closed once", "--root", root, "close", "--job", "second-job", "--abandoned")
-	refuses(t, "still meant to happen is worked", "--root", root, "handoff", "--job", "second-job",
+	refuses(t, "closed once", "--root", root, "job", "close", "second-job", "--abandoned")
+	refuses(t, "still meant to happen is worked", "--root", root, "job", "handoff", "second-job",
 		"--status", "partial", "--next", "still poking", "--started", "2026-10-11T00:00:00Z")
 	after, err := os.ReadFile(archived)
 	if err != nil {
@@ -447,7 +447,7 @@ func TestActorsReachEachOther(t *testing.T) {
 	run(t, "create", root, "--site", "build-01")
 	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "area", "--purpose", "An area")
 	seedCode(t, root)
-	run(t, "--root", root, "open", "--job", "first-job", "--label", "area", "--owner", "claude-sonnet")
+	run(t, "--root", root, "job", "open", "first-job", "--label", "area", "--owner", "claude-sonnet")
 	// A name exists by acting: the owner is written into the brief, but it is this that
 	// makes it a name the tooling has heard from.
 	run(t, "--root", root, "job", "occupy", "first-job", "--actor", "claude-sonnet")
@@ -537,12 +537,12 @@ func TestAJobMovesToAnotherSite(t *testing.T) {
 	run(t, "create", from, "--site", "build-01")
 	run(t, "--root", from, "resource", "declare", "--kind", "worktree", "--name", "uploader", "--purpose", "Uploader reliability work")
 	seedCode(t, from)
-	run(t, "--root", from, "open", "--job", "carried-work", "--label", "uploader")
+	run(t, "--root", from, "job", "open", "carried-work", "--label", "uploader")
 	if err := os.WriteFile(filepath.Join(from, "job", "carried-work", "out", "result.txt"),
 		[]byte("the result\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, "--root", from, "handoff", "--job", "carried-work", "--status", "partial",
+	run(t, "--root", from, "job", "handoff", "carried-work", "--status", "partial",
 		"--next", "keep going", "--started", "2026-10-09T02:10:00Z")
 
 	bundle := filepath.Join(t.TempDir(), "carried-work.tar.gz")
@@ -656,7 +656,7 @@ func TestOpeningAndClosingRefuseBeforeTheyWrite(t *testing.T) {
 	}
 	git(t, root, "add", "doc/convention/01-hand.md")
 
-	refuses(t, "doc/convention/01-hand.md", "--root", root, "open", "--job", "j2", "--label", "area2")
+	refuses(t, "doc/convention/01-hand.md", "--root", root, "job", "open", "j2", "--label", "area2")
 	for _, path := range []string{"doc/task/j2", "job/j2", "worktree/area2"} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); err == nil {
 			t.Errorf("a refused open should not have created %s", path)
@@ -665,7 +665,7 @@ func TestOpeningAndClosingRefuseBeforeTheyWrite(t *testing.T) {
 
 	// The remedy works, and so does the operation after it.
 	run(t, "--root", root, "commit", "--summary", "hand", "--", "doc/convention/01-hand.md")
-	run(t, "--root", root, "open", "--job", "j2", "--label", "area2", "--owner", "fixture-actor")
+	run(t, "--root", root, "job", "open", "j2", "--label", "area2", "--owner", "fixture-actor")
 
 	// Closing: nothing is written before the refusal is known, and no retry is possible
 	// afterwards, so this is the refusal that matters most.
@@ -673,7 +673,7 @@ func TestOpeningAndClosingRefuseBeforeTheyWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	git(t, root, "add", "doc/convention/01-hand.md")
-	refuses(t, "doc/convention/01-hand.md", "--root", root, "close", "--job", "j2")
+	refuses(t, "doc/convention/01-hand.md", "--root", root, "job", "close", "j2")
 	if _, err := os.Stat(filepath.Join(root, "doc", "task", "j2", "brief.md")); err != nil {
 		t.Errorf("a refused close should leave the brief where it was: %v", err)
 	}
@@ -694,7 +694,7 @@ func TestOpeningAndClosingRefuseBeforeTheyWrite(t *testing.T) {
 
 	// Clear the way, and the close happens — and only then does the working directory let go.
 	run(t, "--root", root, "commit", "--summary", "hand again", "--", "doc/convention/01-hand.md")
-	run(t, "--root", root, "close", "--job", "j2")
+	run(t, "--root", root, "job", "close", "j2")
 	if _, err := os.Stat(filepath.Join(root, "doc", "archive", "task", "j2", "brief.md")); err != nil {
 		t.Errorf("the close should have archived the brief: %v", err)
 	}
@@ -1241,7 +1241,7 @@ func TestStatusIsReadableByAMachine(t *testing.T) {
 	run(t, "create", root, "--site", "build-01")
 	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "area", "--purpose", "An area")
 	seedCode(t, root)
-	run(t, "--root", root, "open", "--job", "first-job", "--label", "area", "--owner", "fixture-actor")
+	run(t, "--root", root, "job", "open", "first-job", "--label", "area", "--owner", "fixture-actor")
 
 	out := run(t, "--root", root, "status", "--json")
 	var got struct {
@@ -1537,7 +1537,7 @@ func TestAStaleClaimDoesNotBlockTakingAJobUp(t *testing.T) {
 	run(t, "--root", root, "--actor", "alice", "work", "--job", "j1", "--label", "uploader",
 		"--goal", "g", "--scope", "s", "--criteria", "c", "--owned-paths", "src/**")
 	// Alice stops, and the directory goes back to being idle: the note stays behind.
-	run(t, "--root", root, "--actor", "alice", "handoff", "--job", "j1", "--status", "partial",
+	run(t, "--root", root, "--actor", "alice", "job", "handoff", "j1", "--status", "partial",
 		"--next", "carry on", "--started", "2026-10-10T02:00:00Z")
 	run(t, "--root", root, "--actor", "alice", "worktree", "release", "--label", "uploader")
 
@@ -1583,7 +1583,7 @@ func TestAHandoffBodyIsTheActorsOwn(t *testing.T) {
 	git(t, work, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "the change")
 
 	// A body without the sections is refused before anything is recorded.
-	if out, err := tryAs(t, "alice", "--root", root, "handoff", "--job", "j1", "--status", "partial",
+	if out, err := tryAs(t, "alice", "--root", root, "job", "handoff", "j1", "--status", "partial",
 		"--next", "carry on", "--body", "-"); err == nil {
 		t.Errorf("a body with no sections should be refused, and it said:\n%s", out)
 	}
@@ -1594,7 +1594,7 @@ func TestAHandoffBodyIsTheActorsOwn(t *testing.T) {
 	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, "--root", root, "--actor", "alice", "handoff", "--job", "j1", "--status", "partial",
+	run(t, "--root", root, "--actor", "alice", "job", "handoff", "j1", "--status", "partial",
 		"--next", "carry on", "--body", path)
 
 	dir := filepath.Join(root, "handoff", "j1")

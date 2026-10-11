@@ -140,10 +140,10 @@ Actors reach each other through the tooling rather than through the records: a m
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `open` | Writes the brief, creates the branch, and materialises a labelled working directory. | One commit — unless the label has to be declared first, because that is a different event with a commit of its own. |
+| `job open` | Writes the brief, creates the branch, and materialises a labelled working directory. | One commit — unless the label has to be declared first, because that is a different event with a commit of its own. |
 | `job claim` | Sets `owner` on a job that has none. | The tooling settles simultaneous claims; nothing on disk can. |
 | `reassign`, `job relinquish` | Changes or clears `owner`, on the owner's decision, or on a person's when the owner has become unreachable. | One commit. A job owned by an actor who no longer exists would otherwise be stuck forever. |
-| `close` | Sets the final `status`, moves the brief to `doc/archive/task/<job-id>/`, releases the label and any lease the job still holds. | One `close` commit. It merges nothing. A brief that has already closed is refused, before anything is written. |
+| `job close` | Sets the final `status`, moves the brief to `doc/archive/task/<job-id>/`, releases the label and any lease the job still holds. | One `close` commit. It merges nothing. A brief that has already closed is refused, before anything is written. |
 | `add worktree` | Checks the job's branch out into a label, for the job to work in, or detached, for comparison or reproduction. | Refuses a label that already holds a job branch. A label that is clean and detached is free, once the cleaning the drift rules require has been done. |
 | `release worktree` | Leaves the working directory clean and detached, and destroys it when the declaration says one-off. | |
 
@@ -206,8 +206,8 @@ Merging a job's branch, starting and stopping services, running tests, running a
 
 Four commands are groups, and each one's subcommands are the operations named above:
 `actor list`, `actor show`, `actor online`, `actor offline`; `worktree add`, `worktree release`, `worktree list`,
-`worktree prune`; `job list`, `job show`, `job occupy`, `job vacate`, `job claim`,
-`job relinquish`;
+`worktree prune`; `job list`, `job show`, `job open`, `job close`, `job handoff`,
+`job occupy`, `job vacate`, `job claim`, `job relinquish`;
 `lease take`, `lease renew`, `lease release`, `lease list`; `resource declare`,
 `resource remove`, `resource list`; `asset ingest`, `asset publish`, `asset materialise`,
 `asset withdraw`, `asset store`, `asset prune`; `bundle export`, `bundle import`;
@@ -226,17 +226,14 @@ directory) and `--actor` (the name to act as, defaulting to `$THRUM_ACTOR`, then
 | `asset` | Put durable data in the store, publish it, and take it out again |
 | `bundle` | Carry a job's payload to another site, and take one in |
 | `clean` | Remove what the coordination repository neither tracks nor ignores |
-| `close` | Close a job: set its final status, archive the brief, release the working directory |
 | `collect` | Apply the retention policy to the payloads of closed jobs |
 | `commit` | Commit one coordination event, for a document written by hand |
 | `create` | Create a workspace from the template |
 | `env` | Print the environment variables that keep a job's tools inside the workspace |
-| `handoff` | Record a stretch of work |
 | `job` | The board, one job in full, and who is on it |
 | `join` | Make this machine another site of a workspace that already exists |
 | `lease` | Take, renew, release and list the units of a declared resource |
 | `message` | Send another actor a message, read your own, and keep the mailbox in order |
-| `open` | Open a job: the brief, the branch, and a labelled working directory |
 | `resource` | Declare or remove the resources a workspace shares |
 | `site` | Say how this machine is reached, and how it reaches the others |
 | `status` | Print the derived views: the task board, worktrees, leases, occupancy, payloads |

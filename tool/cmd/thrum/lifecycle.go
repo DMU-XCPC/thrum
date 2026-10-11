@@ -20,7 +20,6 @@ import (
 
 func newOpenCmd() *cobra.Command {
 	var (
-		jobID       string
 		label       string
 		owner       string
 		dependsOn   string
@@ -38,13 +37,14 @@ func newOpenCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "open",
+		Use:   "open <id>",
 		Short: "Open a job: the brief, the branch, and a labelled working directory",
 		Long: "Opening touches the brief, the code repository and a working directory, and leaves\n" +
 			"all three consistent or none. The label has to be declared already: declaring a\n" +
 			"resource is a different event with a commit of its own.",
-		Args: cobra.NoArgs,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			jobID := args[0]
 			l := layout()
 			body, err := briefBody(goal, scope, criteria, briefPath)
 			if err != nil {
@@ -78,7 +78,6 @@ func newOpenCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&jobID, "job", "", "the job id (required)")
 	cmd.Flags().StringVar(&label, "label", "", "the working directory to work in (required)")
 	cmd.Flags().StringVar(&owner, "owner", "", "who is responsible; empty means unowned and claimable")
 	cmd.Flags().StringVar(&dependsOn, "depends-on", "", "job ids that must reach done first")
@@ -93,7 +92,6 @@ func newOpenCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&createLabel, "create-label", false, "declare the label first when it does not exist yet, which is a second commit")
 	cmd.Flags().StringVar(&purpose, "purpose", "", "what the label is for, when declaring it")
 	cmd.Flags().BoolVar(&ephemeral, "ephemeral", false, "whether the label exists for a single use, when declaring it")
-	_ = cmd.MarkFlagRequired("job")
 	_ = cmd.MarkFlagRequired("label")
 	return cmd
 }
@@ -200,7 +198,6 @@ func declareLabel(l workspace.Layout, label, purpose string, ephemeral bool) err
 
 func newHandoffCmd() *cobra.Command {
 	var (
-		jobID      string
 		state      string
 		next       string
 		started    string
@@ -215,14 +212,15 @@ func newHandoffCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "handoff",
+		Use:   "handoff <id>",
 		Short: "Record a stretch of work",
 		Long: "A handoff covers one stretch. Base and head are worked out from the branch and the\n" +
 			"previous record rather than typed, because a hand gets them wrong. Write one when\n" +
 			"you stop, and not before: work that runs for many rounds without stopping needs\n" +
 			"nothing in between.",
-		Args: cobra.NoArgs,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			jobID := args[0]
 			recorded, err := recordedArtifacts(layout(), artifacts)
 			if err != nil {
 				return err
@@ -264,7 +262,6 @@ func newHandoffCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&jobID, "job", "", "the job id (required)")
 	cmd.Flags().StringVar(&state, "status", "", "done, partial, blocked or aborted (required)")
 	cmd.Flags().StringVar(&next, "next", "", "what whoever continues does first; none when finished")
 	cmd.Flags().StringVar(&started, "started", "", "when the stretch began, in either time form (default: now)")
@@ -277,7 +274,6 @@ func newHandoffCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil,
 		"a file this stretch produced, by path relative to the workspace; its raw sha256 is recorded; repeatable")
 	cmd.Flags().StringArrayVar(&metrics, "metric", nil, "a number worth recording, as key=value; repeatable")
-	_ = cmd.MarkFlagRequired("job")
 	_ = cmd.MarkFlagRequired("status")
 	return cmd
 }
@@ -344,19 +340,19 @@ func sha256Of(path string) (string, int64, error) {
 
 func newCloseCmd() *cobra.Command {
 	var (
-		jobID     string
 		abandoned bool
 		summary   string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "close",
+		Use:   "close <id>",
 		Short: "Close a job: set its final status, archive the brief, release the working directory",
 		Long: "Closing merges nothing. The branch stays in the code repository and merging it is\n" +
 			"the project's business: a closed job is a hand-off to whoever integrates, not an\n" +
 			"integration itself.",
-		Args: cobra.NoArgs,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			jobID := args[0]
 			state := format.StatusDone
 			if abandoned {
 				state = format.StatusAbandoned
@@ -372,10 +368,8 @@ func newCloseCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&jobID, "job", "", "the job id (required)")
 	cmd.Flags().BoolVar(&abandoned, "abandoned", false, "close it as abandoned rather than done")
 	cmd.Flags().StringVar(&summary, "summary", "", "the commit's summary")
-	_ = cmd.MarkFlagRequired("job")
 	return cmd
 }
 

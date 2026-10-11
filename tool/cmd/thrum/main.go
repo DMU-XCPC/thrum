@@ -84,9 +84,6 @@ func newRootCmd() *cobra.Command {
 		newCleanCmd(),
 		newCollectCmd(),
 		// Jobs.
-		newOpenCmd(),
-		newHandoffCmd(),
-		newCloseCmd(),
 		newWorktreeCmd(),
 		newWhereCmd(),
 		newWorkCmd(),
