@@ -74,7 +74,10 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
    there.
 2. **Read.** `doc/task/<job-id>/brief.md`, then the newest file in `handoff/<job-id>/`. Its `next`
    is the baton: what the last actor decided you do first, and usually the whole reason you are
-   being asked.
+   being asked. Anything that is **not** in your working tree — a document on another branch, a
+   closed job's brief, a commit you are comparing against — is read, not checked out: `git -C
+   .bare show <ref>:<path>` prints it. A working directory comes from the tooling, under a
+   declared label, and never from a `git worktree add` of your own.
 3. **Read this project's rules.** `doc/convention/`, in number order. The order is the priority.
 4. **Check your mail.** `thrum inbox` lists what other actors have sent you, and `thrum read <id>`
    reads one and takes any files it carried. A message is process information and is never in a

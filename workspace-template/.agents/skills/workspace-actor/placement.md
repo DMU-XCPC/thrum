@@ -32,6 +32,21 @@ convenience, and "I needed it nearby" is not one of the questions.
 
 ## The worktree holds source, and nothing else
 
+**A working directory is made by the tooling, under a declared label.** `thrum work --label
+<label>` — or `open`, or `worktree add` — checks the branch out into `worktree/<label>`, and the
+declaration is what says the label exists at all. Checking a branch out by hand anywhere else,
+into `var/` or `job/` or your home directory, registers a carrier the tooling cannot see:
+`thrum status` and `verify` do not report it, `thrum clean` will not remove it because `var/` is
+ignored, and `thrum where` and `thrum work` will **follow** it — because "which worktree has this
+branch" is how the tooling answers *where is this job*. A hand-made carrier therefore does not
+sit harmlessly beside the workspace; it becomes the answer.
+
+**To read something without working in it, read the blob.** A document on another branch, the
+brief of a job that has closed, a commit you are comparing against: `git -C .bare show
+<ref>:<path>` prints it, and `git -C .bare ls-tree` or `log` say what is there to read. Nothing
+has to be checked out, and nothing should be.
+
+
 Everything under `worktree/<label>/` is source, or a document that changes with the source. That
 is the whole reason a label can be handed from one job to the next without inheriting the last
 one's mess — and why a scratch file, a log, a cache or a downloaded dataset left there is not
