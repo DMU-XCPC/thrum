@@ -104,8 +104,10 @@ Everything in *What the tooling must not do* below, and two more: it does not ho
 
 The keys and the shapes above are the contract: a key is renamed or a value changes type only
 when something that reads them is changed with it, and a test fails when either happens. A job's
-`state` is the word the board prints (`not started`, `blocked`, its brief's status), and its
-`status` is the brief's own — the two differ for a live job on purpose.
+`state` is the word the board prints: for a closed job its brief's status, and for a live one
+what the last handoff said — `done`, `partial`, `blocked`, `aborted`, or `no handoff yet` when
+no stretch has been recorded. Its `status` is the brief's own, and `last_handoff` is the same
+fact `state` uses, so a reader that wants both has both.
 | `clean` | The guarded clean of untracked files. | Never a bare `git clean` at the workspace root, which would delete `.bare/` and the entire source history with it. |
 | `join` | Makes this machine another site of a workspace that already exists: takes the shared line from the coordination repository, and fills in what a repository cannot carry — the ignore rules, the empty directories, the entry point and skill an actor is handed, the site's own name, and its own copies of the code and asset repositories. | Commits nothing: joining does not begin a history, and a second first commit would be a second workspace. Refuses a site the roster does not declare, rather than half-joining one. |
 | *every record write* | Begins by bringing this site up to date from the shared line, and ends by putting the event in it or taking it back out. | The tip of the shared branch is the only piece of exclusion state a coordination write needs: an event is in the line if and only if its parent was. A commit that lost a race was never in the line, so redoing it rewrites nothing that has been seen; a commit whose file moved as well is refused and taken back out, because two versions of one file cannot both be in one line. Nothing is merged, ever |

@@ -1275,8 +1275,8 @@ func TestStatusIsReadableByAMachine(t *testing.T) {
 	}
 	// The board's word is carried, not left for the reader to derive: what a person sees
 	// and what a machine reads are the same state.
-	if got.Report.Jobs[0].State != "not started" {
-		t.Errorf("a job with nothing done yet is described as not started, and it says %q", got.Report.Jobs[0].State)
+	if got.Report.Jobs[0].State != "no handoff yet" {
+		t.Errorf("a job with nothing recorded yet says exactly that, and it says %q", got.Report.Jobs[0].State)
 	}
 	if got.Report.Worktrees[0].Path == "" {
 		t.Error("a working directory is named by its path")
@@ -1310,6 +1310,20 @@ func TestStatusIsReadableByAMachine(t *testing.T) {
 	}
 	if len(keys) != 3 {
 		t.Errorf("and nothing else, because a stable shape is the point: %v", keys)
+	}
+
+	// And what the last stretch said is what the board says. The question a reader is asking
+	// is whether the work got anywhere, and the brief's own status cannot answer it.
+	run(t, "--root", root, "job", "handoff", "first-job", "--status", "partial", "--next", "the rest")
+	if listed := run(t, "--root", root, "job", "list"); !strings.Contains(listed, "partial") {
+		t.Errorf("the board should say what the last handoff said:\n%s", listed)
+	}
+	out = run(t, "--root", root, "status", "--json")
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Report.Jobs[0].State != "partial" {
+		t.Errorf("and the JSON should carry the same word, and it says %q", got.Report.Jobs[0].State)
 	}
 }
 

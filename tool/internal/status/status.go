@@ -57,21 +57,23 @@ type Report struct {
 	Collectible []Collectible     `json:"collectible,omitempty"`
 }
 
-// Board is how the board describes a job: a closed job by its brief, since the state of its
-// last stretch is a detail of how it got there, and a live one by what the derived facts say,
-// because for one of those they are the interesting part. It is carried in State so that what
-// a reader sees and what a machine reads are the same word.
+// Board is how the board describes a job, and it is what the design says the board is: the
+// brief's status together with the last handoff's. A closed job is described by its brief,
+// because the state of its last stretch is a detail of how it got there; a live one is
+// described by what the last stretch said — *done*, *partial*, *blocked*, *aborted* — which is
+// the question somebody reading the board is asking.
+//
+// A job that has been opened and has no handoff yet is the case that has no such answer, and it
+// says exactly that. It does not say "not started": an actor may be on it, and the claim beside
+// the board is where that is written.
 func (j Job) Board() string {
 	if !j.Live {
 		return j.Status
 	}
-	switch {
-	case j.Blocked:
-		return "blocked"
-	case !j.Started:
-		return "not started"
+	if j.LastHandoff == "" {
+		return "no handoff yet"
 	}
-	return j.Status
+	return j.LastHandoff
 }
 
 // Occupant is one site-local note about who is on a job here.

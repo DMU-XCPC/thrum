@@ -116,7 +116,7 @@ func newJobListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&owner, "owner", "", "only jobs this name owns")
-	cmd.Flags().StringVar(&lastSaid, "status", "", "only jobs the board describes this way, such as blocked or not started")
+	cmd.Flags().StringVar(&lastSaid, "status", "", "only jobs the board describes this way, such as blocked, partial or no handoff yet")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the same answer as JSON")
 	return cmd
 }
