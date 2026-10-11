@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/roster"
 	"github.com/multiagentworkspace/thrum/tool/internal/status"
 	"github.com/multiagentworkspace/thrum/tool/internal/validate"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
@@ -213,33 +214,32 @@ func printActors(cmd *cobra.Command, l workspace.Layout) {
 	out := cmd.OutOrStdout()
 	entries, reports := rosterEverywhere(l)
 
-	fmt.Fprintln(out, "actors")
-	if len(entries) == 0 {
-		fmt.Fprintln(out, "  (no names yet: an actor exists as soon as it does something)")
-	}
+	rows := make([][]string, 0, len(entries))
 	for _, e := range entries {
 		job := ""
 		if e.Job != "" {
-			job = "  on " + e.Job
+			job = "on " + e.Job
 		}
-		fmt.Fprintf(out, "  %-16s %-14s last seen %s%s\n", e.Name, e.Site, e.LastSeen, job)
+		rows = append(rows, []string{e.Name, e.Site, e.LastSeen, roster.StateWord(e), job})
+	}
+	fmt.Fprintln(out, "actors")
+	status.PrintRows(out, rows, "(no names yet: an actor exists as soon as it does something)")
+	for _, p := range reports {
+		if !p.Reachable && p.Note != "" {
+			fmt.Fprintf(out, "  (%s did not answer: %s)\n", p.Name, p.Note)
+		}
 	}
 
-	fmt.Fprintln(out, "sites")
-	if len(reports) == 0 {
-		fmt.Fprintln(out, "  (the roster declares no sites)")
-	}
+	rows = rows[:0]
 	for _, p := range reports {
 		state := "unreachable"
 		if p.Reachable {
 			state = "reachable"
 		}
-		note := ""
-		if p.Note != "" {
-			note = "  " + p.Note
-		}
-		fmt.Fprintf(out, "  %-20s %-12s %-24s%s\n", p.Name, state, p.Reach, note)
+		rows = append(rows, []string{p.Name, state, p.Note})
 	}
+	fmt.Fprintln(out, "sites")
+	status.PrintRows(out, rows, "(the roster declares no sites)")
 }
 
 func newStatusCmd() *cobra.Command {

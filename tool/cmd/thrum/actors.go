@@ -234,7 +234,7 @@ func annotateOccupants(l workspace.Layout, report *status.Report) {
 	}
 	for i := range report.Occupancy {
 		if entry, ok := roster.Find(report.Occupancy[i].Occupant, entries); ok {
-			report.Occupancy[i].Presence = roster.Presence(entry)
+			report.Occupancy[i].Presence = roster.StateWord(entry)
 		}
 	}
 }

@@ -82,9 +82,9 @@ type Occupant struct {
 	Occupant string `json:"occupant"`
 	Since    string `json:"since"`
 	Stale    bool   `json:"stale,omitempty"` // the job is no longer live, so the note is
-	// Presence is what the occupant last said about itself, already worded for a reader
-	// and filled in by the caller: this report is about the workspace, and what the
-	// tooling knows about names is not read here.
+	// Presence is what the occupant last said about itself, in one word, filled in by the
+	// caller: this report is about the workspace, and what the tooling knows about names is
+	// not read here. The time it said it is in the roster view, not repeated here.
 	Presence string `json:"presence,omitempty"`
 }
 
@@ -276,13 +276,16 @@ func Expired(lease format.Lease, now time.Time) bool {
 }
 
 // Print writes the report in a form meant to be read, and grepped.
+// Print writes the report for a person.
+//
+// Columns are as wide as what is in them, because a project names its own jobs and a fixed
+// width is wrong the first time one of them is longer. Everything that can be a paragraph —
+// a baton, a list of paths — is cut to one line here: a board is read at a glance, and the
+// whole of it is in `thrum job show`.
 func (r *Report) Print(w io.Writer) {
 	fmt.Fprintf(w, "task board\n")
-	if len(r.Jobs) == 0 {
-		fmt.Fprintf(w, "  (no jobs)\n")
-	}
+	rows := make([][]string, 0, len(r.Jobs))
 	for _, j := range r.Jobs {
-		state := j.State
 		owner := j.Owner
 		if owner == "" {
 			owner = "unowned"
@@ -291,65 +294,58 @@ func (r *Report) Print(w io.Writer) {
 		if !j.Live {
 			where = "archived"
 		}
-		fmt.Fprintf(w, "  %-28s %-11s %-14s %s", j.ID, state, owner, where)
-		// What comes next is a fact about a job that is still meant to happen. For a
-		// closed one it is the tail of the last stretch, and printing it reads as work
-		// waiting to be done.
+		// What comes next is a fact about a job that is still meant to happen. For a closed
+		// one it is the tail of the last stretch, and printing it reads as work waiting.
+		tail := ""
 		if j.Live && j.Next != "" && j.Next != "none" {
-			fmt.Fprintf(w, "  next: %s", firstLine(j.Next))
+			tail = "next: " + cut(boardCell(j.Next), boardTail)
 		}
-		fmt.Fprintln(w)
+		rows = append(rows, []string{j.ID, j.State, owner, where, tail})
 	}
+	PrintRows(w, rows, "(no jobs)")
 
 	fmt.Fprintf(w, "worktrees\n")
-	if len(r.Worktrees) == 0 {
-		fmt.Fprintf(w, "  (none materialised)\n")
-	}
+	rows = rows[:0]
 	for _, e := range r.Worktrees {
 		holds := e.Branch
 		if holds == "" {
 			holds = "detached"
 		}
-		fmt.Fprintf(w, "  %-20s %s\n", e.Label, holds)
+		rows = append(rows, []string{e.Label, holds})
 	}
 	for _, name := range r.Unmaterial {
-		fmt.Fprintf(w, "  %-20s declared, not materialised here\n", name)
+		rows = append(rows, []string{name, "declared, not materialised here"})
 	}
 	for _, name := range r.Undeclared {
-		fmt.Fprintf(w, "  %-20s directory with no declaration\n", name)
+		rows = append(rows, []string{name, "directory with no declaration"})
 	}
+	PrintRows(w, rows, "(none materialised)")
 
 	fmt.Fprintf(w, "leases\n")
-	if len(r.Leases) == 0 {
-		fmt.Fprintf(w, "  (none held)\n")
-	}
+	rows = rows[:0]
 	now := time.Now().UTC()
 	for _, lease := range r.Leases {
 		free := "held"
 		if Expired(lease, now) {
 			free = "expired"
 		}
-		fmt.Fprintf(w, "  %-20s %-10s %-28s %s\n",
-			lease.Resource+"."+lease.Unit, free, lease.Job, lease.Expires)
+		rows = append(rows, []string{lease.Resource + "." + lease.Unit, free, lease.Job, lease.Expires})
 	}
+	PrintRows(w, rows, "(none held)")
 
 	fmt.Fprintf(w, "occupancy\n")
-	if len(r.Occupancy) == 0 {
-		fmt.Fprintf(w, "  (nobody, as far as this site knows)\n")
-	}
+	rows = rows[:0]
 	for _, o := range r.Occupancy {
-		note := ""
+		tail := o.Presence
 		if o.Stale {
-			note = "  (the job is no longer live)"
+			tail = strings.TrimSpace(tail + "  the job is no longer live")
 		}
-		if o.Presence != "" {
-			note = "  (" + o.Presence + ")" + note
-		}
-		fmt.Fprintf(w, "  %-28s %-14s since %s%s\n", o.Job, o.Occupant, o.Since, note)
+		rows = append(rows, []string{o.Job, o.Occupant, "since " + o.Since, tail})
 	}
+	PrintRows(w, rows, "(nobody, as far as this site knows)")
 
 	fmt.Fprintf(w, "payloads\n")
-	printed := false
+	rows = rows[:0]
 	for _, c := range r.Collectible {
 		if len(c.Now) == 0 && len(c.Later) == 0 {
 			continue
@@ -358,13 +354,74 @@ func (r *Report) Print(w io.Writer) {
 		if c.Keep {
 			keep = "  keep: true"
 		}
-		fmt.Fprintf(w, "  %-28s on close: %-14s after the window: %s%s\n",
-			c.Job, listOrDash(c.Now), listOrDash(c.Later), keep)
-		printed = true
+		rows = append(rows, []string{c.Job, "on close: " + listOrDash(c.Now), "after the window: " + listOrDash(c.Later) + keep})
 	}
-	if !printed {
-		fmt.Fprintf(w, "  (no closed job is still carrying a payload)\n")
+	PrintRows(w, rows, "(no closed job is still carrying a payload)")
+}
+
+// boardTail is how much of a baton the board shows before cutting it. The rest is in the job's
+// own view, which is where a paragraph belongs.
+const boardTail = 64
+
+// PrintRows writes one section of an aligned view: the cells as wide as what is in them, and a
+// note when there is nothing, because an empty section that says nothing looks like a section
+// that failed. It is here so that the sections a command adds — names, sites — line up with the
+// ones the report prints.
+func PrintRows(w io.Writer, rows [][]string, note string) {
+	if len(rows) == 0 {
+		fmt.Fprintf(w, "  %s\n", note)
+		return
 	}
+	widths := columnWidths(rows)
+	for _, row := range rows {
+		line := "  "
+		for i, cell := range row {
+			if i == len(row)-1 {
+				line += cell
+				break
+			}
+			line += cell + strings.Repeat(" ", widths[i]-len([]rune(cell)))
+		}
+		fmt.Fprintln(w, strings.TrimRight(line, " "))
+	}
+}
+
+// columnWidths is the widest cell in each column, plus the gap that keeps two of them apart.
+func columnWidths(rows [][]string) []int {
+	widths := []int{}
+	for _, row := range rows {
+		for i, cell := range row {
+			if i >= len(widths) {
+				widths = append(widths, 0)
+			}
+			if n := len([]rune(cell)); n > widths[i] {
+				widths[i] = n
+			}
+		}
+	}
+	for i := range widths {
+		widths[i] += 2
+	}
+	return widths
+}
+
+// boardCell is a value that may be several lines, as one line.
+func boardCell(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+// cut shortens to a width, marking that there was more of it.
+func cut(text string, width int) string {
+	runes := []rune(text)
+	if len(runes) <= width {
+		return text
+	}
+	return strings.TrimRight(string(runes[:width-1]), " ") + "…"
 }
 
 func listOrDash(items []string) string {

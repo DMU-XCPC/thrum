@@ -51,6 +51,19 @@ const (
 // a name that has been heard from and has never said either way, which is what a session that
 // ended without saying so looks like — and pretending otherwise is how a claim comes to read
 // like a lock.
+// StateWord is what a name last said about itself in one word, for a view that has no room for
+// a sentence and shows the time beside it anyway.
+func StateWord(e Entry) string {
+	switch e.State {
+	case StateOnline:
+		return "online"
+	case StateOffline:
+		return "offline"
+	default:
+		return "not said"
+	}
+}
+
 // Said is the same thing without the last-seen, for a view that already shows it.
 func Said(e Entry) string {
 	switch e.State {

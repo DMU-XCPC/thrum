@@ -93,7 +93,7 @@ Everything in *What the tooling must not do* below, and two more: it does not ho
     "jobs":     [{"id", "state", "status", "owner", "live", "started", "blocked", "last_handoff", "next"}],
     "worktrees":[{"path", "label", "branch", "detached"}],
     "leases":   [{"resource", "unit", "job", "since", "expires"}],
-    "occupancy":[{"job", "occupant", "since", "stale", "presence"}],
+    "occupancy":[{"job", "occupant", "since", "stale", "presence"}],   // presence is one word: online, offline, not said
     "collectible": [{"job", "closed", "now", "later", "keep"}],
     "undeclared": […], "unmaterialised": […]
   },
@@ -101,6 +101,10 @@ Everything in *What the tooling must not do* below, and two more: it does not ho
   "sites":  [{"name", "reachable", "note"}]
 }
 ```
+
+The text is a person's view of the same thing: each section aligned to what is in it — a fixed
+width is wrong the first time a project names a job longer than it — and anything that can be a
+paragraph cut to one line, because the whole of a baton is in `job show`.
 
 The keys and the shapes above are the contract: a key is renamed or a value changes type only
 when something that reads them is changed with it, and a test fails when either happens. A job's
