@@ -21,6 +21,12 @@ type CreateOptions struct {
 	Site string
 	// Actor is who is creating it, used for the first commit's identity.
 	Actor string
+	// Code is where the project keeps its code repository. Empty means this workspace
+	// starts an empty one, which is what a project that has pushed nothing anywhere yet
+	// has — and a job branches from history, so nothing can be opened until there is some.
+	Code string
+	// Store is where the project keeps its asset repository, if it keeps one already.
+	Store string
 }
 
 // Create instantiates a workspace from the template.
@@ -76,14 +82,10 @@ func Create(opts CreateOptions) (Layout, error) {
 		return l, err
 	}
 
-	// The code and asset repositories, both bare so that no checkout duplicates them.
-	codeArgs := []string{"init", "--bare", "-b", "main", "--quiet", l.CodeRepo()}
-	if _, err := gitx.Run(l.Root, codeArgs...); err != nil {
-		return l, fmt.Errorf("initialising the code repository: %w", err)
-	}
-	storeArgs := []string{"init", "--bare", "--quiet", l.Store()}
-	if _, err := gitx.Run(l.Root, storeArgs...); err != nil {
-		return l, fmt.Errorf("initialising the asset repository: %w", err)
+	// The code and asset repositories, both bare so that no checkout duplicates them, and
+	// taken from where the project keeps them when it says where that is.
+	if err := repositories(l, opts.Code, opts.Store); err != nil {
+		return l, err
 	}
 
 	if err := firstCommit(l, opts.Actor); err != nil {

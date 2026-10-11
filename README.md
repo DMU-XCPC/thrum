@@ -52,21 +52,16 @@ make build
 ./.gocache/thrum create /tmp/demo --site build-01
 cd /tmp/demo
 
-# The code repository starts empty, and a job branches from the project's history, so the
-# project needs a first commit before anything can be opened.
-git clone --quiet .bare /tmp/demo-clone
-cd /tmp/demo-clone && echo '# demo' > README.md
-git add README.md && git -c user.email=you@example -c user.name=you commit -m 'project: first commit'
-git push --quiet origin HEAD:refs/heads/main && cd /tmp/demo
+# --code brings the project's own history in, so there is nothing to push by hand.
+./.gocache/thrum create /tmp/demo --site build-01 --code <the project's repository>
 
-thrum resource declare --kind worktree --name uploader --purpose 'uploader reliability'
-thrum open --job add-retry --label uploader --owner me \
+# One command: the label is declared, the job opened and claimed, and the directory printed.
+thrum work --job add-retry --label uploader --purpose 'uploader reliability' \
     --goal 'retry the uploader instead of failing it' \
     --scope 'the uploader only' \
     --criteria 'a flaky upload succeeds on the second attempt'
-
-eval "$(thrum env --job add-retry)"   # point your tools inside the workspace
-thrum status                          # the board, the working directories, the claims
+eval "$(thrum env --job add-retry)"   # what it tells you to run, before anything else
+thrum job --job add-retry             # what the job is for, where it is, who is on it
 thrum verify                          # every structural rule, in one command
 
 thrum handoff --job add-retry --status done --next none
@@ -92,7 +87,8 @@ layouts are independent.
 | Path | What it is |
 | --- | --- |
 | `doc/design.md` | The design of a workspace, and the authority for everything else here |
-| `doc/tooling.md` | The operations a workspace needs its tooling to provide, derived from the design |
+| `doc/tooling.md` | The interface: operations, refusals, and the commands — kept in step with the binary by a test |
+| `doc/implementation.md` | How the tooling is built, and why |
 | `tool/` | The implementation of those operations, including the one that creates a workspace |
 | `workspace-template/` | The template that operation creates a workspace from |
 | `harness/` | Companions for particular agent harnesses. **Not the format**: they consume what the design already promises, and a workspace neither ships nor knows about them |
@@ -110,10 +106,11 @@ under `doc/template/`, and the ignore rules, which are written into `.gitignore`
 
 1. **`doc/design.md`** — what a workspace is made of and why, four definitions in, and the
    authority for every rule the tooling enforces.
-2. **`doc/tooling.md`** — the operations a workspace needs, and what each one is for. It
-   adds no rules of its own.
-3. **`tool/README.md`** — building the tooling, its command surface, how sites reach each
-   other, and what it refuses.
+2. **`doc/tooling.md`** — the interface: the operations, what each does and refuses, and every
+   command. It adds no rules of its own.
+3. **`doc/implementation.md`** — how the tooling is built: the stack, the record line and its
+   lock, the daemon's process.
+4. **`tool/README.md`** — where the code is and how to build and test it.
 
 A behaviour change starts as a change to `doc/design.md`. Where an implementation and the
 design disagree, the design is right.

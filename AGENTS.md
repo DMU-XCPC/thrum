@@ -11,9 +11,10 @@ before it changes anything.
 ## What is the authority
 
 **`doc/design.md` is the authority for everything.** The tooling implements it, and where an
-implementation and the design disagree, the design is right. `doc/tooling.md` derives the
-operations a workspace needs from it and adds no rule of its own; `tool/README.md` maps those
-operations onto commands and adds no rule either.
+implementation and the design disagree, the design is right. `doc/tooling.md` is the
+interface — the operations, what each does and refuses, and every command, kept in step with
+the binary by a test in `tool/e2e`; `doc/implementation.md` is how the tooling is built, and
+neither adds a rule of its own.
 
 **A behaviour change starts as a change to `doc/design.md`.** The implementation, the templates
 and the tests follow in the same change. So does the manual an actor is handed —
@@ -24,8 +25,9 @@ authority by accident, which is the one thing this repository is arranged to pre
 
 **The design never names the tool.** It says "the tooling", because a workspace has to stay
 usable if the tool were rewritten tomorrow. Keep it that way, and keep the same split
-everywhere else: a rule belongs to the design, an operation to `tooling.md`, a command to
-`tool/README.md`, and a refusal to the code that makes it.
+everywhere else: a rule belongs to the design, an interface to `tooling.md` — commands
+included, since a command is how an operation is reached — the code to `implementation.md`,
+and a refusal to the code that makes it.
 
 ## Build and test
 
@@ -55,7 +57,8 @@ actors at two sites over a real SSH channel.
 | Path | What it is |
 | --- | --- |
 | `doc/design.md` | The design of a workspace. The authority. |
-| `doc/tooling.md` | The operations a workspace needs, derived from the design. |
+| `doc/tooling.md` | The interface: the operations, the refusals, and every command. |
+| `doc/implementation.md` | How the tooling is built: the stack, the record line, the daemon. |
 | `tool/` | The implementation. |
 | `workspace-template/` | What a workspace is created from, carried into the binary. |
 | `harness/` | Companions for particular agent harnesses, and **not the format**. They read the CLI, `--json` output and the documented layout; they must never be a reason for the design to change, and a workspace neither ships nor knows about them. `harness/dsh/` is one. |
@@ -86,5 +89,5 @@ ever gets worked around is a defect that comes back.
 
 Merging a job's branch, starting and stopping services, running tests, and deciding which actor
 takes which job are the project's business or whoever dispatches work — the tooling never does
-them, and neither should a change here. `doc/tooling.md` ends with the same list from the
+them, and neither should a change here. `doc/tooling.md` has the same list from the
 workspace's side.

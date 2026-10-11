@@ -9,7 +9,7 @@ export GOPATH     := $(ROOT)/.gocache/path
 export GOPROXY    := https://goproxy.cn,direct
 export GOSUMDB    := sum.golang.google.cn
 
-.PHONY: build test test-harness vet fmt tidy clean
+.PHONY: build install test test-harness vet fmt tidy clean
 
 # The binary lives with the rest of the build state, so that nothing has to be
 # installed to try it.
@@ -38,6 +38,16 @@ test:
 test-harness:
 	@if command -v node >/dev/null 2>&1; then cd harness/dsh && node --test test/; \
 	else echo "no node: skipping the harness plugin's tests"; fi
+
+# Where it goes, and nowhere else: a machine that runs the tooling should not need a Go
+# toolchain to have it, which is what the static build above is for.
+PREFIX  ?= /usr/local
+DESTDIR ?=
+
+install: build
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 0755 $(BIN) $(DESTDIR)$(PREFIX)/bin/thrum
+	@echo installed $(DESTDIR)$(PREFIX)/bin/thrum
 
 vet:
 	cd tool && go vet ./...

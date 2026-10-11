@@ -22,7 +22,8 @@ handoff, and say what you expected — *When the tooling is wrong* in `SKILL.md`
 | --- | --- |
 | what the job is for, and how it will be judged | `doc/task/<job-id>/brief.md` |
 | where the last stretch stopped, and what to do first | the newest file in `handoff/<job-id>/`; its `next` is the baton |
-| where to work | the label `git -C .bare worktree list` shows `job/<job-id>` checked out in (the workspace root is a different repository) |
+| where to work | `thrum where --job <job-id>` prints it; `thrum work --job <job-id>` gets you there, and materialises a working directory if this site has none |
+| everything about this job | `thrum job --job <job-id>`, or `--json` for whatever asked |
 | this project's rules, in number order | `doc/convention/` — read them before working |
 | what is true right now | `thrum status`, `thrum actor ask --job <job-id>`, `thrum inbox` |
 

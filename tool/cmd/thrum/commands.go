@@ -13,7 +13,11 @@ import (
 func layout() workspace.Layout { return workspace.New(rootDir) }
 
 func newCreateCmd() *cobra.Command {
-	var site string
+	var (
+		site  string
+		code  string
+		store string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "create <dir>",
@@ -21,7 +25,9 @@ func newCreateCmd() *cobra.Command {
 		Long: "Create instantiates a workspace. It is not a file copy: the code and asset\n" +
 			"repositories are initialised rather than duplicated, and the empty directories\n" +
 			"are created rather than copied, because a repository cannot carry an empty\n" +
-			"directory.",
+			"directory.\n\n" +
+			"Without --code the code repository starts empty, and a job branches from history, so\n" +
+			"nothing can be opened until the project has a commit there.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if site == "" {
@@ -31,6 +37,8 @@ func newCreateCmd() *cobra.Command {
 				Root:  args[0],
 				Site:  site,
 				Actor: actor,
+				Code:  code,
+				Store: store,
 			})
 			if err != nil {
 				return err
@@ -40,6 +48,8 @@ func newCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&site, "site", "", "the name of this site (default: this hostname, slugified)")
+	cmd.Flags().StringVar(&code, "code", "", "the project's code repository, cloned here; without it this workspace starts an empty one")
+	cmd.Flags().StringVar(&store, "store", "", "the project's asset repository, cloned here")
 	return cmd
 }
 

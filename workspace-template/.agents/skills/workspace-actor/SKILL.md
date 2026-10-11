@@ -66,11 +66,12 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
 
 ## The loop
 
-1. **Locate.** `git -C .bare worktree list` names the label holding `job/<job-id>`; that is where you
-   work. (The coordination repository is a different repository, and its own `git worktree list`
-   shows only the workspace root — `thrum status` answers the same question if you would rather ask.)
-   If no label holds it, the job is unstarted, already closed, or its work moved to another site —
-   and `ls handoff/<job-id>/` tells you which, because it is empty only in the first case.
+1. **Locate.** `thrum where --job <job-id>` prints the directory holding `job/<job-id>`, which is
+   where you work. If this site has none, `thrum work --job <job-id> --label <label>` materialises
+   one (and `thrum job --job <job-id>` says everything else about the job in one place). The
+   coordination repository is a different repository, whose own `git worktree list` shows only the
+   workspace root — never work there. If the job is unstarted, already closed, or its work moved to
+   another site, `thrum job --job <job-id>` and `ls handoff/<job-id>/` tell you which.
 2. **Read.** `doc/task/<job-id>/brief.md`, then the newest file in `handoff/<job-id>/`. Its `next`
    is the baton: what the last actor decided you do first, and usually the whole reason you are
    being asked.

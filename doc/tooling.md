@@ -1,80 +1,9 @@
-# Workspace tooling
+# The interface
 
-[`design.md`](design.md) is the design and the authority. This file is derived from it: the operations a workspace needs its tooling to provide. Nothing here adds a rule, and where the two disagree the design wins.
-
-## What needs the tooling at all
-
-An operation belongs here when doing it by hand is unsafe or impossible:
-
-- **two actors must not both succeed at it** — taking a lease, occupying a job, claiming an unowned job, publishing a version, declaring a name;
-- **it spans several things at once** — opening a job touches a brief, the code repository and a working directory, and has to leave all three consistent or none;
-- **it computes something a hand gets wrong** — content hashes, tags, git bundles, a file name from a timestamp;
-- **it deletes something a hand would delete too much of** — the guarded clean;
-- **it answers a question no file can** — who is where, and who is on what, right now — and it carries a message from one actor to another;
-
-Everything else is a file plus a commit, and an actor does it in an editor. That is not an oversight: the workspace has to stay readable and editable without a helper.
-
-**The command surface is not part of the design.** One program with subcommands, several programs, or a library all satisfy this list. What matters is that each operation exists and refuses what it must.
-
-## Shape
-
-The operations above are the interface. This section is about the processes that provide them and the topology they form, because one machine and several machines are different problems.
-
-### One site
-
-Everything above is a command-line program and nothing else. No long-running process is required, and that is a constraint rather than an accident: the simplest case — one machine, somebody watching — must work with no infrastructure at all. `var/occupy/` is a note, and "who is working" is answerable by looking around. Actors on one machine can reach each other with no daemon either: a mailbox is a directory, and a roster is a file.
-
-### Several sites
-
-A file cannot do three things, which is why a long-running process exists at all:
-
-- **questions about the present** — who exists and where, who is on a job, which peer can be reached: no file can answer these, because they are true only now;
-- **carrying a message** — one actor telling another something needs something listening, and the recipient may be on another machine;
-- **exclusion across machines** — the invariants that one working tree gives for free have to be held by something.
-
-So each site may run the same daemon, in the same role. **There is no hub and no privileged node**, and the reasons are structural:
-
-- **The roster is a declaration, not a service.** Which sites exist is `doc/resource/site.yaml`, so it travels by git like every other record, is auditable, and needs no quorum to be readable. It also closes the last machine fact this design was missing: a site's `capacity` is how many jobs that host runs at once.
-- **A resource is leased where it is, never where it is used.** A lease is taken at the resource's home site — the machine that physically holds the thing — so exclusion stays site-local and needs no consensus. This costs no new exposure, because reaching the resource already meant reaching that machine.
-- **Transport is symmetric, and nothing relays.** Peers serve their repositories to each other, so an external git remote becomes useful rather than necessary, and payload bundles travel directly between peers. A request goes to the site that can answer it and comes back: no daemon forwards for another, which is what keeps an answer from becoming a search. The consequence is deliberate too — a site that cannot be reached is **refused, not proxied**, so a full mesh is not required and a partial one is legitimate. Mutual reachability is required exactly between the sites that have to share a claim or a lease, because that is where exclusion has to hold.
-- **The actor roster is a service, not a declaration.** Each daemon knows the names its own site has seen and learns the rest from its peers, because which actors exist is the tooling's knowledge and never a file. The sites themselves are the other case, and stay a declaration.
-
-### Why this topology
-
-The state in this design falls into three kinds, and the topology follows from where each kind can live:
-
-| Kind of state | Example | Home |
-| --- | --- | --- |
-| Permanent decisions and evidence | handoffs, briefs, conventions, manifests | the shared line — git |
-| Site-local runtime | occupancy, this machine's leases, environments, caches | `var/`, tooling-managed |
-| **Cross-site runtime** | a message on its way to an actor, and the answer to *who exists, and where* | the daemons, and the mailboxes under `var/` |
-
-Pinning each resource to a home site is what keeps the third row from swallowing the design: exclusion needs no agreement beyond the one machine that physically holds the thing, so nothing has to be agreed globally. What is left is small and does not want agreement either — a message, and the answer to who exists and where — so the daemons carry it and the topology stays symmetric.
-
-Two lessons from prior art are worth recording, because both were learned the hard way elsewhere:
-
-> **Symmetric transport and symmetric membership are cheap. Symmetric exclusion is expensive.**
-
-Systems that tried to make exclusion symmetric paid for it: Cassandra's lightweight transactions use Paxos and are awkward to operate, and Riak largely gave exclusion up. Systems that kept exclusion local — one writer per object, chosen by a map — did not have to.
-
-> **The data path should not need the control plane.**
-
-A resource's home site answers for that resource even when the rest of the world is unreachable, and that failure is the same as the physical one: if the machine is gone, the thing on it was gone anyway.
-
-What is borrowed, and from where:
-
-- **Ceph** — a small cluster map plus a primary per object, with the data path independent of the map. Here the map is a git-tracked declaration, which is steadier than a monitor quorum.
-- **Orleans and Akka Cluster Sharding** — a virtual entity that always exists, placed by the runtime, activated once. A job is that entity: it exists, it is materialised at a site, and one actor works it at a time.
-- **SWIM, memberlist, Serf** — failure detection without a registry.
-- **Fossil and `hg serve`** — a version-control system with a built-in server is a well-trodden path, so `serve` is not an invention.
-- **Content-addressed caches** — anything whose bytes are named by their hash can be fetched from any peer that holds them, which is what `store/` already is.
-- **etcd** — if a central service is ever wanted, this is the primitive set it would need: leases with a TTL, watches for telling one actor that something happened, compare-and-swap. It should be used rather than reimplemented.
-
-### Degradation
-
-- A peer that is unreachable takes only its own resources out of reach. Work at every other site continues.
-- With the site roster unreadable, each site keeps working from the last one it saw. A control plane that is down must not stop work that needs no control.
-- If exclusion cannot be established for a cross-site resource, the claim is **refused, not assumed** — the same answer this design gives everywhere else.
+This is what a workspace's tooling provides, and how it is reached: the operations, what each
+one does and refuses, the interfaces they are asked through, and the commands that carry them.
+The design is [`design.md`](design.md) and it is the authority; this document adds no rule of
+its own, and the code that makes it is described in [`implementation.md`](implementation.md).
 
 ## The daemon
 
@@ -83,27 +12,11 @@ The previous section says why a long-running process exists and why there is no 
 ### It is optional, and that is load-bearing
 
 Every operation in this document works with no daemon running: the command-line program does its work locally and returns. The daemon is started when a question about the present has to be answered, when peers have to be reached, or when an actor has to be sent something, and the program talks to it when it is there. A site with somebody watching never needs it.
-
-### Lifecycle
-
-- **One per site.** A second refuses to start, by the same atomic discipline the rest of this design uses for occupancy: create a lock under `var/`, and lose if it is already there.
-- **Restarting is safe and loses nothing that matters.** The daemon holds almost no state of its own, because the workspace is the state: it re-reads the roster and the records when it starts, and the leases it honours are files. What a restart does lose is a message that was in flight, and nothing else: the roster and the mailboxes are files under `var/`, so they are still there when it returns. Nothing pretends otherwise.
-- **Starting needs no network.** It reads the roster from the workspace, begins listening, and reports ready; peers are found later, or never.
-
-### State
-
-| Where | What |
-| --- | --- |
-| In memory | the names its site has seen and when each was last heard from, which job each says it is on, the last site roster it read, which peers it can currently reach |
-| On disk, under `var/` | the actor roster; the mailboxes, with the bytes they carry; `occupy/`, which it writes and clears on an actor's behalf; its lock; its socket |
-| Nowhere | job records; payloads except while carrying them; any decision about who should take which job |
-
 ### Interfaces
 
 - **Local**: a socket under `var/`, so the command-line program on the same site can ask and tell. When the socket is not there, the command does the work itself.
 - **Remote**: SSH, with no authentication model of its own. The machines that hold resources are already reachable over SSH — that is what reaching a resource always meant — so the daemon rides on what exists rather than inventing a trust model. A peer runs one command per request, over the same channel it would use to use the resource; a message is one of those requests, with its attachments behind it.
 - **`serve` is therefore nearly free**: the repositories are files at paths the roster declares, and a peer fetches them over SSH like any other remote. Where the sites already share an external git remote, none of it is needed. **It is the daemon's own listener that serves them** — a peer asks it for `git-upload-pack` or `git-receive-pack` — because a request through a system sshd runs one forced command and carries the protocol rather than git's. A site that accepts peers through an sshd it already runs therefore answers questions and takes messages through it, and serves its repositories only where its own listener is reachable.
-
 ### What it answers
 
 | Question | Asked of | Answer |
@@ -113,11 +26,9 @@ Every operation in this document works with no daemon running: the command-line 
 | This job reached `done` | the actors who were waiting on it | a message left in each of their mailboxes, at whichever site they are |
 | Who exists, and where | every peer, in parallel | the actor roster each of them keeps |
 | Send this actor a message | the recipient's site | written into its mailbox, or refused because that site cannot be reached |
-
 ### Configuration
 
 Two things it cannot read from the workspace: the root it was started in, and the name of the site it is on. The second comes from `var/site`, a one-line site-local file, because a site that cannot name itself cannot find its own half of a resource declaration — and every peer it talks to needs to know which roster entry it is. Everything else it reads from the workspace: the site roster is a declaration, where it accepts peers is its own file, and git is the directory service. There is no discovery protocol.
-
 ### Failure
 
 - **A peer is unreachable** — its resources are out of reach; every other site carries on.
@@ -125,34 +36,9 @@ Two things it cannot read from the workspace: the root it was started in, and th
 - **A claim cannot be established** — refused, never assumed.
 - **A message cannot be delivered** — the send is refused and says so. Nothing is queued, because a workspace that assumes delivery loses messages quietly.
 - **The daemon is absent** — everything local still works, including messages between actors on this machine, because a mailbox is a directory; asking about another site, and sending to one, fails loudly.
-
 ### What it must not do
 
 Everything in *What the tooling must not do* below, and two more: it does not hold a job's payload except while carrying a bundle through — message attachments are its own business and live only under `var/` — and it introduces no rule of its own. It exists so that "nobody is watching" and "several machines" can be true, and for nothing else.
-
-## Stack
-
-An implementation decision, not a design rule: nothing in `design.md` depends on any of it, and a workspace has to stay usable if the tool were rewritten in something else tomorrow.
-
-**Pure Go, with cgo disabled.** One statically linked binary per platform, built with `CGO_ENABLED=0`, so it can be dropped onto a machine that has nothing but `git` and work. Cross-compilation is then free, which matters because the tool is installed rather than copied and there is no package manager to lean on.
-
-The parts:
-
-| Concern | Choice |
-| --- | --- |
-| Command surface | `cobra`, one command per operation, with completion |
-| Structured files | `gopkg.in/yaml.v3`, used **only** on a front-matter block |
-| Git | the real `git`, always as a subprocess, with its version checked by `verify`: the usage here is unusual enough that git has to stay the authority |
-| Peer channel | `golang.org/x/crypto/ssh`, client and server, authenticated from `authorized_keys`; the serving side exposes a forced command with a small verb set rather than a shell |
-| Local IPC | JSON over a unix socket at `var/daemon.sock`, with `var/daemon.lock` held by the one daemon |
-| Atomicity | create-with-`O_EXCL` for locks, and write-temporary-then-`rename` for every replacement |
-| Static assets | `go:embed` for `workspace-template/` |
-| Tests | `go test`, golden files for every format, and one test that runs the whole validation list against a fixture workspace |
-| Packaging | `goreleaser`, plus a systemd unit for the daemon |
-
-**Front matter is edited textually.** The body of a document is copied through byte for byte and only the delimited front-matter block is decoded and re-encoded. That is why a YAML library without perfect comment round-tripping is good enough here: what must survive is the prose, and the prose never passes through the parser.
-
-**This choice closes one open question and one worry.** Embedding the template is what makes an update derivable: the current template is in the binary, so what a workspace is missing is found by comparing the two rather than remembered, and `update` is what acts on the comparison. And because peers speak SSH, an embedded git server is not a thing that has to be built at all: the repositories are files at declared paths, and serving them is permitting a peer to read them.
 
 ## Workspace
 
@@ -175,7 +61,7 @@ An actor is a name: nothing is started, and nothing is bound to a process. Which
 | --- | --- | --- |
 | `roster` | Knows which names this site has seen, when each was last heard from, and which job each says it is on. | The workspace records names and claims; this is what the tooling has seen, and it is never used to refuse anything |
 | `ask` | Answers *who is on this job right now*, from the site that holds it. | The file at `var/occupy/` is a claim, and this reports the one that counts; a query, so it answers rather than refuses, including when the answer is that nobody can say |
-| `env` | Prints the base environment variables that point a job's tools at the workspace. | An actor that runs a tool without them writes outside the workspace, where nothing collects or reviews what it leaves |
+| `env` | Prints the base environment variables that point a job's tools at the workspace: `THRUM_ROOT`, `THRUM_ACTOR`, `THRUM_JOB`, `TMPDIR`, `XDG_STATE_HOME` and `XDG_CACHE_HOME`, as shell `export` lines to evaluate. | An actor that runs a tool without them writes outside the workspace, where nothing collects or reviews what it leaves. The tool-specific variables a tool has of its own are set when it is invoked, not here |
 
 ## Messages
 
@@ -188,7 +74,6 @@ Actors reach each other through the tooling rather than through the records: a m
 | `reply` | Sends a message whose `reply_to` names the one being answered. | A message cannot be retracted or edited, because it may already have started something; a correction is another message |
 | `attach` | Carries bytes with a message. | Not an asset: no content addressing, no tag, no manifest, and never `store/`. Anything that has to survive is published as an asset and referred to by name |
 | `purge` | Removes a message and its attachments from a mailbox. | Manual on purpose: nothing collects messages, because nothing can know which of them still matter |
-
 
 ## Jobs
 
@@ -256,8 +141,170 @@ Actors reach each other through the tooling rather than through the records: a m
 
 Merging a job's branch, starting and stopping services, running tests, running an actor's harness, and deciding which actor takes which job. The first four are the project's business; the last belongs to whoever dispatches work. The workspace never assigns a job to an actor.
 
-## Still open
+## Commands
 
-- **How a site discovers the others.** Today the roster is a git declaration, each site enters its own reach by hand, and keys are exchanged once; that is enough for a workspace whose sites are known to each other. A discovery protocol is not designed, and is not needed for a site to be added reliably — `join` and the roster are the whole of it.
-- **Whether a site ever needs its records to be reconciled rather than published or withdrawn.** Today the answer is no, by construction: an event that cannot go into the line is taken back out and recorded again, and the operation that takes it out is the one thing a site needs for it. The cost is a round trip per event at a site with a remote.
-- **Whether a stored copy of a peer's state is ever needed** for a site that is offline for a long time, and if so whose.
+Four commands are groups, and each one's subcommands are the operations named above:
+`actor list`, `actor show`, `actor ask`; `worktree add`, `worktree release`, `worktree list`,
+`worktree prune`; `occupancy occupy`, `occupancy vacate`, `occupancy sweep`, `occupancy show`;
+`lease take`, `lease renew`, `lease release`, `lease list`; `resource declare`,
+`resource remove`, `resource list`; `asset ingest`, `asset publish`, `asset materialise`,
+`asset withdraw`, `asset store`, `asset prune`; `bundle export`, `bundle import`;
+`site listen`, `site reach`, `site key`, `site show`; and the hidden `daemon run`,
+`daemon exec`, `daemon stop`.
+
+Every command is one of the operations above, and every one of them takes the same two
+global flags: `--root` (the workspace, defaulting to `$THRUM_ROOT`, then the current
+directory) and `--actor` (the name to act as, defaulting to `$THRUM_ACTOR`, then `$USER`).
+`thrum <command> --help` has the flags in full; this is the map.
+
+| Command | What it is for |
+| --- | --- |
+| `actor` | Say which names exist, where each was last heard from, and what they are on |
+| `asset` | Put durable data in the store, publish it, and take it out again |
+| `bundle` | Carry a job's payload to another site, and take one in |
+| `claim` | Take responsibility for a job, or hand it to somebody else |
+| `clean` | Remove what the coordination repository neither tracks nor ignores |
+| `close` | Close a job: set its final status, archive the brief, release the working directory |
+| `collect` | Apply the retention policy to the payloads of closed jobs |
+| `commit` | Commit one coordination event, for a document written by hand |
+| `create` | Create a workspace from the template |
+| `env` | Print the environment variables that keep a job's tools inside the workspace |
+| `handoff` | Record a stretch of work |
+| `inbox` | List this actor's mailbox, or keep reporting what arrives in it |
+| `job` | Print everything about one job: what it is for, where it is, and who is on it |
+| `join` | Make this machine another site of a workspace that already exists |
+| `lease` | Take, renew, release and list the units of a declared resource |
+| `occupancy` | Say who is on a job at this site, and since when |
+| `open` | Open a job: the brief, the branch, and a labelled working directory |
+| `purge` | Remove a message and its attachments from this mailbox |
+| `read` | Read one message, and take its attachments if it has any |
+| `relinquish` | Give up ownership, leaving the job claimable |
+| `reply` | Answer a message, naming what it answers |
+| `resource` | Declare or remove the resources a workspace shares |
+| `send` | Send another actor a message, here or at its own site |
+| `site` | Say how this machine is reached, and how it reaches the others |
+| `status` | Print the derived views: the task board, worktrees, leases, occupancy, payloads |
+| `sync` | Publish the records this site has made, and fetch what has arrived |
+| `update` | Bring this workspace up to date with the template the tooling carries |
+| `verify` | Run every mechanical check and report what fails |
+| `where` | Print the working directory a job is in, or the workspace root |
+| `work` | Take up a job: the label, the job, the claim, and the directory |
+| `worktree` | Manage the labelled working directories |
+
+Two commands are hidden, because they are for the tool itself, for an operator who wants it
+under systemd, and for a system `sshd`: `thrum daemon run`, `thrum daemon exec` and
+`thrum daemon stop`.
+
+## Reaching a peer
+
+How one site reaches another is the site's own business and lives in
+`var/config/<name>.yaml`, never in git:
+
+```yaml
+reach: build-01.internal:22     # or user@host:port, or unix:/run/thrum.sock
+ssh_user: root                   # optional
+key: /etc/thrum/id_ed25519       # optional; var/secrets/id_ed25519 is the default
+```
+
+Authentication is SSH's and nothing else: the daemon accepts a peer whose public key is in
+`var/secrets/authorized_keys`, and refuses every other key. A peer may ask for exactly two
+things — the forced command, and this workspace's own repositories, so that the records
+and branches can travel by git. A path outside the workspace is refused, and there is no
+shell.
+
+The daemon can serve SSH itself, or a system `sshd` can be pointed at it:
+
+```sshconfig
+# authorized_keys on the serving side
+command="thrum daemon exec",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA…
+```
+
+## What it refuses, on purpose
+
+- A job id that has been used before; a label that is not declared, or that holds another
+  job; opening a job without saying what it is for is allowed but writes a brief that
+  says nothing.
+- A resource declared without a kind: a kind is never guessed. A name already declared as
+  another kind, because a resource name is unique across every kind and the tooling is the only
+  writer of those files.
+- Overwriting occupancy that names another actor; taking over is explicit.
+- Removing a resource whose directory exists.
+- A lease for a job the workspace does not know or one that has closed, for an occupied
+  unit, for a unit above the resource's capacity, or renewal or release by a job that does
+  not hold it.
+- An artifact path outside `job/<job-id>/`, or an absolute one: a record names this job's
+  payload and not the machine.
+- Ownership taken from an owner by anybody but that owner: an owner is who the work was
+  promised to.
+- Publishing a version twice, reusing a withdrawn version number, or moving a tag.
+- Replacing a payload without being asked; importing one whose records have not arrived.
+- Writing a handoff over an existing handoff, or for a job that has already closed; closing a job that has already closed, which is refused before anything is written.
+- A handoff whose `next` disagrees with its status: `none` belongs to `done`, and every other stretch leaves a baton.
+- Sending to a name nobody has seen: the roster is what makes a typo an error rather than
+  a message into an empty mailbox.
+- Committing two documents of different events together, and recording an event when the index
+  holds changes that event did not make.
+- Publishing a backlog that does not go together with what was published elsewhere: `sync`
+  refuses rather than merging, and says so when the remote cannot be reached instead of
+  reporting it as a failure to push.
+- Recording an event when the index holds changes that event did not make — checked **before**
+  the event writes anything, so a refusal never leaves half an event behind.
+- `git clean` with `-x`, or with `-d`: the first would delete `.bare/` and the source
+  history with it, the second would demolish the workspace's own empty directories.
+- Repairing anything in `verify`. It reports; a wrong repair costs more than a stale line.
+
+## When the records do not go together
+
+Two sites can record something while they are apart and find that their records cannot both
+be in one line — the same file, changed on both sides. Nothing is merged and nothing is
+dropped: the record that cannot go in stays local, and `sync` refuses with the file named and
+the way out in the message.
+
+The way out is three steps, and the first one is the only one that has to be typed carefully:
+
+```sh
+git show origin/main:doc/resource/gpu.yaml    # read what the other site published
+thrum sync --withdraw                         # take this site's records out of the working
+                                              # copy; what they wrote stays in the tree
+# put the file right, then record the event again
+thrum commit --summary "both declarations" -- doc/resource/gpu.yaml
+thrum sync
+```
+
+`--withdraw` is safe because the records it takes out were **never in the line**, so nothing
+anybody has seen is rewritten, and every file they wrote stays where it is. What is not safe is
+the command that looks easiest: **`git reset --hard origin/main` would delete the record**, and
+a record in question is a brief or a handoff — somebody's work, and the only copy of it.
+
+## Where it writes
+
+Under `--root`, and nowhere else: `doc/`, `handoff/` and `store/` are the versioned half,
+`var/` is this site's runtime — including `var/records.lock`, the advisory lock a record write
+holds so that two actors on one machine wait for each other — and — including the actor roster and the mailboxes — and
+`job/<job-id>/` is a job's payload. `AGENTS.md` and `.agents/` are the unversioned skeleton
+the tooling materialises, beside the empty directories and the ignore rules; the rules that
+keep them out of `git status` — and therefore out of `clean` — are written with the rest of
+the list, in both copies.
+
+`var/secrets/` holds machine-local credentials, including the daemon's own host key and
+its `authorized_keys`. Prefer keeping it outside the workspace; it is gitignored either
+way, and it never belongs in a handoff or a message.
+
+## Fetching a peer's repositories
+
+A site with a daemon answers for three repositories and no others: the workspace root (the
+records), the code repository, and the store. Nothing in this tool fetches them — a peer uses
+its own `ssh` as the transport, exactly as it would for any other remote, and git asks the
+daemon for `git-upload-pack <path>` over that channel:
+
+```sh
+# the key is the workspace's own, and the path is the site's, as the roster declares it
+export GIT_SSH_COMMAND="ssh -i /path/to/this/site/var/secrets/id_ed25519 -p <port> \
+  -o StrictHostKeyChecking=accept-new"
+git ls-remote "ssh://<user>@<host><that-site's-workspace-root>"
+```
+
+Nothing needs an external git remote for this: a second site can be brought into being from a
+peer's daemon alone, by joining with that URL as `--remote`. `join` and `sync` take it like any
+other remote URL, and the only thing that has to be arranged is that the key in the peer's
+`var/secrets/authorized_keys` is the one the client offers.

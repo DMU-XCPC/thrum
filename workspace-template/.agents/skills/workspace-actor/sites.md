@@ -170,6 +170,9 @@ before the site knows the workspace does.
    code and asset repositories. **It commits nothing**, because a second first commit would be a
    second workspace with its own idea of which names are taken, and the two would never agree.
 3. **Enter the reach on both sides.** How to reach a machine is that machine's own business, so
-   each side writes its own `var/config/<peer>.yaml`, and public keys are exchanged once. SSH is
+   each side writes its own half with `thrum site reach <peer> <address>` (and `thrum site listen
+   --at <address>` if it accepts peers), and public keys are exchanged once: `thrum site key` prints
+   the line that goes into a peer's `var/secrets/authorized_keys`. `thrum site show` says what this
+   machine has. SSH is
    the whole authentication model. A site that accepts no peers runs no daemon and declares no
    reach, and everything that needs only its own machine still works.

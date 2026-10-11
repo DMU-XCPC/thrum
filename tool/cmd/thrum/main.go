@@ -90,6 +90,10 @@ func newRootCmd() *cobra.Command {
 		newClaimCmd(),
 		newRelinquishCmd(),
 		newWorktreeCmd(),
+		newWhereCmd(),
+		newWorkCmd(),
+		newJobCmd(),
+		newSiteCmd(),
 		newCommitCmd(),
 		// Runtime.
 		newOccupancyCmd(),

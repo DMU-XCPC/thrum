@@ -61,6 +61,15 @@ func try(t *testing.T, args ...string) (string, error) {
 	return string(out), err
 }
 
+// tryAs runs the command as another actor, for the rules that are about who is asking.
+func tryAs(t *testing.T, actorName string, args ...string) (string, error) {
+	t.Helper()
+	cmd := exec.Command(thrum, args...)
+	cmd.Env = append(os.Environ(), "THRUM_ACTOR="+actorName)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
 // refuses checks that an operation is refused, and that the refusal says why.
 func refuses(t *testing.T, want string, args ...string) {
 	t.Helper()
@@ -981,6 +990,184 @@ func TestTwoActorsRecordingAtOnceBothLand(t *testing.T) {
 	}
 	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
 		t.Errorf("the workspace should still validate, and said:\n%s", out)
+	}
+}
+
+// The convenience layer composes commands rather than events: one call gets an actor into a
+// working directory, and what it recorded is what the operations recorded, each as its own
+// commit.
+func TestTakingUpAJobInOneStep(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project.git")
+	root := filepath.Join(t.TempDir(), "workspace")
+	clone := filepath.Join(t.TempDir(), "clone")
+
+	// A project with a history, which is what a site joins rather than inventing.
+	git(t, t.TempDir(), "init", "--bare", "-b", "main", project)
+	git(t, t.TempDir(), "clone", "--quiet", project, clone)
+	if err := os.WriteFile(filepath.Join(clone, "README.md"), []byte("the project\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, clone, "add", "README.md")
+	git(t, clone, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "project: first commit")
+	git(t, clone, "push", "--quiet", "origin", "HEAD:refs/heads/main")
+
+	// A workspace that starts from that project, so nothing has to be pushed by hand.
+	run(t, "create", root, "--site", "build-01", "--code", project)
+	if out := gitOut(t, filepath.Join(root, ".bare"), "log", "--oneline", "main"); !strings.Contains(out, "project: first commit") {
+		t.Errorf("the code repository should have come from the project:\n%s", out)
+	}
+
+	// One command: the label declared, the job opened, claimed, occupied, and the directory
+	// printed.
+	out := run(t, "--root", root, "work", "--job", "j1", "--label", "area",
+		"--purpose", "an area", "--goal", "do the thing", "--scope", "only the thing",
+		"--criteria", "the thing works")
+	if !strings.Contains(out, "work in "+filepath.Join(root, "worktree", "area")) {
+		t.Errorf("work should end by naming the directory:\n%s", out)
+	}
+	if !strings.Contains(out, `eval "$(thrum env --job j1)"`) {
+		t.Errorf("work should hand over the environment line:\n%s", out)
+	}
+
+	// Each step is its own event, and nothing else was recorded.
+	subjects := gitOut(t, root, "log", "--pretty=%s")
+	for _, want := range []string{"resource:", "brief j1:"} {
+		if !strings.Contains(subjects, want) {
+			t.Errorf("the records should hold %q:\n%s", want, subjects)
+		}
+	}
+
+	// Asking again finds everything where it already is, and records nothing new.
+	before := gitOut(t, root, "rev-list", "--count", "HEAD")
+	if out := run(t, "--root", root, "work", "--job", "j1"); !strings.Contains(out, "work in ") {
+		t.Errorf("asking a second time should land in the same place:\n%s", out)
+	}
+	if after := gitOut(t, root, "rev-list", "--count", "HEAD"); after != before {
+		t.Errorf("asking a second time should record nothing, and commits went from %s to %s", before, after)
+	}
+
+	// The job's picture, for a person and for whatever asked.
+	if out := run(t, "--root", root, "job", "--job", "j1"); !strings.Contains(out, "do the thing") || !strings.Contains(out, "work in") {
+		t.Errorf("the job view should say what it is for and where it is:\n%s", out)
+	}
+	if out := run(t, "--root", root, "job", "--job", "j1", "--json"); !strings.Contains(out, `"goal": "do the thing"`) {
+		t.Errorf("the JSON view should carry the same answer:\n%s", out)
+	}
+
+	// Where, for a script: the directory and nothing else.
+	where := strings.TrimSpace(run(t, "--root", root, "where", "--job", "j1"))
+	if where != filepath.Join(root, "worktree", "area") {
+		t.Errorf("where should print the directory alone, and printed %q", where)
+	}
+
+	// The same actor asking again is fine, and a different one is refused before anything
+	// is written: one actor at a time is what the occupancy note is for.
+	out, err := tryAs(t, "somebody-else", "--root", root, "work", "--job", "j1", "--label", "area")
+	if err == nil {
+		t.Fatalf("another actor should have been refused, and it said:\n%s", out)
+	}
+	if !strings.Contains(out, "occupied by fixture-actor") {
+		t.Errorf("the refusal should say who is on it:\n%s", out)
+	}
+
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the workspace should validate, and said:\n%s", out)
+	}
+}
+
+// The site's own half is written by the tooling, and none of it is committed.
+func TestTheSitesOwnHalfIsWrittenRatherThanTyped(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+
+	if out := run(t, "--root", root, "site", "show"); !strings.Contains(out, "accepts   nobody") {
+		t.Errorf("a fresh site should accept nobody:\n%s", out)
+	}
+	run(t, "--root", root, "site", "listen", "--at", "unix:"+filepath.Join(root, "var", "peers.sock"))
+	// The roster is what says which sites exist, so a reach to one nobody declares is
+	// stale by design and reported as such.
+	run(t, "--root", root, "resource", "declare", "--kind", "site", "--name", "lab-02", "--purpose", "the lab")
+	run(t, "--root", root, "site", "reach", "lab-02", "lab-02.internal:22", "--ssh-user", "root")
+	out := run(t, "--root", root, "site", "show")
+	for _, want := range []string{"accepts   peers at unix:", "reaches   lab-02 at lab-02.internal:22"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the site view should say %q:\n%s", want, out)
+		}
+	}
+	// The key is made once and printed as the line a peer authorises.
+	first := strings.TrimSpace(run(t, "--root", root, "site", "key"))
+	if !strings.HasPrefix(first, "ssh-ed25519 ") {
+		t.Errorf("the key should be an authorized_keys line:\n%s", first)
+	}
+	if again := strings.TrimSpace(run(t, "--root", root, "site", "key")); again != first {
+		t.Errorf("the key should be made once, and it changed:\n%s\n%s", first, again)
+	}
+	// Nothing under var/ is committed, and the workspace still validates.
+	if out := gitOut(t, root, "status", "--porcelain"); strings.TrimSpace(out) != "" {
+		t.Errorf("the site's own half must never be committed:\n%s", out)
+	}
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the workspace should validate, and said:\n%s", out)
+	}
+}
+
+// The command reference is documentation, and documentation drifts. This is the guard: every
+// command the binary has is in the reference, and every command the reference names exists.
+func TestTheCommandReferenceMatchesTheBinary(t *testing.T) {
+	// The reference lives two directories up from this package.
+	reference, err := os.ReadFile(filepath.Join("..", "..", "doc", "tooling.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	section := string(reference)
+	if i := strings.Index(section, "## Commands"); i >= 0 {
+		section = section[i:]
+	} else {
+		t.Fatal("doc/tooling.md has no ## Commands section")
+	}
+
+	documented := map[string]bool{}
+	for _, line := range strings.Split(section, "\n") {
+		if !strings.HasPrefix(line, "| `") {
+			continue
+		}
+		name := strings.TrimPrefix(line, "| `")
+		if j := strings.Index(name, "`"); j > 0 {
+			documented[name[:j]] = true
+		}
+	}
+
+	out := run(t, "--help")
+	actual := map[string]bool{}
+	inList := false
+	for _, line := range strings.Split(out, "\n") {
+		switch {
+		case strings.HasPrefix(line, "Available Commands:"):
+			inList = true
+			continue
+		case inList && strings.TrimSpace(line) == "":
+			inList = false
+			continue
+		case !inList:
+			continue
+		}
+		name := strings.Fields(line)[0]
+		switch name {
+		case "completion", "help", "daemon":
+			continue // completion and help are cobra's; daemon is documented as hidden
+		}
+		actual[name] = true
+	}
+
+	for name := range actual {
+		if !documented[name] {
+			t.Errorf("the binary has a command the reference does not: %s", name)
+		}
+	}
+	for name := range documented {
+		if !actual[name] {
+			t.Errorf("the reference names a command the binary does not have: %s", name)
+		}
 	}
 }
 

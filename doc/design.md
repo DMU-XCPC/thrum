@@ -5,8 +5,8 @@ why. It is the authority for everything else in this repository — the tooling 
 it, and where an implementation and this document disagree, this document is right.
 
 It describes **a workspace created from the template**, not this repository. The
-operations a workspace needs its tooling to provide are in [`tooling.md`](tooling.md),
-which is derived from this document and adds no rule of its own.
+interface a workspace's tooling provides is in [`tooling.md`](tooling.md) and how that tooling
+is built is in [`implementation.md`](implementation.md); neither adds a rule of its own.
 
 Four words are used throughout, and they are defined at the start because everything else
 is built on them.
@@ -1003,4 +1003,88 @@ The workspace does not manage processes, evict caches or read secrets. It only s
 The following are left open deliberately rather than guessed at:
 
 - **Whether the tooling assembles a startup context for one job.** The workspace's half is settled twice over: an actor is given two facts, the root and a job id, and the workspace carries an entry point and a skill saying where everything else is derived from, including the rules. The base environment variables are not part of it either: the tooling prints them for a job. What is left open is whether the tooling should gather a job's own context — the brief, the baton, the working directory, the environment — and hand it over itself, rather than leaving the reading to the actor.
+- **Whether the tooling should hand over the startup context itself.** The manual and the skill
+  say what an actor reads and in what order; whether the tooling should assemble that, rather
+  than leaving it to whoever starts the agent, is open.
 - **How a site discovers the others.** Today the roster is a git declaration, each site enters its own reach by hand, and keys are exchanged once; that is enough for a site to be added reliably, which is what `Joining a site` describes. A discovery protocol is deliberately not designed, and nothing depends on one existing.
+
+## The tooling's place
+
+The operations themselves are specified in [`tooling.md`](tooling.md), and how they are built
+in [`implementation.md`](implementation.md). This chapter is what belongs to the design: why a
+workspace needs tooling at all, and what shape that tooling takes when there is more than one
+machine.
+
+## What needs the tooling at all
+
+An operation belongs here when doing it by hand is unsafe or impossible:
+
+- **two actors must not both succeed at it** — taking a lease, occupying a job, claiming an unowned job, publishing a version, declaring a name;
+- **it spans several things at once** — opening a job touches a brief, the code repository and a working directory, and has to leave all three consistent or none;
+- **it computes something a hand gets wrong** — content hashes, tags, git bundles, a file name from a timestamp;
+- **it deletes something a hand would delete too much of** — the guarded clean;
+- **it answers a question no file can** — who is where, and who is on what, right now — and it carries a message from one actor to another;
+
+Everything else is a file plus a commit, and an actor does it in an editor. That is not an oversight: the workspace has to stay readable and editable without a helper.
+
+**The command surface is not part of the design.** One program with subcommands, several programs, or a library all satisfy this list. What matters is that each operation exists and refuses what it must.
+
+## Shape
+
+The operations above are the interface. This section is about the processes that provide them and the topology they form, because one machine and several machines are different problems.
+
+### One site
+
+Everything above is a command-line program and nothing else. No long-running process is required, and that is a constraint rather than an accident: the simplest case — one machine, somebody watching — must work with no infrastructure at all. `var/occupy/` is a note, and "who is working" is answerable by looking around. Actors on one machine can reach each other with no daemon either: a mailbox is a directory, and a roster is a file.
+
+### Several sites
+
+A file cannot do three things, which is why a long-running process exists at all:
+
+- **questions about the present** — who exists and where, who is on a job, which peer can be reached: no file can answer these, because they are true only now;
+- **carrying a message** — one actor telling another something needs something listening, and the recipient may be on another machine;
+- **exclusion across machines** — the invariants that one working tree gives for free have to be held by something.
+
+So each site may run the same daemon, in the same role. **There is no hub and no privileged node**, and the reasons are structural:
+
+- **The roster is a declaration, not a service.** Which sites exist is `doc/resource/site.yaml`, so it travels by git like every other record, is auditable, and needs no quorum to be readable. It also closes the last machine fact this design was missing: a site's `capacity` is how many jobs that host runs at once.
+- **A resource is leased where it is, never where it is used.** A lease is taken at the resource's home site — the machine that physically holds the thing — so exclusion stays site-local and needs no consensus. This costs no new exposure, because reaching the resource already meant reaching that machine.
+- **Transport is symmetric, and nothing relays.** Peers serve their repositories to each other, so an external git remote becomes useful rather than necessary, and payload bundles travel directly between peers. A request goes to the site that can answer it and comes back: no daemon forwards for another, which is what keeps an answer from becoming a search. The consequence is deliberate too — a site that cannot be reached is **refused, not proxied**, so a full mesh is not required and a partial one is legitimate. Mutual reachability is required exactly between the sites that have to share a claim or a lease, because that is where exclusion has to hold.
+- **The actor roster is a service, not a declaration.** Each daemon knows the names its own site has seen and learns the rest from its peers, because which actors exist is the tooling's knowledge and never a file. The sites themselves are the other case, and stay a declaration.
+
+### Why this topology
+
+The state in this design falls into three kinds, and the topology follows from where each kind can live:
+
+| Kind of state | Example | Home |
+| --- | --- | --- |
+| Permanent decisions and evidence | handoffs, briefs, conventions, manifests | the shared line — git |
+| Site-local runtime | occupancy, this machine's leases, environments, caches | `var/`, tooling-managed |
+| **Cross-site runtime** | a message on its way to an actor, and the answer to *who exists, and where* | the daemons, and the mailboxes under `var/` |
+
+Pinning each resource to a home site is what keeps the third row from swallowing the design: exclusion needs no agreement beyond the one machine that physically holds the thing, so nothing has to be agreed globally. What is left is small and does not want agreement either — a message, and the answer to who exists and where — so the daemons carry it and the topology stays symmetric.
+
+Two lessons from prior art are worth recording, because both were learned the hard way elsewhere:
+
+> **Symmetric transport and symmetric membership are cheap. Symmetric exclusion is expensive.**
+
+Systems that tried to make exclusion symmetric paid for it: Cassandra's lightweight transactions use Paxos and are awkward to operate, and Riak largely gave exclusion up. Systems that kept exclusion local — one writer per object, chosen by a map — did not have to.
+
+> **The data path should not need the control plane.**
+
+A resource's home site answers for that resource even when the rest of the world is unreachable, and that failure is the same as the physical one: if the machine is gone, the thing on it was gone anyway.
+
+What is borrowed, and from where:
+
+- **Ceph** — a small cluster map plus a primary per object, with the data path independent of the map. Here the map is a git-tracked declaration, which is steadier than a monitor quorum.
+- **Orleans and Akka Cluster Sharding** — a virtual entity that always exists, placed by the runtime, activated once. A job is that entity: it exists, it is materialised at a site, and one actor works it at a time.
+- **SWIM, memberlist, Serf** — failure detection without a registry.
+- **Fossil and `hg serve`** — a version-control system with a built-in server is a well-trodden path, so `serve` is not an invention.
+- **Content-addressed caches** — anything whose bytes are named by their hash can be fetched from any peer that holds them, which is what `store/` already is.
+- **etcd** — if a central service is ever wanted, this is the primitive set it would need: leases with a TTL, watches for telling one actor that something happened, compare-and-swap. It should be used rather than reimplemented.
+
+### Degradation
+
+- A peer that is unreachable takes only its own resources out of reach. Work at every other site continues.
+- With the site roster unreadable, each site keeps working from the last one it saw. A control plane that is down must not stop work that needs no control.
+- If exclusion cannot be established for a cross-site resource, the claim is **refused, not assumed** — the same answer this design gives everywhere else.

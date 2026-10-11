@@ -111,7 +111,7 @@ func Join(opts JoinOptions) (Layout, error) {
 		return l, err
 	}
 
-	if err := repositories(l, opts); err != nil {
+	if err := repositories(l, opts.Code, opts.Store); err != nil {
 		return l, err
 	}
 	done = true
@@ -147,36 +147,6 @@ func declared(l Layout, site string) error {
 	}
 	if _, ok := entries[site]; !ok {
 		return fmt.Errorf("the roster does not declare %q: declare it at a site that is already in the workspace, and sync, before joining with it", site)
-	}
-	return nil
-}
-
-// repositories gives this site its own copies of the code and asset repositories.
-//
-// They are bare on every site, so nothing duplicates a checkout, and each site holds its
-// own: the code repository is reached the way the project reaches it, and the asset
-// repository carries the versions a site has fetched.
-func repositories(l Layout, opts JoinOptions) error {
-	if err := os.MkdirAll(filepath.Dir(l.CodeRepo()), 0o755); err != nil {
-		return err
-	}
-	for _, repo := range []struct{ path, remote string }{
-		{l.CodeRepo(), opts.Code},
-		{l.Store(), opts.Store},
-	} {
-		if repo.remote == "" {
-			args := []string{"init", "--bare", "--quiet", repo.path}
-			if repo.path == l.CodeRepo() {
-				args = []string{"init", "--bare", "-b", "main", "--quiet", repo.path}
-			}
-			if _, err := gitx.Run(l.Root, args...); err != nil {
-				return fmt.Errorf("initialising %s: %w", repo.path, err)
-			}
-			continue
-		}
-		if _, err := gitx.Run(l.Root, "clone", "--bare", "--quiet", repo.remote, repo.path); err != nil {
-			return fmt.Errorf("cloning %s into %s: %w", repo.remote, repo.path, err)
-		}
 	}
 	return nil
 }
