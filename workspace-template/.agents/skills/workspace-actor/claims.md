@@ -13,7 +13,11 @@ is a lock, and saying so is not a disclaimer — it is what makes each one usabl
 ## Occupancy — `var/occupy/`
 
 `thrum occupancy occupy --job <job-id>` writes the claim; `thrum occupancy vacate --job <job-id>`
-clears it. In the ordinary flow it is `thrum work --job <job-id>` that writes it, because taking a
+clears it. **A claim is stale when this site has no working directory for the job** — an actor
+that stopped without vacating leaves one, because releasing the directory does not clear the note.
+`thrum occupancy sweep` removes the stale ones, a site that no longer holds the job included; and
+until one is gone, `thrum work` refuses the job to everybody, so a stale note you meet is worth
+sweeping rather than working around. In the ordinary flow it is `thrum work --job <job-id>` that writes it, because taking a
 job up is the opening, the claim and the working directory in one act; `occupy` is the same claim
 said on its own. The file holds an `occupant` and a `since`, and it is written and cleared by the
 tooling on your behalf, never by hand.

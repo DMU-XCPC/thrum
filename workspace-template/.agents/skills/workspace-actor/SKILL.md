@@ -109,8 +109,12 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
    have to happen, and it ends by printing the working directory and the environment line to run:
    it opens the job when it is not open yet, declares the label when you name a new one, claims
    the job, and materialises a working directory when this site has none. It is a claim and not a
-   lock, so if it names somebody else, ask that actor or the job's owner rather than reaching for
-   `--take-over` — see `claims.md`. `thrum occupancy vacate --job <job-id>` ends the stretch.
+   lock. `work` has no `--take-over`: a claim that names somebody else is theirs, and you ask them
+   or the job's owner rather than working beside them — `claims.md` has the rest. A claim is
+   **stale** when this site has no working directory for the job, which is what an actor stopping
+   without vacating leaves behind — and until it is gone `thrum work` refuses. `thrum occupancy
+   sweep` removes the ones whose site no longer holds the job; `thrum occupancy vacate --job
+   <job-id>` clears a note, and ends your own stretch.
 6. **Point your tools inside the workspace.** `eval "$(thrum env --job <job-id>)"` before running
    anything. A tool run without it writes outside, where nothing collects what it leaves.
 7. **Take what you need first.** A lease for a unit of a declared resource, before you start rather
