@@ -8,6 +8,12 @@ yourself — `thrum work --job <new-id> --purpose '<what it is for>'`, with the 
 the brief's goal. Work that begins as "read this and find out" is still a job: the records are
 where the work has to be visible, and a stretch nobody can find is a stretch nobody can continue.
 
+**Work you were given is a new job.** Opening it is the ordinary path, not the exception: `thrum work
+--job <new-id> --purpose '<what it is for>'` opens it and takes it up in one act. A job that already
+exists belongs to whoever it was opened for, so continue one only when you were pointed at it — or
+when it has no owner and you take it up — never because the board happens to hold something that
+looks close to your task.
+
 **Set your actor name before your first command.** The name identifies **this working session** —
 the entity doing the work — and it stays the same for as long as the session runs: a model swapped,
 a context compacted, a host restarted, and the name on the records it already wrote is still the same

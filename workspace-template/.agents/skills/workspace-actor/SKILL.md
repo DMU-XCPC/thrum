@@ -145,10 +145,13 @@ your own.
    and the root is the coordination repository, which holds records and not code. Scratch, logs and
    a tool's output go in `job/<job-id>/`, which is what `thrum env` points `TMPDIR` at; a helper
    script you write for yourself belongs there too, and a secret belongs in no file inside the
-   workspace. Stay inside the brief's `owned_paths`, and commit to `job/<job-id>`. That list is
-   this job's scope, and a path outside it is the owner's decision: ask, and put the answer or the
-   question in your handoff. "No live brief claims that path" is a different rule, about claims,
-   and it does not widen a scope. **Where a thing goes is `placement.md`**, and that is the file to
+   workspace. Work where the brief's `owned_paths` says you will, and commit to `job/<job-id>`. It
+   is **a declaration, not a lock** — it says what you expect to touch, written where everyone can
+   read it — so a path outside it is not forbidden: you may touch one when **no other live brief
+   claims it** (live: still in `doc/task/`), and you say so in your handoff. When a live brief does
+   claim it, that is not yours to decide: ask its owner in a message, and if the owner is an agent,
+   stop and record `blocked` with `blocked_by` naming that job. An unowned job has nobody to ask,
+   which is what unowned is for — you may claim it and decide. `records.md` has the field. **Where a thing goes is `placement.md`**, and that is the file to
    have read before writing a file anywhere. `out/` is where the work happens, not a delivery: a result
    that has to outlive the job is published to `store/`, which is `assets.md`. When the work runs on another machine — a rented box, not a site of this
    workspace — the driving scripts and the raw output go in `job/<job-id>/`, the handoff records the

@@ -50,7 +50,7 @@ keep: false                      # optional; true protects this job's payload
 | `job` | always | must equal the containing directory name |
 | `status` | always | `active` while it is still meant to happen, then `done` or `abandoned` |
 | `branch` | always | the branch in the code repository that implements it |
-| `owned_paths` | always | paths this job touches exclusively, relative to the code repository root; may be empty for analysis-only work |
+| `owned_paths` | always | paths this job expects to touch, relative to the code repository root — a declaration every actor can read, never a lock; may be empty for analysis-only work |
 | `owner` | optional | who is responsible; absent means nobody is |
 | `depends_on` | optional | job ids that must reach `done` before this work proceeds |
 | `keep` | optional, default false | true keeps this job's payload out of collection |
