@@ -69,6 +69,12 @@ thrum purge <id>
 - **Delivered or refused, never queued.** When the recipient's site cannot be reached the send
   fails and says so, because a workspace that assumes delivery is a workspace that loses messages
   quietly.
+
+- **The gate is the site, not the person.** A mailbox is a directory at the site that has the
+  name, so a message goes in whenever that site answers — the actor does not have to be working,
+  and nothing waits for it. A name a site that did not answer might have is **not** "nobody by
+  that name": the send failed, and where the name is cannot be established. A name this site has
+  seen is delivered to without asking anyone.
 - **It cannot be retracted or edited, because it may already have started something.** Your own
   tooling may act on a message the moment it arrives. A correction is another message with
   `reply_to` set.

@@ -31,6 +31,9 @@ const (
 	VerbStatus Verb = "status"
 	// VerbRoster is the names this site has seen.
 	VerbRoster Verb = "roster"
+	// VerbRosterLearn is the push in the other direction: what one site has seen, for a peer
+	// to merge into its own. It answers with how many entries it changed.
+	VerbRosterLearn Verb = "roster.learn"
 	// VerbJob answers two things at once: whether this site holds the job — whether a
 	// working directory here has its branch checked out — and what its claim says. It
 	// is what makes a claim globally consistent without anybody agreeing on anything:

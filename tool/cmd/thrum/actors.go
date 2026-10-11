@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
@@ -59,10 +60,9 @@ func newActorCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := layout()
-			entries, _ := rosterEverywhere(l)
-			entry, ok := roster.Find(args[0], entries)
+			entry, ok, silent := findActor(l, args[0])
 			if !ok {
-				return fmt.Errorf("no actor named %q here or at any site that answered", args[0])
+				return noSuchName(args[0], silent, "the question")
 			}
 			fmt.Printf("name       %s\n", entry.Name)
 			fmt.Printf("site       %s\n", entry.Site)
@@ -145,6 +145,70 @@ func newEnvCmd() *cobra.Command {
 }
 
 // rosterEverywhere merges what every site that answers says, newest hearing wins.
+// findActor answers where a name is, keeping apart the two answers that are not the same: no
+// site has seen it, and a site that may have seen it did not answer.
+//
+// A site learns its peers' rosters, so the usual answer is already here and costs nothing. The
+// asking is what makes an answer possible for a name that has only ever been used at a site
+// this one has not heard from since — and asking one site at a time, rather than merging every
+// answer into one list, is what keeps *cannot be established* sayable: a merge cannot tell a
+// peer that has nothing from a peer that said nothing.
+//
+// It returns the sites that could not be asked at all, which is the same thing as not
+// answering: a site with no address entered here cannot say anything either.
+func findActor(l workspace.Layout, name string) (roster.Entry, bool, []string) {
+	if local, err := roster.Local(l); err == nil {
+		if entry, ok := roster.Find(name, local); ok {
+			return entry, true, nil
+		}
+	}
+
+	peers := daemon.NewPeers(l)
+	refs, err := peers.Refs()
+	if err != nil {
+		return roster.Entry{}, false, nil
+	}
+	var silent []string
+	var lists [][]roster.Entry
+	for _, ref := range refs {
+		if ref.Name == peers.Site() || ref.Stale {
+			continue
+		}
+		// Declared here, and no address entered for it, so it cannot be asked: the same as
+		// not answering, and not the same as it never having seen the name.
+		if ref.Reach == "" {
+			silent = append(silent, ref.Name)
+			continue
+		}
+		resp, err := peers.Ask(ref, daemon.Request{Verb: daemon.VerbRoster})
+		if err != nil || !resp.OK {
+			silent = append(silent, ref.Name)
+			continue
+		}
+		var body struct {
+			Actors []roster.Entry `json:"actors"`
+		}
+		if err := decode(resp, &body); err != nil {
+			silent = append(silent, ref.Name)
+			continue
+		}
+		lists = append(lists, body.Actors)
+	}
+	if entry, ok := roster.Find(name, roster.Merge(peers.Site(), lists...)); ok {
+		return entry, true, silent
+	}
+	return roster.Entry{}, false, silent
+}
+
+// noSuchName is the refusal for a name every site that could be asked has never seen, and the
+// different one for a name a silent site might have.
+func noSuchName(name string, silent []string, what string) error {
+	if len(silent) > 0 {
+		return fmt.Errorf("%s did not answer, so where %q is cannot be established: %s failed, and nothing was queued — try again when that site is up", strings.Join(silent, ", "), name, what)
+	}
+	return fmt.Errorf("no site has seen an actor named %q: check the name, or let them act first", name)
+}
+
 func rosterEverywhere(l workspace.Layout) ([]roster.Entry, []daemon.PeerReport) {
 	local, err := roster.Local(l)
 	if err != nil {

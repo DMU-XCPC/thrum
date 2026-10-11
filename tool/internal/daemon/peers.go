@@ -303,7 +303,14 @@ func (p *Peers) Home(resource string) ([]string, []string, error) {
 	answers := make(chan answer, len(refs))
 	asked := 0
 	for _, ref := range refs {
-		if ref.Reach == "" || ref.Stale || ref.Name == p.Site() {
+		if ref.Stale || ref.Name == p.Site() {
+			continue
+		}
+		// Declared, and this machine has no address entered for it, so it cannot be asked
+		// at all — which is the same answer as asking it and getting nothing back, and not
+		// the same as it holding nothing.
+		if ref.Reach == "" {
+			unanswered = append(unanswered, ref.Name)
 			continue
 		}
 		asked++

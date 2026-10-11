@@ -972,6 +972,10 @@ A lease cannot be replaced that way, and that is the entire reason it exists: wh
 
 An actor is a name, and actors reach each other through the tooling rather than through the records. A message is **process information**: it is not a record, it is never committed, it does not travel by git, and nothing about it is validated. It exists so that one actor can tell another something now — that a job is free, that the job it was waiting on is done, that the file it wanted is ready.
 
+**The roster and the mailboxes are one subsystem.** What the daemons know about the present — which names exist, where each is, whether each is working, and what has been sent to it — is process information like everything else here: never a record, never committed, never validated, and outside the retention policy. It is neither durable nor agreed, because nothing in a workspace needs it to be: a daemon that restarts keeps what it had learned and learns the rest again, every fact in it carries when it was last heard, and an answer that is behind is therefore visibly behind.
+
+**A daemon learns the roster from its peers.** A site knows the names it has seen itself and the names its peers have told it about, and tells them what it learns in turn, merging by when each name was last heard from. That is what makes *who exists, and where* answerable at a site whose peer has gone quiet, and it is why the question is not a round trip to every site. What a learned answer never is, is authority: delivery always asks the site that has the name, and a claim is always arbitrated at the job's home, because a learned answer can be behind and neither a message nor a job may rest on one.
+
 ```text
 var/msg/<actor>/<id>.md          # one message
 var/msg/<actor>/<id>/<file>      # its attachments, if any
@@ -989,6 +993,7 @@ var/msg/<actor>/<id>/<file>      # its attachments, if any
 | `attachments[]` | When there are files | Each name and its size; the bytes sit beside the message |
 
 - **It is delivered or refused, and never queued.** The sender's tooling hands the message to the recipient's site; when that site cannot be reached the send fails and says so, because a workspace that assumes delivery is a workspace that loses messages quietly. Once accepted, the message is in the recipient's mailbox and stays there until somebody removes it.
+- **The gate is the site, not the actor.** A mailbox is a directory at the site that has the name, so a message goes in whenever that site answers — whether or not the actor is working, and without waiting for it: an actor going online or offline is not a condition of delivery. **A site that did not answer is not a site that said no**: *where this name is cannot be established* and *no site has this name* are different refusals, and only the second is about the name.
 - **It cannot be retracted or edited, because it may already have started something.** An agent's own tooling may act on a message the moment it arrives, so a correction is another message with `reply_to` set.
 - **It appears whole, or not at all.** Its attachments are written first and the record that names them last, each of them by a rename, so a tool watching a mailbox never sees a message whose bytes have not arrived. That is what lets a harness be woken by a mailbox rather than made to poll it.
 - **Attachments are bytes and nothing more.** They are not assets: no content addressing, no tag, no manifest, and never `store/`. Sending a file this way is the transport, not the record — anything that has to survive is published as an asset and referred to by name.

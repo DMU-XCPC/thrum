@@ -52,6 +52,24 @@ func (s *Service) Handle(req Request) Response {
 		}
 		return resp
 
+	case VerbRosterLearn:
+		var args struct {
+			Site   string         `json:"site"`
+			Actors []roster.Entry `json:"actors"`
+		}
+		if err := req.DecodeArgs(&args); err != nil {
+			return Fail(err)
+		}
+		learned, err := roster.Learn(s.L, args.Site, args.Actors)
+		if err != nil {
+			return Fail(err)
+		}
+		resp, err := Payload(map[string]any{"learned": learned})
+		if err != nil {
+			return Fail(err)
+		}
+		return resp
+
 	case VerbJob:
 		var args struct {
 			Job string `json:"job"`

@@ -462,7 +462,7 @@ func TestActorsReachEachOther(t *testing.T) {
 
 	// A name nobody has seen is refused rather than written into a mailbox nobody
 	// reads: the roster is exactly the knowledge that makes the check possible.
-	refuses(t, "no actor named", "--root", root, "send", "--to", "claud-sonnet", "--subject", "typo")
+	refuses(t, "no site has seen an actor named", "--root", root, "send", "--to", "claud-sonnet", "--subject", "typo")
 
 	// The recipient reads it, and the list shows an id and a subject as separate things.
 	inbox := run(t, "--root", root, "inbox", "--actor", "claude-sonnet")
@@ -1079,6 +1079,10 @@ func TestTakingUpAJobInOneStep(t *testing.T) {
 func TestTheSitesOwnHalfIsWrittenRatherThanTyped(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "workspace")
 	run(t, "create", root, "--site", "build-01")
+	// A site that accepts peers runs a daemon, and a test that leaves one behind leaves a
+	// process holding a temporary directory that is about to be removed.
+	stopDaemon := func() { _, _ = try(t, "--root", root, "daemon", "stop") }
+	t.Cleanup(stopDaemon)
 
 	if out := run(t, "--root", root, "site", "show"); !strings.Contains(out, "accepts   nobody") {
 		t.Errorf("a fresh site should accept nobody:\n%s", out)
@@ -1168,6 +1172,65 @@ func TestTheCommandReferenceMatchesTheBinary(t *testing.T) {
 		if !actual[name] {
 			t.Errorf("the reference names a command the binary does not have: %s", name)
 		}
+	}
+}
+
+// A name a silent site might have is not a name nobody has. The first is a send failure that
+// names the site that did not answer; only the second is about the name — and a name this site
+// knows is delivered to without asking anyone, because the gate is the site that has it.
+func TestASilentSiteIsNotNoSuchName(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+	run(t, "--root", root, "resource", "declare", "--kind", "site", "--name", "lab-02", "--purpose", "the lab")
+	// This site's key, so that asking a peer fails because the peer is not there rather than
+	// because this machine has no identity to dial with.
+	run(t, "--root", root, "site", "key")
+
+	// A peer with an address nothing is listening on: the dial fails at once, and locally.
+	silent := "unix:" + filepath.Join(t.TempDir(), "nothing.sock")
+	run(t, "--root", root, "site", "reach", "lab-02", silent, "--ssh-user", "root")
+
+	out, err := tryAs(t, "sender", "--root", root, "send", "--to", "nobody", "--subject", "hello", "--body", "hi")
+	if err == nil {
+		t.Fatalf("a send that cannot establish where the recipient is should fail, and it said:\n%s", out)
+	}
+	if !strings.Contains(out, "lab-02 did not answer") || !strings.Contains(out, "cannot be established") {
+		t.Errorf("the send should name the site that did not answer:\n%s", out)
+	}
+	if !strings.Contains(out, "the send failed") {
+		t.Errorf("it should say that the send failed:\n%s", out)
+	}
+	if strings.Contains(out, "no site has seen") {
+		t.Errorf("a silent site must not be reported as nobody having the name:\n%s", out)
+	}
+
+	if out, err := tryAs(t, "sender", "--root", root, "actor", "show", "nobody"); err == nil || !strings.Contains(out, "cannot be established") {
+		t.Errorf("asking about a name a silent site might have is not the answer that it does not exist:\n%s", out)
+	}
+
+	// Forgetting the address does not make the site stop existing: a site the roster declares
+	// and this machine cannot ask is still a site that did not answer.
+	run(t, "--root", root, "site", "reach", "lab-02", "--forget")
+	if out, err := tryAs(t, "sender", "--root", root, "send", "--to", "nobody", "--subject", "hello", "--body", "hi"); err == nil || !strings.Contains(out, "lab-02 did not answer") {
+		t.Errorf("a declared site this machine has no address for cannot be asked, so the answer is not established:\n%s", out)
+	}
+
+	// With no other site in the world at all, the same name is simply unknown.
+	run(t, "--root", root, "resource", "remove", "--kind", "site", "--name", "lab-02")
+	refuses(t, "no site has seen", "--root", root, "send", "--to", "nobody", "--subject", "hello", "--body", "hi")
+
+	t.Cleanup(func() { _, _ = try(t, "--root", root, "daemon", "stop") })
+
+	// And a name this site has seen goes into its own mailbox, whatever a peer is doing: the
+	// site that has the name is the gate, not the sites that do not.
+	run(t, "--root", root, "site", "reach", "lab-02", silent, "--ssh-user", "root")
+	tryAs(t, "sender", "--root", root, "status")
+	out = run(t, "--root", root, "send", "--to", "sender", "--subject", "hello", "--body", "hi")
+	if !strings.Contains(out, "sender") {
+		t.Errorf("a name at this site should be delivered to here:\n%s", out)
+	}
+	if out := run(t, "--root", root, "inbox", "--actor", "sender"); !strings.Contains(out, "hello") {
+		t.Errorf("the message should be in the mailbox it was sent to:\n%s", out)
 	}
 }
 

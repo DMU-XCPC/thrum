@@ -98,9 +98,29 @@ func Run(l workspace.Layout, o Options) error {
 	// it exists: a site that accepted peers a moment ago and then left is a site whose
 	// actors cannot be written to. Stopping it is `daemon stop`, and stopping it is
 	// safe — the workspace is the state, and a message already in a mailbox stays there.
+	// The roster is process information the sites keep between them, so the daemon is what
+	// keeps it current: it exchanges rosters with every peer, and it says nothing at all when
+	// there is nothing new. It stops when the daemon does.
+	syncing := newRosterSync(l)
+	synced := make(chan struct{})
+	go func() {
+		syncing.once()
+		ticker := time.NewTicker(rosterSyncEvery)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				syncing.once()
+			case <-synced:
+				return
+			}
+		}
+	}()
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
+	close(synced)
 	return nil
 }
 
