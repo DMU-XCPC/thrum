@@ -47,6 +47,8 @@ func newWorkCmd() *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := layout()
+			// A claim this site no longer holds a directory for, met below and taken over.
+			staleClaim := ""
 
 			// Where the job is, when it exists: a job has one home, and working on it from
 			// a site that does not hold it is how two actors end up on one job.
@@ -63,11 +65,18 @@ func newWorkCmd() *cobra.Command {
 				}
 				// Somebody else being on it is refused before anything is created, not
 				// after: a materialised directory and a declared label left behind by a
-				// refusal are work nobody asked for.
+				// refusal are work nobody asked for. But a claim is stale once this site no
+				// longer holds the job — an actor that stopped without vacating leaves one
+				// behind, and releasing the directory does not clear the note — and a stale
+				// claim must not block the job for everybody. It is taken over below, and
+				// said out loud when it is.
 				if note, ok, err := occupancy.Get(l, jobID); err != nil {
 					return err
 				} else if ok && note.Occupant != actor {
-					return fmt.Errorf("%s is occupied by %s since %s: ask them for it rather than working on it beside them", jobID, note.Occupant, note.Since)
+					if _, _, err := worktreeOf(l, jobID); err == nil {
+						return fmt.Errorf("%s is occupied by %s since %s: ask them for it rather than working on it beside them", jobID, note.Occupant, note.Since)
+					}
+					staleClaim = note.Occupant
 				}
 			}
 
@@ -148,7 +157,10 @@ func newWorkCmd() *cobra.Command {
 			if note, ok, err := occupancy.Get(l, jobID); err != nil {
 				return err
 			} else if !ok || note.Occupant != actor {
-				if err := occupancy.Occupy(l, jobID, actor, false, now()); err != nil {
+				if staleClaim != "" {
+					fmt.Printf("%s was occupied by %s, and this site held no directory for it: that claim is stale, and is taken over\n", jobID, staleClaim)
+				}
+				if err := occupancy.Occupy(l, jobID, actor, staleClaim != "", now()); err != nil {
 					return err
 				}
 			}

@@ -1374,3 +1374,41 @@ func nextLine(t *testing.T, lines <-chan string, within time.Duration) string {
 		return ""
 	}
 }
+
+// A claim left behind by an actor who stopped is stale when this site no longer has a
+// directory for the job — and it must not block the job for everybody. Releasing the working
+// directory does not clear the note, so this is met at the last step of taking a job up.
+func TestAStaleClaimDoesNotBlockTakingAJobUp(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "build-01")
+	run(t, "create", root, "--site", "build-01")
+
+	clone := filepath.Join(t.TempDir(), "seed")
+	git(t, filepath.Dir(clone), "clone", "--quiet", filepath.Join(root, ".bare"), clone)
+	if err := os.WriteFile(filepath.Join(clone, "README.md"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, clone, "add", ".")
+	git(t, clone, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "project: first")
+	git(t, clone, "push", "--quiet", "origin", "HEAD:refs/heads/main")
+
+	run(t, "--root", root, "--actor", "alice", "resource", "declare", "--kind", "worktree", "--name", "uploader", "--purpose", "the area")
+	run(t, "--root", root, "--actor", "alice", "work", "--job", "j1", "--label", "uploader",
+		"--goal", "g", "--scope", "s", "--criteria", "c", "--owned-paths", "src/**")
+	// Alice stops, and the directory goes back to being idle: the note stays behind.
+	run(t, "--root", root, "--actor", "alice", "handoff", "--job", "j1", "--status", "partial",
+		"--next", "carry on", "--started", "2026-10-10T02:00:00Z")
+	run(t, "--root", root, "--actor", "alice", "worktree", "release", "--label", "uploader")
+
+	// Somebody else takes the job up, and the stale note does not stand in the way.
+	out := run(t, "--root", root, "--actor", "bob", "work", "--job", "j1", "--label", "uploader")
+	if !strings.Contains(out, "stale") || !strings.Contains(out, "work in") {
+		t.Errorf("a stale claim should be taken over and said so, and it said:\n%s", out)
+	}
+	show := run(t, "--root", root, "occupancy", "show")
+	if !strings.Contains(show, "bob") {
+		t.Errorf("the claim should now be bob's, and occupancy says:\n%s", show)
+	}
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the workspace should still validate, and said:\n%s", out)
+	}
+}
