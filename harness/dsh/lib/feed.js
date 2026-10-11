@@ -42,7 +42,7 @@ export function watchMailbox({
 
   const start = () => {
     if (stopped) return
-    child = spawn(command, ['--root', root, '--actor', actor, 'inbox', '--watch', '--json'], {
+    child = spawn(command, ['--root', root, '--actor', actor, 'message', 'list', '--watch', '--json'], {
       // The actor is passed twice on purpose: on the command line for a reader of the
       // process table, and in the environment because that is how thrum names an actor.
       env: { ...process.env, THRUM_ACTOR: actor },

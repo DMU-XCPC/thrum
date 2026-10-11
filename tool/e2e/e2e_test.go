@@ -1270,6 +1270,21 @@ func TestStatusIsReadableByAMachine(t *testing.T) {
 	if len(got.Actors) == 0 {
 		t.Error("the names should be in it, which is a question about the present and not a file")
 	}
+
+	// The keys are the shape a machine reads, so they are pinned here: the report, and the
+	// two questions about the present that no report answers.
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &keys); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"report", "actors", "sites"} {
+		if _, ok := keys[want]; !ok {
+			t.Errorf("status --json should carry %q, and carries %v", want, keys)
+		}
+	}
+	if len(keys) != 3 {
+		t.Errorf("and nothing else, because a stable shape is the point: %v", keys)
+	}
 }
 
 // seedCode gives the code repository one commit, which is what a project has before any

@@ -117,7 +117,7 @@ test('a session says who it is, and a watch for that actor starts', async () => 
   assert.deepEqual(result, { watching: 'alice', root: `${WS}`, mailbox: `${WS}/var/msg/alice` })
 
   assert.equal(w.spawned.length, 1)
-  assert.deepEqual(w.spawned[0].args, ['--root', `${WS}`, '--actor', 'alice', 'inbox', '--watch', '--json'])
+  assert.deepEqual(w.spawned[0].args, ['--root', `${WS}`, '--actor', 'alice', 'message', 'list', '--watch', '--json'])
   assert.equal(w.spawned[0].options.env.THRUM_ACTOR, 'alice')
 })
 

@@ -17,6 +17,36 @@ Every operation in this document works with no daemon running: the command-line 
 - **Local**: a socket under `var/`, so the command-line program on the same site can ask and tell. When the socket is not there, the command does the work itself.
 - **Remote**: SSH, with no authentication model of its own. The machines that hold resources are already reachable over SSH — that is what reaching a resource always meant — so the daemon rides on what exists rather than inventing a trust model. A peer runs one command per request, over the same channel it would use to use the resource; a message is one of those requests, with its attachments behind it.
 - **`serve` is therefore nearly free**: the repositories are files at paths the roster declares, and a peer fetches them over SSH like any other remote. Where the sites already share an external git remote, none of it is needed. **It is the daemon's own listener that serves them** — a peer asks it for `git-upload-pack` or `git-receive-pack` — because a request through a system sshd runs one forced command and carries the protocol rather than git's. A site that accepts peers through an sshd it already runs therefore answers questions and takes messages through it, and serves its repositories only where its own listener is reachable.
+### The wire
+
+A peer is reached over SSH, and every request is one verb with a JSON argument list. These names
+are the daemon's own, and they are not yet one shape — some say noun and verb, some are bare —
+so this is what they are today rather than what they ought to be:
+
+| Verb | Asks |
+| --- | --- |
+| `status` | Is this site's daemon there, and what does it hold |
+| `roster` | The names this site has seen |
+| `roster.learn` | The names the caller has seen, merged into this site's roster |
+| `job` | Whether this site holds a job, and what its claim says |
+| `occupy`, `vacate` | Write or clear this site's claim on a job |
+| `holds` | Whether this site says a resource lives here |
+| `lease.take`, `lease.renew`, `lease.release` | The units of a resource, taken and given back where it lives |
+| `msg.deliver` | Put a message into one of this site's mailboxes |
+| `exec` | Run one of the git verbs allowed inside a served repository |
+
+The names are half one shape and half another: `lease.take` and `msg.deliver` say noun and verb,
+while `job`, `occupy`, `holds` and `roster` are bare. Renaming them is a wire change and is not
+done here, because **a rename breaks a pair of sites that are not the same version** — an old
+site asking with the old name is refused by a new one, and the other way round — and nothing
+versions this wire. The sites are one collective's own machines and are updated together, which
+is the assumption this rests on rather than a guarantee it makes.
+
+**Renaming one of these breaks a pair of sites that are not the same version** — an old site
+asking with the old name is refused by a new one, and the other way round. Nothing here versions
+the wire: the sites are one collective's own machines, and they are updated together, which is
+the assumption this rests on rather than a guarantee it makes.
+
 ### What it answers
 
 | Question | Asked of | Answer |
@@ -47,7 +77,7 @@ Everything in *What the tooling must not do* below, and two more: it does not ho
 | `create` | Instantiates a workspace from the template: the two bare repositories, the empty runtime directories, the ignore rules in both `.gitignore` and `.git/info/exclude`, the entry point and the skill an actor is handed, this site's own name in `var/site`, and the first coordination commit. | Never a plain file copy. The repositories have to be initialised, not duplicated. |
 | `update` | Brings the unversioned skeleton up to date with the template the tooling carries: the empty directories, the ignore rules in both copies, and the entry point and skill an actor is handed. Reports the copy-me files under `doc/template/` that differ, and writes them only when a person asks, leaving them uncommitted to be recorded. | Never touches a versioned file on its own initiative, and never removes a directory. Restores a rule the workspace has lost, and keeps a rule the tooling no longer has until `--narrow` says otherwise |
 | `verify` | Runs the whole validation list, including the unversioned skeleton — a directory the template defines that is not there, a file the template carries that is not there, and an ignore rule the tooling carries that this workspace has lost in either copy — and the values the conventions declare, since a policy nobody can read is a policy nobody has. | Reports; it does not repair. |
-| `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. | `--json` is the same picture for whatever asked.
+| `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. | `--json` is the same picture for whatever asked, as `{"report": …, "actors": […], "sites": […]}` — the report, and the two questions about the present that no report answers.
 | `clean` | The guarded clean of untracked files. | Never a bare `git clean` at the workspace root, which would delete `.bare/` and the entire source history with it. |
 | `join` | Makes this machine another site of a workspace that already exists: takes the shared line from the coordination repository, and fills in what a repository cannot carry — the ignore rules, the empty directories, the entry point and skill an actor is handed, the site's own name, and its own copies of the code and asset repositories. | Commits nothing: joining does not begin a history, and a second first commit would be a second workspace. Refuses a site the roster does not declare, rather than half-joining one. |
 | *every record write* | Begins by bringing this site up to date from the shared line, and ends by putting the event in it or taking it back out. | The tip of the shared branch is the only piece of exclusion state a coordination write needs: an event is in the line if and only if its parent was. A commit that lost a race was never in the line, so redoing it rewrites nothing that has been seen; a commit whose file moved as well is refused and taken back out, because two versions of one file cannot both be in one line. Nothing is merged, ever |

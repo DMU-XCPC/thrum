@@ -56,7 +56,7 @@ test('a watch runs the command that reports a mailbox as a stream', () => {
 
   assert.equal(calls.length, 1)
   assert.equal(calls[0].command, 'thrum')
-  assert.deepEqual(calls[0].args, ['--root', '/ws', '--actor', 'alice', 'inbox', '--watch', '--json'])
+  assert.deepEqual(calls[0].args, ['--root', '/ws', '--actor', 'alice', 'message', 'list', '--watch', '--json'])
   // The actor is in the environment too, because that is how thrum names one.
   assert.equal(calls[0].options.env.THRUM_ACTOR, 'alice')
 })
