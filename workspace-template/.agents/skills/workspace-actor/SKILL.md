@@ -22,6 +22,11 @@ neither is restated here:
 Where this skill and a convention disagree about a project's policy, the convention wins. Where
 either disagrees with the brief about this job, the brief wins.
 
+**The files beside this one are these rules in detail**, one question each, and they are not
+optional reading when their question comes up — a listing cannot tell you *when*. The loop below
+names the file at each step that reaches one: `placement.md`, `records.md`, `names.md`,
+`knowledge.md`, `assets.md`, `claims.md`, `sites.md`.
+
 ## Seven things that explain the rest
 
 Read these once. Nearly every rule below follows from them, which is why a situation this skill
@@ -118,7 +123,8 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
 6. **Point your tools inside the workspace.** `eval "$(thrum env --job <job-id>)"` before running
    anything. A tool run without it writes outside, where nothing collects what it leaves.
 7. **Take what you need first.** A lease for a unit of a declared resource, before you start rather
-   than once you are stuck: `thrum lease take --resource <name> --job <job-id>`.
+   than once you are stuck: `thrum lease take --resource <name> --job <job-id>` — the resource, its
+   units and how long a lease lives are `assets.md`.
 8. **Work in the directory step 1 named.** That is where the code is; `var/`, `job/` and the
    workspace root are not places to edit — `var/` is the tooling's, `job/` is this job's payload,
    and the root is the coordination repository, which holds records and not code. Scratch, logs and
@@ -127,8 +133,10 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
    workspace. Stay inside the brief's `owned_paths`, and commit to `job/<job-id>`. That list is
    this job's scope, and a path outside it is the owner's decision: ask, and put the answer or the
    question in your handoff. "No live brief claims that path" is a different rule, about claims,
-   and it does not widen a scope.
-9. **Commit, then hand off.** `head` has to name an existing commit, so the commit comes first.
+   and it does not widen a scope. **Where a thing goes is `placement.md`**, and that is the file to
+   have read before writing a file anywhere.
+9. **Commit, then hand off.** `head` has to name an existing commit, so the commit comes first —
+   the record's shape, its sections and what it refuses are `records.md`.
    Then `thrum handoff --job <job-id> --status <done|partial|blocked|aborted> --next '<first thing
    next>'`. One handoff is one coordination event, and therefore one commit.
 10. **Close, or leave the baton.** `thrum close --job <job-id>` only when the acceptance criteria
