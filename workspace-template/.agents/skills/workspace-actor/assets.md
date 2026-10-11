@@ -1,10 +1,12 @@
 # Assets — `store/` and `doc/asset/`
 
-`store/` is where bytes that must survive a job go. It is a **bare git repository**, and that is
-the whole design: git already provides content addressing, immutability, deduplication, delta
-compression between similar versions, integrity checking, transport and backup. A hand-rolled
-object directory would reimplement all of it and lose the delta compression that makes comparing
-a dataset against a future version cheap.
+How do durable bytes live, and how does a version become permanent? `store/` is where bytes that
+must survive a job go. It is a **bare git repository**, and that is the whole design: git already
+provides content addressing, immutability, deduplication, delta compression between similar
+versions, integrity checking, transport and backup. A hand-rolled object directory would
+reimplement all of it and lose the delta compression that makes comparing a dataset against a
+future version cheap.
+
 
 Assets are **never checked out permanently**. A job materialises the version it needs into its
 own transient directory:

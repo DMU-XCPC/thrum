@@ -1,9 +1,9 @@
 # The records you write
 
-Two record types are yours: the **brief**, which states a job's intent, and the **handoff**,
-which records a stretch of work. Both are YAML front-matter plus a Markdown body, and both are
-committed to the coordination repository — so neither may contain a secret, and neither may name
-an absolute or machine-local path.
+How must a record look? Two record types are yours: the **brief**, which states a job's
+intent, and the **handoff**, which records a stretch of work. Both are YAML front-matter plus
+a Markdown body, and both are committed to the coordination repository — so neither may
+contain a secret, and neither may name an absolute or machine-local path.
 
 `doc/template/` carries a copy-me file for each. `thrum open` and `thrum handoff` write them
 correctly; this file is what you need when you edit one by hand, and when you have to judge
@@ -68,14 +68,10 @@ file.
 
 ### Three states are not stored
 
-- **Started or not** is read from `handoff/<job-id>/`, which stays empty until the first handoff.
-  There is no `open`.
-- **Blocked or not** is read from the latest handoff. A job stops being blocked the moment a
-  later handoff says something else; no field has to be remembered or reset.
-- **Live** means the brief is still in `doc/task/`, and a brief in `doc/task/` is therefore
-  always `active`. Closing moves it to `doc/archive/task/<job-id>/`.
-
-Only `status` is a decision rather than a reading, and it changes only when the job ends.
+*Started or not*, *blocked or not* and *live or not* are derived, and `SKILL.md` says where from
+— the loop's locate and read steps, and *Stopping without spinning*. The consequence for a
+record is narrow: **only `status` is a decision rather than a reading**, it lives in the brief,
+and it changes only when the job ends.
 
 ### Ownership, and whose brief it is
 
@@ -204,11 +200,12 @@ from `assets` into `store/`. `thrum status` prints all of it.
 ## Writing a record is a coordination event
 
 Every operation that records something brings this site up to date from the shared line first,
-and then puts the event in it or takes it back out. Nothing is ever merged. If the line moved
-while you were writing, your commit comes back out and is made again on top of what moved; if
-the same file moved as well, the event is refused and what you wrote stays in the working tree,
-uncommitted, for you to look at and record again. `sites.md` has the whole of it — including why
-a refused event is not a lost one.
+and then puts the event in it or takes it back out; nothing is ever merged. That whole mechanic
+belongs to the line rather than to records, and `sites.md` states it — including why a refused
+event is not a lost one. Two consequences a writer of records has to carry are here.
+
+**A refused event leaves your record in the working tree, uncommitted**, for you to look at and
+record again after reading what moved. The file is not lost and not published.
 
 **On one machine, one writer at a time.** If another actor here is recording, your event waits
 for theirs and then records on top, so two commands running at once do not collide or report a

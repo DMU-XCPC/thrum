@@ -1,7 +1,8 @@
 # Where a thing goes
 
-Nothing in a workspace is placed by taste. A thing's home follows from what it is, and the
-same procedure answers every case, including the ones this file does not name.
+Where does this thing belong? Nothing in a workspace is placed by taste: a thing's home
+follows from what it is, and the same procedure answers every case, including the ones this
+file does not name.
 
 ## The procedure
 
@@ -32,19 +33,22 @@ convenience, and "I needed it nearby" is not one of the questions.
 
 ## The worktree holds source, and nothing else
 
-**A working directory is made by the tooling, under a declared label.** `thrum work --label
-<label>` — or `open`, or `worktree add` — checks the branch out into `worktree/<label>`, and the
-declaration is what says the label exists at all. Checking a branch out by hand anywhere else,
-into `var/` or `job/` or your home directory, registers a carrier the tooling cannot see:
-`thrum status` and `verify` do not report it, `thrum clean` will not remove it because `var/` is
-ignored, and `thrum where` and `thrum work` will **follow** it — because "which worktree has this
-branch" is how the tooling answers *where is this job*. A hand-made carrier therefore does not
-sit harmlessly beside the workspace; it becomes the answer.
+**A working directory is made by the tooling, under a declared label.** The tooling checks the
+branch out into `worktree/<label>`: `thrum work --job <job-id> --label <label>` takes a job up
+and is the ordinary way, `thrum open --job <job-id> --label <label> --create-label` opens one for
+somebody else, and `thrum worktree add --label <label>` materialises a label on its own,
+detached, for comparison. The declaration is what says the label exists at all. Checking a branch
+out by hand anywhere else, into `var/` or `job/` or your home directory, registers a carrier the
+tooling cannot see: `thrum status` and `verify` do not report it, `thrum clean` will not remove it
+because `var/` is ignored, and `thrum where` and `thrum work` will **follow** it — because "which
+worktree has this branch" is how the tooling answers *where is this job*. A hand-made carrier
+therefore does not sit harmlessly beside the workspace; it becomes the answer.
 
 **To read something without working in it, read the blob.** A document on another branch, the
 brief of a job that has closed, a commit you are comparing against: `git -C .bare show
 <ref>:<path>` prints it, and `git -C .bare ls-tree` or `log` say what is there to read. Nothing
-has to be checked out, and nothing should be.
+has to be checked out, and nothing should be — *Reading is not checking out* in `SKILL.md` has
+the reason.
 
 
 Everything under `worktree/<label>/` is source, or a document that changes with the source. That
@@ -109,13 +113,10 @@ rather than a silent one — but a hash cannot give the bytes back.
 | Runtime — `var/`, `job/`, `worktree/` | working state | no | no |
 
 **Nothing under `var/` is written by hand, and that includes making a directory there.**
-`var/` is the tooling's: each thing in it is the tooling's because a hand would break what it
-carries — an occupancy with an expiry, a site-local half, a mailbox. A scratch directory of your
-own under `var/` is not working state the workspace knows about: `thrum status` and `verify` do
-not report it, nothing collects it, and it never travels. Working *in* one is worse than untidy,
-because the work then lives where no actor after you will look for it.
+`var/` is the tooling's, and *What you may touch* in `SKILL.md` is the rule. It matters here
+because placement is how the mistake happens: working state you put under `var/` is state no
+actor after you finds, which is the same failure as work outside the root.
 
 `.bare/`, `store/`, `var/`, `job/` and `worktree/` are ignored in `.gitignore` and
 `.git/info/exclude`. Never run a bare `git clean` at the workspace root: `-x` would delete
-`.bare/` and the entire source history with it. `thrum clean` is the guarded version, and it
-removes only what the coordination repository neither tracks nor ignores.
+`.bare/` and the entire source history with it. `thrum clean` is the guarded version.

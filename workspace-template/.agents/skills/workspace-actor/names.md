@@ -1,9 +1,9 @@
 # How a name is made
 
-Names are identifiers, not descriptions. They are typed by people as often as by tools, so they
-stay short and shell-safe; they are parsed by tools, so they follow one grammar; and **they never
-encode state that can change**, because a name that has been written into a record can never
-change again.
+What may a name be? Names are identifiers, not descriptions. They are typed by people as often as
+by tools, so they stay short and shell-safe; they are parsed by tools, so they follow one grammar;
+and **they never encode state that can change**, because a name that has been written into a
+record can never change again.
 
 ## The atoms
 

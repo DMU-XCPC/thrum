@@ -1,6 +1,7 @@
 # Durable knowledge: conventions, topics, retirement
 
-Jobs come and go. Three things outlive them, and each has a different job to do.
+What outlives a job, and where does it go? Jobs come and go. Three things outlive them, and each
+has a different job to do.
 
 | | Instructs or describes | Lives in | Belongs to |
 | --- | --- | --- | --- |

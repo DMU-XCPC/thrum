@@ -1,7 +1,8 @@
 # Claims: who is on a job, and who holds what
 
-Two different things are both called "who has it", and they answer different questions. Neither
-is a lock, and saying so is not a disclaimer — it is what makes each one usable.
+Who is on this job right now, and which job holds this? Two different things are both called
+"who has it", and they answer different questions. Neither is a lock, and saying so is not a
+disclaimer — it is what makes each one usable.
 
 | | Occupancy | Lease |
 | --- | --- | --- |
@@ -13,14 +14,16 @@ is a lock, and saying so is not a disclaimer — it is what makes each one usabl
 ## Occupancy — `var/occupy/`
 
 `thrum occupancy occupy --job <job-id>` writes the claim; `thrum occupancy vacate --job <job-id>`
-clears it. **A claim is stale when this site has no working directory for the job** — an actor
-that stopped without vacating leaves one, because releasing the directory does not clear the note.
-`thrum work` takes a stale one over and says whose it was; `thrum occupancy sweep` clears the ones
-a site is carrying; and a claim on a directory this site *does* have is somebody's live claim, which
-is the case you ask about rather than work around. In the ordinary flow it is `thrum work --job <job-id>` that writes it, because taking a
-job up is the opening, the claim and the working directory in one act; `occupy` is the same claim
-said on its own. The file holds an `occupant` and a `since`, and it is written and cleared by the
-tooling on your behalf, never by hand.
+clears it. In the ordinary flow it is `thrum work --job <job-id>` that writes it, because taking
+a job up is the opening, the claim and the working directory in one act. The file holds an
+`occupant` and a `since`, and it is written and cleared by the tooling on your behalf, never by
+hand.
+
+**A claim is stale when this site has no working directory for the job**, and `SKILL.md` has
+what happens then — `thrum work` takes a stale one over and says whose it was, `thrum occupancy
+sweep` clears the stale ones a site is carrying, and a claim on a directory this site does have
+is somebody's live claim, which is the one you ask about rather than work around. What is left
+for this file is the reason the distinction is drawn the way it is.
 
 **It is a claim, not a lock, because nothing on disk can tell a working actor from a stopped
 one.** A name stays behind after the actor has stopped, and the tooling does not pretend
@@ -38,9 +41,10 @@ What follows:
 - A job no site holds cannot be claimed, because there is nothing to claim.
 - Two sites holding one job is refused rather than picked between.
 - A peer that does not answer means **cannot be established**, never *nobody is on it*.
-- **Taking a job over is a decision, not a field edit.** If `occupant` names somebody else, ask
-  the tooling or the job's owner. `--take-over` exists; using it is how you claim you know
-  something the file does not.
+- **Taking a job over is a decision, not a field edit.** Its plain form is `thrum occupancy
+  occupy --job <job-id> --take-over`, which is the explicit act for a live claim — after its
+  owner was asked. `thrum work` never takes a live claim; the stale case it does take over is
+  the one `SKILL.md` describes, and that one is taken over for you and said out loud.
 
 Who has held the job, and since when, comes from the record instead: the current claim, and the
 handoffs for every finished stretch, each of which already names its `agent` and its start and
@@ -69,9 +73,9 @@ worktree:
 | `ephemeral` | yes | `worktree` entries | true when the directory exists for a single use and may be destroyed on release |
 | `purpose` | no | always | what the resource is for, in a person's words |
 
-- **The declaration is a recipe, not an inventory.** The code repository's `git worktree list` says what this site has
+- **The declaration is a recipe, not an inventory.** `thrum worktree list` says what this site has
   materialised; the file says what the project intends to exist. A declared entry with no
-  directory is normal — not yet materialised here, or removed and expected back. **A directory
+  directory is normal, and `thrum status` reports it as not materialised here. **A directory
   with no entry is the error**, and the tooling reports it.
 - **Only the tooling writes these files**, one change per commit, because a registry is the one
   file that holds several entries and two hands appending to it collide.
@@ -133,6 +137,8 @@ every act on a lease names the job: taking it, renewing it, releasing it.
   releasing early means deleting the file.
 - **A lease dies with its job.** A lease whose job is `done` or `abandoned` is as free as an
   expired one — otherwise a finished job would keep its unit out of reach until the expiry passed.
+  `thrum close --job <job-id>` is what releases the units the job still holds here, so a holder
+  does not have to remember them (*The loop*, step 10, in `SKILL.md`).
 - **A lease whose `resource` names nothing in `doc/resource/` is not valid.** That is how
   "everything unversioned must be anchored by something versioned" is checked mechanically, and
   it is the reason the declarations exist at all.
