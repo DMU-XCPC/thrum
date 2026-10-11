@@ -22,7 +22,7 @@ neither is restated here:
 Where this skill and a convention disagree about a project's policy, the convention wins. Where
 either disagrees with the brief about this job, the brief wins.
 
-## Six things that explain the rest
+## Seven things that explain the rest
 
 Read these once. Nearly every rule below follows from them, which is why a situation this skill
 does not name still has a right answer.
@@ -43,7 +43,11 @@ does not name still has a right answer.
 5. **A name is a permanent identifier.** It never encodes state that can change, and job ids,
    asset versions and convention numbers are never reused. So *used once* is enforceable rather
    than promised.
-6. **The tooling refuses what must not happen, and the refusal says why.** A rule the tooling
+6. **Everything you write is inside the workspace, or it is a mistake.** `var/` belongs to the
+   tooling, `job/<job-id>/` is the payload, and the only place code is edited is the directory the
+   tooling names — *What you may touch* above is the whole of it. Nothing a job produces lands
+   outside the workspace root.
+7. **The tooling refuses what must not happen, and the refusal says why.** A rule the tooling
    enforces is one less rule to carry: you meet it as a refusal at the moment it matters, rather
    than having to remember it.
 
@@ -64,6 +68,24 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
 - Without `--actor` or `$THRUM_ACTOR`, the tooling records `$USER`.
 - A later session may use a different name; every command of one session uses the same one.
 
+## What you may touch
+
+Five things, and nothing else. **Read this twice**: the failure it prevents is silent, because
+work done in the wrong place is work the next actor will not find, and no command will tell you.
+
+| | |
+| --- | --- |
+| **the directory the tooling names** | `thrum where --job <job-id>` prints it, and `thrum work --job <job-id>` takes the job up and puts you there. This, and only this, is where the code is edited. |
+| **your job's payload** | `job/<job-id>/`: scratch, logs, and a tool's output — which is what `thrum env --job <job-id>` points `TMPDIR` and the cache and state directories at, so a tool that respects them cannot write anywhere else. |
+| **the records you write** | the brief's body, `handoff/<job-id>/…`, and the project's `doc/topic/` and `doc/convention/`. |
+| **nothing under `var/`** | It is the tooling's — *including making a directory there*. An entry a hand invents is invisible to `thrum status` and `verify`, is never collected, and never travels. |
+| **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. Secrets go in none of these files; the only ones inside a workspace are the tooling's own, in `var/secrets/`. |
+
+**Reading is not checking out.** A document on another branch, the brief of a job that has
+closed, a commit you are comparing against — `git -C .bare show <ref>:<path>` prints it, and
+`git -C .bare ls-tree` or `log` say what there is to read. A working directory is made by the
+tooling, under a declared label, and never by a `git worktree add` of your own.
+
 ## The loop
 
 1. **Locate.** `thrum where --job <job-id>` prints the directory holding `job/<job-id>`, which is
@@ -71,7 +93,8 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
    No directory here means the job is unstarted, already closed, or its work has moved to another
    site: `thrum job` and `ls handoff/<job-id>/` say which. The coordination repository is a
    different repository, whose own `git worktree list` shows only the workspace root — never work
-   there.
+   there, and never in `var/` or `job/<job-id>/` either: *What you may touch* is the whole
+   contract.
 2. **Read.** `doc/task/<job-id>/brief.md`, then the newest file in `handoff/<job-id>/`. Its `next`
    is the baton: what the last actor decided you do first, and usually the whole reason you are
    being asked. Anything that is **not** in your working tree — a document on another branch, a
@@ -94,8 +117,10 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
    than once you are stuck: `thrum lease take --resource <name> --job <job-id>`.
 8. **Work in the directory step 1 named.** That is where the code is; `var/`, `job/` and the
    workspace root are not places to edit — `var/` is the tooling's, `job/` is this job's payload,
-   and the root is the coordination repository, which holds records and not code. Stay inside the
-   brief's `owned_paths`, and commit to `job/<job-id>`.
+   and the root is the coordination repository, which holds records and not code. Scratch, logs and
+   a tool's output go in `job/<job-id>/`, which is what `thrum env` points `TMPDIR` at; a helper
+   script you write for yourself belongs there too, and a secret belongs in no file inside the
+   workspace. Stay inside the brief's `owned_paths`, and commit to `job/<job-id>`.
 9. **Commit, then hand off.** `head` has to name an existing commit, so the commit comes first.
    Then `thrum handoff --job <job-id> --status <done|partial|blocked|aborted> --next '<first thing
    next>'`. One handoff is one coordination event, and therefore one commit.
