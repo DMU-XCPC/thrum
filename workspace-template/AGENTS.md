@@ -3,6 +3,11 @@
 You are an **actor**. You were given two facts: this workspace root, and a job id. Everything
 else is derived from here. Nothing in this file is the authority for anything.
 
+**If nobody gave you a job id**, there are two lawful ways in: ask for one, or open the job
+yourself — `thrum work --job <new-id> --purpose '<what it is for>'`, with the person's own words as
+the brief's goal. Work that begins as "read this and find out" is still a job: the records are
+where the work has to be visible, and a stretch nobody can find is a stretch nobody can continue.
+
 **Set your actor name before your first command.** A handoff, an occupancy, a lease and a job's
 owner all record which actor did the work:
 
@@ -13,15 +18,29 @@ export THRUM_ACTOR=claude-opus     # one slug, for every command in this session
 If you were given a name, that is your name. Without `--actor` or `$THRUM_ACTOR`, your work is
 recorded under `$USER`.
 
+**A host that gives every command a new shell loses the export**: pass `--actor <name>` on each
+command instead, with the same value.
+
 **The name is yours, not the name of what you are running in.** `deepseek-harness`, `dsh` and
 `claude-code` name a harness — the thing hosting you, which changes while the work goes on, and
 which hosts several actors at once, so one of those names would merge their handoffs, occupancies
 and leases into one. Name the actor: `dana`, `agent-3`, `claude-opus`.
 
+**This file is the workspace's; the project's `AGENTS.md` inside the working directory is the
+project's.** Both are read, and they govern different things: this one says where work goes and
+how it is recorded, the project's says how the code is built and delivered. Where a project keeps
+its own handoffs (`docs/handoffs/…`), those are deliverables; `handoff/<job-id>/` is the
+coordination record, and a stretch that both a person and this workspace will read writes both.
+
 **This format and `thrum` are under development.** A refusal is still the design being enforced,
 so trust it first; but a command that fails unexpectedly, or a refusal that contradicts the
 records, is a defect. Keep what the tool produced under `job/<job-id>/log/`, name it in your
 handoff, and say what you expected — *When the tooling is wrong* in `SKILL.md` has the rest.
+
+**First command of a stretch: `thrum verify`** — with `thrum status` beside it. It reports and
+never repairs, so it is always safe to run, and it is where a workspace that is incoherent, or a
+skeleton older than the tooling, is found before any work is built on it. If it reports skeleton
+drift, `thrum update --dry-run` says what the tooling has now.
 
 ## What you may touch
 
@@ -57,7 +76,8 @@ never inside `var/`.
 
 Before you run anything, `eval "$(thrum env --job <job-id>)"`: it points `TMPDIR` and the cache
 and state directories inside the payload, so a tool that respects them cannot write outside the
-workspace.
+workspace. Where a host gives every command a clean `/tmp`, this is not advice but the only way
+the next command can see what this one made.
 
 Then read `.agents/skills/workspace-actor/SKILL.md`. It is the loop, and this file is only the
 way in.

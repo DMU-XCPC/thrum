@@ -110,7 +110,8 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
    closed job's brief, a commit you are comparing against — is read, not checked out: `git -C
    .bare show <ref>:<path>` prints it. A working directory comes from the tooling, under a
    declared label, and never from a `git worktree add` of your own.
-3. **Read this project's rules.** `doc/convention/`, in number order. The order is the priority.
+3. **Read this project's rules.** `doc/convention/`, in number order. The order is the priority. An empty directory means this project has written no policy yet: say
+   that in your handoff rather than inventing a rule for it.
 4. **Check your mail.** `thrum inbox` lists what other actors have sent you, and `thrum read <id>`
    reads one and takes any files it carried. A message is process information and is never in a
    handoff, so this is the only place it arrives — and it is often why the last actor stopped. `thrum send --to <actor>` is the other half, and the only
@@ -145,7 +146,10 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
    question in your handoff. "No live brief claims that path" is a different rule, about claims,
    and it does not widen a scope. **Where a thing goes is `placement.md`**, and that is the file to
    have read before writing a file anywhere. `out/` is where the work happens, not a delivery: a result
-   that has to outlive the job is published to `store/`, which is `assets.md`.
+   that has to outlive the job is published to `store/`, which is `assets.md`. When the work runs on another machine — a rented box, not a site of this
+   workspace — the driving scripts and the raw output go in `job/<job-id>/`, the handoff records the
+   remote paths and the hashes of what came back, and the remote `/tmp` is one-shot: a result whose
+   only copy is there is a result that will be lost.
 9. **Commit, then hand off.** `head` has to name an existing commit, so the commit comes first —
    the record's shape, its sections and what it refuses are `records.md`. When an event is refused,
    your record stays in the working tree uncommitted, to be recorded again once what it clashed with
@@ -154,7 +158,8 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
    next>'`. One handoff is one coordination event, and therefore one commit.
 10. **Close, or leave the baton.** `thrum close --job <job-id>` only when the acceptance criteria
     hold, and `thrum close --abandoned` when they will not. Closing merges nothing: the branch stays
-    in the code repository for whoever integrates. Before closing, look for something to promote to
+    in the code repository for whoever integrates. Before closing, look for something to promote — a fact that outlives the job and does not depend on how it was solved, such
+    as a platform's hard constraints or a toolchain's rules — to
     `doc/topic/`.
 
 ## If you are opening the job rather than taking it up
