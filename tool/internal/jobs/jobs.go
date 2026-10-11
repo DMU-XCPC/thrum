@@ -93,6 +93,12 @@ func Open(l workspace.Layout, o OpenOptions) (string, error) {
 	if err := workspace.WriteBrief(l, brief, o.Body); err != nil {
 		return "", err
 	}
+	// Before anything is written: an event that only discovers the index is in its way
+	// when it goes to record itself leaves half of itself behind.
+	if err := commit.Guard(l, rel(l, l.Brief(o.Job))); err != nil {
+		return "", err
+	}
+
 	// The payload's shape is the design's, and it exists from the moment the job does:
 	// an actor told that out/ is where results go should find out/ there. These are
 	// empty directories under an ignored path, so they need no commit.
@@ -252,6 +258,9 @@ func WriteHandoff(l workspace.Layout, o HandoffOptions) (string, error) {
 	}
 	name := format.HandoffFileName(started)
 	path := l.HandoffFile(o.Job, name)
+	if err := commit.Guard(l, rel(l, path)); err != nil {
+		return "", err
+	}
 	// Claim the name before writing it, so that two stretches beginning in the same
 	// second cannot silently become one record.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
@@ -391,6 +400,9 @@ func SetOwner(l workspace.Layout, job, owner, by, summary string) (string, error
 	}
 	if brief.Owner == owner {
 		return "", nil // nothing to change, and nothing to record
+	}
+	if err := commit.Guard(l, rel(l, l.Brief(job))); err != nil {
+		return "", err
 	}
 	path, err := workspace.EditBrief(l, job, func(b *format.Brief) error {
 		b.Owner = owner

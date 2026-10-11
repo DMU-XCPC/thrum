@@ -7,6 +7,7 @@ import (
 
 	"github.com/multiagentworkspace/thrum/tool/internal/commit"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +18,10 @@ import (
 // of what was published meanwhile. That is the same step every record write takes, so
 // sync takes it too, rather than being the one command that cannot publish its own work.
 func newSyncCmd() *cobra.Command {
-	var jobID string
+	var (
+		jobID    string
+		withdraw bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -37,6 +41,9 @@ func newSyncCmd() *cobra.Command {
 			branch, err := currentBranch(l.Root)
 			if err != nil {
 				return err
+			}
+			if withdraw {
+				return withdrawRecords(l, branch, jobID)
 			}
 			if !hasOrigin(l.Root) {
 				return fmt.Errorf("the coordination repository has no remote, so there is nowhere to publish the records")
@@ -98,7 +105,60 @@ func newSyncCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&jobID, "job", "", "also publish this job's branch, for a site that has to fetch it")
+	cmd.Flags().BoolVar(&withdraw, "withdraw", false,
+		"take this site's unpublished records back out of the line, keeping what they wrote in the working tree")
 	return cmd
+}
+
+// withdrawRecords takes this site's unpublished records back out of the working copy of the
+// line.
+//
+// It is the way out of records that cannot go into one line, and it is deliberately the only
+// way the tooling offers: a record that has not been published was never in the line, so
+// moving it out rewrites nothing anybody has seen, and every file it wrote stays in the
+// working tree. What must never happen to this situation is `git reset --hard`, because the
+// thing it destroys is a brief or a handoff — somebody's work, and the only copy.
+func withdrawRecords(l workspace.Layout, branch, jobID string) error {
+	if err := commit.Hold(l); err != nil {
+		return err
+	}
+	if !hasOrigin(l.Root) {
+		return fmt.Errorf("the coordination repository has no remote, so there is nothing this site's records could have gone into")
+	}
+	if _, err := gitx.Run(l.Root, "fetch", "--quiet", "origin"); err != nil {
+		return fmt.Errorf("origin cannot be reached, so what this site has not published cannot be compared with it")
+	}
+	up := "origin/" + branch
+	if !gitx.Resolves(l.Root, up) {
+		fmt.Println("nothing to take back: the line has nothing on it yet, so none of this site's records are in it")
+		return nil
+	}
+	unpublished, err := countBetween(l.Root, up, "HEAD")
+	if err != nil {
+		return err
+	}
+	if unpublished == 0 {
+		fmt.Println("nothing to take back: everything this site recorded is in the line")
+		return nil
+	}
+	if _, err := gitx.Run(l.Root, "reset", "--mixed", "--quiet", up); err != nil {
+		return err
+	}
+	fmt.Printf("took %d record(s) back out of the line; what they wrote is in the working tree, uncommitted\n", unpublished)
+	if unpublished > 1 {
+		fmt.Println("they were separate events, so they have to be recorded again one at a time")
+	}
+	out, _ := gitx.Run(l.Root, "status", "--porcelain")
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			fmt.Println("  " + line)
+		}
+	}
+	fmt.Println("read what the other site published, put the file right, and record the event again")
+	if jobID != "" {
+		fmt.Printf("the branch for %s was not touched: a branch is code, and merging code is the project's business\n", jobID)
+	}
+	return nil
 }
 
 // currentBranch is the branch this repository is on, which is the one a refspec has to

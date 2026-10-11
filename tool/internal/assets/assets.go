@@ -206,6 +206,9 @@ func Publish(l workspace.Layout, o PublishOptions) (string, error) {
 		return "", fmt.Errorf("%s is already published, and a tag is never moved", tag)
 	}
 	path := l.Manifest(o.Asset, o.Version)
+	if err := commit.Guard(l, relManifest(l, o.Asset, o.Version)); err != nil {
+		return "", err
+	}
 	if _, err := os.Stat(path); err == nil {
 		return "", fmt.Errorf("%s already exists", path)
 	}
@@ -440,6 +443,10 @@ func Withdraw(l workspace.Layout, o WithdrawOptions) (string, error) {
 	}
 
 	path := l.Manifest(o.Asset, o.Version)
+	if err := commit.Guard(l, relManifest(l, o.Asset, o.Version),
+		filepath.ToSlash(filepath.Join("doc", "archive", "asset", o.Asset, o.Version+".md"))); err != nil {
+		return "", err
+	}
 	front, body, err := format.LoadDocument(path)
 	if err != nil {
 		return "", fmt.Errorf("%s is not published", format.AssetTag(o.Asset, o.Version))
@@ -472,8 +479,16 @@ func Withdraw(l workspace.Layout, o WithdrawOptions) (string, error) {
 	if summary == "" {
 		summary = o.Reason
 	}
+	// One version's two files, rather than the whole asset directory: an event owns exactly
+	// what it changed, and a neighbouring version's manifest is another event's business.
 	return commitEvent(l, commit.KindRetire, "asset/"+o.Asset+"/"+o.Version, summary,
-		l.AssetDir(o.Asset), filepath.Join(l.Archive(), "asset", o.Asset))
+		l.Manifest(o.Asset, o.Version), filepath.Join(l.Archive(), "asset", o.Asset, o.Version+".md"))
+}
+
+// relManifest is a manifest's path relative to the workspace root, which is the form git
+// and an event's paths are both expressed in.
+func relManifest(l workspace.Layout, asset, version string) string {
+	return filepath.ToSlash(filepath.Join("doc", "asset", asset, version+".md"))
 }
 
 // commitEvent records one coordination event, with paths made relative to the root,

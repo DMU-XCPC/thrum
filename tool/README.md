@@ -161,7 +161,7 @@ a policy nobody can read is a policy nobody has.
 | `verify` | `thrum verify` |
 | `status` | `thrum status` |
 | `clean` | `thrum clean [--dry-run]` |
-| `sync` | `thrum sync [--job <id>]` — brings this site up to date from the line, puts its own unpublished records on top, and publishes them |
+| `sync` | `thrum sync [--job <id>]` — brings this site up to date from the line, puts its own unpublished records on top, and publishes them; `--withdraw` takes unpublished records back out of the working copy, keeping what they wrote |
 | `roster` | `thrum actor list`, `thrum actor show <name>` |
 | `ask` | `thrum actor ask --job <id>` |
 | `env` | `thrum env --job <id>` |
@@ -281,9 +281,34 @@ command="thrum daemon exec",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed
 - Publishing a backlog that does not go together with what was published elsewhere: `sync`
   refuses rather than merging, and says so when the remote cannot be reached instead of
   reporting it as a failure to push.
+- Recording an event when the index holds changes that event did not make — checked **before**
+  the event writes anything, so a refusal never leaves half an event behind.
 - `git clean` with `-x`, or with `-d`: the first would delete `.bare/` and the source
   history with it, the second would demolish the workspace's own empty directories.
 - Repairing anything in `verify`. It reports; a wrong repair costs more than a stale line.
+
+## When the records do not go together
+
+Two sites can record something while they are apart and find that their records cannot both
+be in one line — the same file, changed on both sides. Nothing is merged and nothing is
+dropped: the record that cannot go in stays local, and `sync` refuses with the file named and
+the way out in the message.
+
+The way out is three steps, and the first one is the only one that has to be typed carefully:
+
+```sh
+git show origin/main:doc/resource/gpu.yaml    # read what the other site published
+thrum sync --withdraw                         # take this site's records out of the working
+                                              # copy; what they wrote stays in the tree
+# put the file right, then record the event again
+thrum commit --summary "both declarations" -- doc/resource/gpu.yaml
+thrum sync
+```
+
+`--withdraw` is safe because the records it takes out were **never in the line**, so nothing
+anybody has seen is rewritten, and every file they wrote stays where it is. What is not safe is
+the command that looks easiest: **`git reset --hard origin/main` would delete the record**, and
+a record in question is a brief or a handoff — somebody's work, and the only copy of it.
 
 ## Where it writes
 

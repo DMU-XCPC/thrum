@@ -66,7 +66,7 @@ func newCommitCmd() *cobra.Command {
 				fmt.Printf("nothing to record: %s is already what the line has\n", strings.Join(paths, ", "))
 				return nil
 			}
-			if err := commit.Current(l); err != nil {
+			if err := commit.Begin(l, paths...); err != nil {
 				return err
 			}
 			id, err := commit.Event(l, kind, subject, summary, paths...)

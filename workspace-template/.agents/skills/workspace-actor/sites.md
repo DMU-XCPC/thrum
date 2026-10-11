@@ -33,6 +33,14 @@ and nothing requires a fetch in order to start work. `thrum sync` does it, and i
 publishes a **backlog**: a site that recorded while it was alone has records the line does not, so
 sync brings the site up to date and puts them on top rather than refusing them.
 
+**When they do not go together.** Two sites can record while they are apart and find that the
+same file was changed on both sides. Nothing is merged and nothing is dropped: the record stays
+local, and `thrum sync` refuses, names the file, and says the way out. Read what the other site
+published (`git show origin/main:<path>`), take your records back out of the working copy with
+`thrum sync --withdraw` — what they wrote stays in the tree, uncommitted — put the file right,
+and record the event again. Never `git reset --hard`: the record it would destroy is a brief or
+a handoff, which is somebody's work and the only copy.
+
 ## Messages — `var/msg/<actor>/`
 
 Actors reach each other through the tooling, not through the records. A message is **process

@@ -583,6 +583,118 @@ func TestAJobMovesToAnotherSite(t *testing.T) {
 	}
 }
 
+// An event whose paths are in the way refuses before it writes anything. A refusal that
+// comes after the write leaves half an event behind — a file on disk and in the index that
+// never reaches the line, which validation does not see and sync does not carry — and it
+// then blocks the very remedy it recommends.
+func TestAnEventRefusesBeforeItWritesAnything(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+
+	hand := filepath.Join(root, "doc", "convention", "01-hand.md")
+	if err := os.WriteFile(hand, []byte("# Hand\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "doc/convention/01-hand.md")
+
+	out, err := try(t, "--root", root, "resource", "declare", "--kind", "host", "--name", "gpu", "--purpose", "p")
+	if err == nil {
+		t.Fatalf("the declaration should have been refused, and said:\n%s", out)
+	}
+	if !strings.Contains(out, "doc/convention/01-hand.md") {
+		t.Errorf("the refusal should name what is in the way:\n%s", out)
+	}
+	if strings.Contains(out, "already declares") {
+		t.Errorf("it should have refused before writing, not after:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(root, "doc", "resource", "host.yaml")); err == nil {
+		t.Error("a refused event must not have written anything")
+	}
+	if staged := strings.TrimSpace(gitOut(t, root, "diff", "--cached", "--name-only")); staged != "doc/convention/01-hand.md" {
+		t.Errorf("the index should be as it was found, and holds:\n%s", staged)
+	}
+
+	// The remedy the refusal recommends has to be one the actor can actually take.
+	run(t, "--root", root, "commit", "--summary", "hand", "--", "doc/convention/01-hand.md")
+	run(t, "--root", root, "resource", "declare", "--kind", "host", "--name", "gpu", "--purpose", "p")
+	if _, err := os.Stat(filepath.Join(root, "doc", "resource", "host.yaml")); err != nil {
+		t.Errorf("the declaration should go through once the way is clear: %v", err)
+	}
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the workspace should validate, and said:\n%s", out)
+	}
+}
+
+// Records that cannot go into one line are refused with the file named and the way out in
+// the message, and the way out keeps what the record wrote.
+func TestRecordsThatDoNotGoTogetherSayTheWayOut(t *testing.T) {
+	first := filepath.Join(t.TempDir(), "build-01")
+	second := filepath.Join(t.TempDir(), "lab-02")
+	records := filepath.Join(t.TempDir(), "records.git")
+
+	run(t, "create", first, "--site", "build-01")
+	git(t, first, "init", "--bare", "-b", "main", records)
+	git(t, first, "remote", "add", "origin", records)
+	run(t, "--root", first, "resource", "declare", "--kind", "site", "--name", "build-01", "--purpose", "build")
+	run(t, "--root", first, "resource", "declare", "--kind", "site", "--name", "lab-02", "--purpose", "lab")
+	run(t, "--root", first, "sync")
+	run(t, "join", second, "--remote", records, "--site", "lab-02")
+
+	// Both sites declare into the same registry while they are apart.
+	git(t, second, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "not-there"))
+	run(t, "--root", second, "resource", "declare", "--kind", "gpu", "--name", "gpu", "--purpose", "the GPU, as lab-02 sees it")
+	git(t, second, "remote", "set-url", "origin", records)
+	run(t, "--root", first, "resource", "declare", "--kind", "gpu", "--name", "other", "--purpose", "the GPU, as build-01 sees it")
+	run(t, "--root", first, "sync")
+
+	out, err := try(t, "--root", second, "sync")
+	if err == nil {
+		t.Fatalf("records that cannot go together should be refused, and it said:\n%s", out)
+	}
+	for _, want := range []string{"doc/resource/gpu.yaml", "--withdraw", "reset --hard"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the refusal should mention %q, and says:\n%s", want, out)
+		}
+	}
+	// The record is still local, and still a record.
+	if unpublished := strings.TrimSpace(gitOut(t, second, "rev-list", "--count", "origin/main..HEAD")); unpublished != "1" {
+		t.Errorf("the unpublished record should still be here, and there are %s", unpublished)
+	}
+
+	// The way out: out of the line, and what it wrote still in the tree.
+	if out := run(t, "--root", second, "sync", "--withdraw"); !strings.Contains(out, "took 1 record") {
+		t.Errorf("withdrawing should say what it took back:\n%s", out)
+	}
+	if unpublished := strings.TrimSpace(gitOut(t, second, "rev-list", "--count", "origin/main..HEAD")); unpublished != "0" {
+		t.Errorf("nothing should be left unpublished, and there are %s", unpublished)
+	}
+	registry := filepath.Join(second, "doc", "resource", "gpu.yaml")
+	kept, err := os.ReadFile(registry)
+	if err != nil {
+		t.Fatalf("the record's file should still be there: %v", err)
+	}
+	if !strings.Contains(string(kept), "as lab-02 sees it") {
+		t.Errorf("and it should still say what the site recorded:\n%s", kept)
+	}
+
+	// Put the file right, record the event again, and it goes in.
+	if err := os.WriteFile(registry, []byte("gpu:\n  - name: gpu\n    purpose: the GPU, as lab-02 sees it\n  - name: other\n    purpose: the GPU, as build-01 sees it\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(t, "--root", second, "commit", "--summary", "both declarations", "--", "doc/resource/gpu.yaml")
+	run(t, "--root", second, "sync")
+	line := gitOut(t, second, "log", "--pretty=%s", "origin/main")
+	if !strings.Contains(line, "both declarations") {
+		t.Errorf("the corrected record should be in the line:\n%s", line)
+	}
+	if merges := gitOut(t, second, "rev-list", "--merges", "--all"); strings.TrimSpace(merges) != "" {
+		t.Errorf("and nothing was merged:\n%s", merges)
+	}
+	if out := run(t, "--root", second, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the site should validate, and said:\n%s", out)
+	}
+}
+
 // A site that recorded while it was alone has records the line does not, and sync is the
 // command that publishes them: it brings the site up to date first and puts the backlog on
 // top, rather than refusing because the line moved meanwhile.

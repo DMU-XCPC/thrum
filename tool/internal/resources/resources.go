@@ -9,6 +9,7 @@ package resources
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/atomic"
@@ -17,6 +18,19 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"gopkg.in/yaml.v3"
 )
+
+// unrecorded says so when a declaration is written here but not in the line, which is the
+// state a crash between the write and the record leaves behind. Without it the next attempt
+// is a dead end that reads like a duplicate: the file says it is declared, and the line has
+// never heard of it.
+func unrecorded(l workspace.Layout, kind string) string {
+	rel := filepath.ToSlash(filepath.Join("doc", "resource", kind+".yaml"))
+	nothing, err := commit.Nothing(l, rel)
+	if err != nil || nothing {
+		return ""
+	}
+	return fmt.Sprintf(", and that declaration is not in the line yet: `thrum commit --summary \"declared %s\" -- %s` records it", kind, rel)
+}
 
 // Entry is what declaring a resource needs.
 type Entry struct {
@@ -68,6 +82,11 @@ func Declare(l workspace.Layout, kind string, e Entry) error {
 	}
 
 	path := l.ResourceKind(kind)
+	// Before the file is touched: an event that finds the index in its way only when it
+	// goes to record itself leaves half of itself behind.
+	if err := commit.Guard(l, filepath.ToSlash(filepath.Join("doc", "resource", kind+".yaml"))); err != nil {
+		return err
+	}
 	return atomic.Replace(path, func(current []byte) ([]byte, error) {
 		doc, err := parse(current, kind)
 		if err != nil {
@@ -79,7 +98,7 @@ func Declare(l workspace.Layout, kind string, e Entry) error {
 		}
 		for _, item := range seq.Content {
 			if nameOf(item) == e.Name {
-				return nil, fmt.Errorf("%s already declares %q", path, e.Name)
+				return nil, fmt.Errorf("%s already declares %q%s", path, e.Name, unrecorded(l, kind))
 			}
 		}
 		seq.Content = append(seq.Content, entryNode(e))
@@ -97,6 +116,11 @@ func Remove(l workspace.Layout, kind, name string) error {
 		return err
 	}
 	path := l.ResourceKind(kind)
+	// Before the file is touched: an event that finds the index in its way only when it
+	// goes to record itself leaves half of itself behind.
+	if err := commit.Guard(l, filepath.ToSlash(filepath.Join("doc", "resource", kind+".yaml"))); err != nil {
+		return err
+	}
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("%s declares nothing", kind)
 	}

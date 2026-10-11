@@ -3,6 +3,7 @@ package commit
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
@@ -70,9 +71,85 @@ func Current(l workspace.Layout) error {
 	args := append(gitx.IdentityArgs(l.Root, ""), "rebase", "--quiet", up)
 	if _, err := gitx.Run(l.Root, args...); err != nil {
 		_, _ = gitx.Run(l.Root, append(gitx.IdentityArgs(l.Root, ""), "rebase", "--abort")...)
-		return fmt.Errorf("the %d record commits this site has not published do not go together with what was published elsewhere: nothing was changed here, and nothing was merged", ahead)
+		return clash(l, ahead, up)
 	}
 	return nil
+}
+
+// Begin makes a record write's way clear: the line is brought current, and the index is
+// checked for changes that are not this event's.
+func Begin(l workspace.Layout, paths ...string) error {
+	if err := Current(l); err != nil {
+		return err
+	}
+	return Guard(l, paths...)
+}
+
+// Guard refuses when the index holds changes this event did not make.
+//
+// It is meant to run *before* the event writes anything. An event that discovers the index
+// is in its way only when it goes to record itself has already written its own half — a
+// file on disk and in the index that never reaches the line, which validation does not see
+// and sync does not carry — and the refusal then blocks the very remedy it recommends.
+func Guard(l workspace.Layout, paths ...string) error {
+	foreign, err := foreignStaged(l, paths)
+	if err != nil {
+		return err
+	}
+	if len(foreign) > 0 {
+		return fmt.Errorf("the index holds changes this event did not make — %s — and an event records exactly what it staged, so it would put somebody else's change under this event's name: record them as their own event, or unstage them, and then ask again. This event has written nothing",
+			strings.Join(foreign, ", "))
+	}
+	return nil
+}
+
+// Hold takes the coordination lock for a change to the records that is not an event.
+func Hold(l workspace.Layout) error {
+	return acquire(l)
+}
+
+// clash explains records that cannot go into one line, and says the way out.
+//
+// The way out is not to force anything. A record that is unpublished was never in the line,
+// so it can be taken out of the working copy without rewriting anything anyone has seen,
+// and the files it wrote stay where they are: a brief or a handoff is somebody's work, and
+// the one command that would make this moment painless is the one that would destroy it.
+func clash(l workspace.Layout, ahead int, up string) error {
+	where := ""
+	if shared := clashPaths(l, up); len(shared) > 0 {
+		where = fmt.Sprintf(": %s changed on both sides", strings.Join(shared, ", "))
+	}
+	return fmt.Errorf("this site's %d unpublished record(s) do not go together with what was published elsewhere%s, and nothing was changed here or merged, because dropping a record is worse than stopping. To get out of it: read what the other site published with `git show %s:<path>`, then `thrum sync --withdraw` takes this site's records back out of the line and leaves what they wrote in the working tree, and from there the file can be put right and the event recorded again. Do not reach for `git reset --hard`: the thing it destroys is exactly the file in question",
+		ahead, where, up)
+}
+
+// clashPaths names the paths this site and the line both changed.
+func clashPaths(l workspace.Layout, up string) []string {
+	out, err := gitx.Run(l.Root, "merge-base", "HEAD", up)
+	if err != nil {
+		return nil
+	}
+	base := strings.TrimSpace(out)
+	mine, err := gitx.Run(l.Root, "diff", "--name-only", base, "HEAD")
+	if err != nil {
+		return nil
+	}
+	theirs, err := gitx.Run(l.Root, "diff", "--name-only", base, up)
+	if err != nil {
+		return nil
+	}
+	both := map[string]bool{}
+	for _, p := range strings.Fields(theirs) {
+		both[p] = true
+	}
+	var shared []string
+	for _, p := range strings.Fields(mine) {
+		if both[p] {
+			shared = append(shared, p)
+		}
+	}
+	sort.Strings(shared)
+	return shared
 }
 
 // publishOrUndo puts the event in the line, or takes it back out.
@@ -219,7 +296,12 @@ func prepare(l workspace.Layout, paths []string) error {
 		return err
 	}
 	if len(foreign) > 0 {
-		return fmt.Errorf("the index holds changes this event did not make — %s — and an event records exactly what it staged, so going on would put somebody else's change under this event's name: record them as their own event, or unstage them",
+		// Something arrived between the guard and the write, which only a hand can do
+		// while the lock is held. Take this event's own paths back out of the index, so
+		// that what is left is what the guard saw, and the caller is not left holding
+		// half an event.
+		_, _ = gitx.Run(l.Root, append([]string{"reset", "--quiet", "--"}, paths...)...)
+		return fmt.Errorf("the index holds changes this event did not make — %s — and nothing was recorded: what this event wrote is in the working tree, uncommitted, and the paths it staged have been taken back out of the index",
 			strings.Join(foreign, ", "))
 	}
 	anything, err := anythingStaged(l, paths)
