@@ -121,7 +121,7 @@ your own.
    handoff, so this is the only place it arrives — and it is often why the last actor stopped. `thrum message send --to <actor>` is the other half, and the only
    way to reach an actor at another site: a message never travels by git and never appears in a
    handoff.
-5. **Take it up.** `thrum work --job <job-id>` is `open`, `claim` and `occupy` in the order they
+5. **Take it up.** `thrum work --job <job-id>` is `open`, `job claim` and `occupy` in the order they
    have to happen, and it ends by printing the working directory and the environment line to run:
    it opens the job when it is not open yet, declares the label when you name a new one, claims
    the job, and materialises a working directory when this site has none. It is a claim and not a

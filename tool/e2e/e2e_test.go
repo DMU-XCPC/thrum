@@ -348,8 +348,8 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 		"--job", "second-job", "--unit", "2", "--ttl", "1h")
 	refuses(t, "lies under", "--root", root, "handoff", "--job", "second-job", "--status", "partial",
 		"--next", "carry on", "--started", "2026-10-09T05:00:00Z", "--artifact", "/etc/hostname")
-	run(t, "--root", root, "claim", "--job", "second-job") // nobody owns it, so anybody may
-	refuses(t, "only its owner", "--root", root, "claim", "--job", "second-job",
+	run(t, "--root", root, "job", "claim", "second-job") // nobody owns it, so anybody may
+	refuses(t, "only its owner", "--root", root, "job", "claim", "second-job",
 		"--owner", "somebody-else", "--actor", "somebody-else")
 
 	// The baton and the status are one rule with two directions, and the tooling refuses
@@ -1231,6 +1231,44 @@ func TestASilentSiteIsNotNoSuchName(t *testing.T) {
 	}
 	if out := run(t, "--root", root, "message", "list", "--actor", "sender"); !strings.Contains(out, "hello") {
 		t.Errorf("the message should be in the mailbox it was sent to:\n%s", out)
+	}
+}
+
+// The whole picture is readable by a machine as well as by a person, names and reachability
+// included: a harness should not have to parse the text.
+func TestStatusIsReadableByAMachine(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "area", "--purpose", "An area")
+	seedCode(t, root)
+	run(t, "--root", root, "open", "--job", "first-job", "--label", "area", "--owner", "fixture-actor")
+
+	out := run(t, "--root", root, "status", "--json")
+	var got struct {
+		Report struct {
+			Jobs []struct {
+				ID    string `json:"id"`
+				Owner string `json:"owner"`
+			} `json:"jobs"`
+			Worktrees []struct {
+				Label string `json:"label"`
+			} `json:"worktrees"`
+		} `json:"report"`
+		Actors []struct {
+			Name string `json:"name"`
+		} `json:"actors"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("status --json should be JSON: %v\n%s", err, out)
+	}
+	if len(got.Report.Jobs) != 1 || got.Report.Jobs[0].ID != "first-job" || got.Report.Jobs[0].Owner != "fixture-actor" {
+		t.Errorf("the board should be in it: %+v", got.Report.Jobs)
+	}
+	if len(got.Report.Worktrees) != 1 || got.Report.Worktrees[0].Label != "area" {
+		t.Errorf("the working directories should be in it: %+v", got.Report.Worktrees)
+	}
+	if len(got.Actors) == 0 {
+		t.Error("the names should be in it, which is a question about the present and not a file")
 	}
 }
 

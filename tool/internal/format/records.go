@@ -107,11 +107,11 @@ type Manifest struct {
 // actor is the claim at var/occupy/ and would be a second record of one fact — and Unit
 // is a string because YAML would otherwise read 02 as octal.
 type Lease struct {
-	Resource string `yaml:"resource"`
-	Unit     string `yaml:"unit"`
-	Job      string `yaml:"job"`
-	Since    string `yaml:"since"`
-	Expires  string `yaml:"expires"`
+	Resource string `yaml:"resource" json:"resource"`
+	Unit     string `yaml:"unit" json:"unit"`
+	Job      string `yaml:"job" json:"job"`
+	Since    string `yaml:"since" json:"since"`
+	Expires  string `yaml:"expires" json:"expires"`
 }
 
 // Occupy is var/occupy/<job-id>.yaml: which actor the tooling is running on a job at

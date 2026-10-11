@@ -24,46 +24,62 @@ import (
 
 // Job is one line of the task board.
 type Job struct {
-	ID          string
-	Status      string
-	Owner       string
-	Live        bool // still in doc/task/
-	Started     bool
-	Blocked     bool
-	LastHandoff string
-	Next        string
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	Owner       string `json:"owner,omitempty"`
+	Live        bool   `json:"live"`
+	Started     bool   `json:"started"`
+	Blocked     bool   `json:"blocked"`
+	LastHandoff string `json:"last_handoff,omitempty"`
+	Next        string `json:"next,omitempty"`
 }
 
 // Collectible is a payload the retention policy would take something from.
 type Collectible struct {
-	Job    string
-	Closed string   // when the brief says it closed, so far as a file can say
-	Now    []string // subdirectories collected at once
-	Later  []string // subdirectories collected after the window
-	Keep   bool
+	Job    string   `json:"job"`
+	Closed string   `json:"closed,omitempty"` // when the brief says it closed, so far as a file can say
+	Now    []string `json:"now,omitempty"`    // subdirectories collected at once
+	Later  []string `json:"later,omitempty"`  // subdirectories collected after the window
+	Keep   bool     `json:"keep,omitempty"`
 }
 
 // Report is everything the tool can answer without asking another machine.
 type Report struct {
-	Jobs        []Job
-	Worktrees   []worktrees.Entry
-	Undeclared  []string // directories with no entry: the error direction
-	Unmaterial  []string // entries with no directory: normal, worth seeing
-	Leases      []format.Lease
-	Occupancy   []Occupant
-	Collectible []Collectible
+	Jobs        []Job             `json:"jobs"`
+	Worktrees   []worktrees.Entry `json:"worktrees"`
+	Undeclared  []string          `json:"undeclared,omitempty"`     // directories with no entry: the error direction
+	Unmaterial  []string          `json:"unmaterialised,omitempty"` // entries with no directory: normal, worth seeing
+	Leases      []format.Lease    `json:"leases"`
+	Occupancy   []Occupant        `json:"occupancy"`
+	Collectible []Collectible     `json:"collectible,omitempty"`
+}
+
+// State is how the board describes a job: a closed job by its brief, since the state of its
+// last stretch is a detail of how it got there, and a live one by what the derived facts say,
+// because for one of those they are the interesting part.
+func (j Job) State() string {
+	if !j.Live {
+		return j.Status
+	}
+	switch {
+	case j.Blocked:
+		return "blocked"
+	case !j.Started:
+		return "not started"
+	}
+	return j.Status
 }
 
 // Occupant is one site-local note about who is on a job here.
 type Occupant struct {
-	Job      string
-	Occupant string
-	Since    string
-	Stale    bool // the job is no longer live, so the note is
+	Job      string `json:"job"`
+	Occupant string `json:"occupant"`
+	Since    string `json:"since"`
+	Stale    bool   `json:"stale,omitempty"` // the job is no longer live, so the note is
 	// Presence is what the occupant last said about itself, already worded for a reader
 	// and filled in by the caller: this report is about the workspace, and what the
 	// tooling knows about names is not read here.
-	Presence string
+	Presence string `json:"presence,omitempty"`
 }
 
 // Gather builds the report.
@@ -259,19 +275,7 @@ func (r *Report) Print(w io.Writer) {
 		fmt.Fprintf(w, "  (no jobs)\n")
 	}
 	for _, j := range r.Jobs {
-		// A job that has closed is described by its brief: the state of its last
-		// stretch is a detail of how it got there. A live job is described by what
-		// the derived facts say, because for one of those they are the interesting
-		// part.
-		state := j.Status
-		if j.Live {
-			switch {
-			case j.Blocked:
-				state = "blocked"
-			case !j.Started:
-				state = "not started"
-			}
-		}
+		state := j.State()
 		owner := j.Owner
 		if owner == "" {
 			owner = "unowned"

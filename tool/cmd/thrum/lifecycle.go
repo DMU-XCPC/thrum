@@ -379,67 +379,6 @@ func newCloseCmd() *cobra.Command {
 	return cmd
 }
 
-func newClaimCmd() *cobra.Command {
-	var jobID, owner string
-
-	cmd := &cobra.Command{
-		Use:   "claim",
-		Short: "Take responsibility for a job, or hand it to somebody else",
-		Long: "A job with no owner is one nobody is responsible for. Whoever takes it up writes\n" +
-			"itself in without asking, because there is nobody left to ask; an owner may also\n" +
-			"reassign a job it holds.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			who := owner
-			if who == "" {
-				who = actor
-			}
-			id, err := jobs.SetOwner(layout(), jobID, who, actor, "")
-			if err != nil {
-				return err
-			}
-			if id == "" {
-				fmt.Printf("%s is already owned by %s\n", jobID, who)
-				return nil
-			}
-			fmt.Printf("%s is now owned by %s (%s)\n", jobID, who, short(id))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&jobID, "job", "", "the job id (required)")
-	cmd.Flags().StringVar(&owner, "owner", "", "who takes it (default: this actor)")
-	_ = cmd.MarkFlagRequired("job")
-	return cmd
-}
-
-func newRelinquishCmd() *cobra.Command {
-	var jobID string
-
-	cmd := &cobra.Command{
-		Use:   "relinquish",
-		Short: "Give up ownership, leaving the job claimable",
-		Long: "Giving ownership up is what makes a job claimable, and it is the owner's act. When\n" +
-			"the owner is an actor who no longer exists, a person gives it up on their behalf,\n" +
-			"since the job would otherwise be stuck forever.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := jobs.SetOwner(layout(), jobID, "", actor, "")
-			if err != nil {
-				return err
-			}
-			if id == "" {
-				fmt.Printf("%s was already unowned\n", jobID)
-				return nil
-			}
-			fmt.Printf("%s is now unowned (%s)\n", jobID, short(id))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&jobID, "job", "", "the job id (required)")
-	_ = cmd.MarkFlagRequired("job")
-	return cmd
-}
-
 func newWorktreeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "worktree",

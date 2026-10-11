@@ -15,10 +15,10 @@ import (
 
 // Entry is one working directory this site has materialised.
 type Entry struct {
-	Path     string
-	Label    string // empty when the directory is not under worktree/
-	Branch   string // empty when the directory is detached
-	Detached bool
+	Path     string `json:"path"`
+	Label    string `json:"label,omitempty"`  // empty when the directory is not under worktree/
+	Branch   string `json:"branch,omitempty"` // empty when the directory is detached
+	Detached bool   `json:"detached,omitempty"`
 }
 
 // Job returns the job a directory is carrying, if any.

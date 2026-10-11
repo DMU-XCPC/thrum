@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -98,15 +99,34 @@ func resolveJob(l workspace.Layout, job string) (jobHome, error) {
 	sort.Strings(silent)
 	switch {
 	case len(holders) == 0 && len(silent) > 0:
-		return home, fmt.Errorf("no site that answered holds %s, and %s did not answer: who is on it cannot be established, and this is not the same as nobody being on it",
-			job, strings.Join(silent, ", "))
+		return home, homeUnknown{job: job, silent: silent}
 	case len(holders) == 0:
-		return home, fmt.Errorf("no site holds %s: a job is materialised at a site before anybody is on it, and this one is materialised nowhere", job)
+		return home, noHome{job: job}
 	case len(holders) > 1:
 		return home, fmt.Errorf("%s say they hold %s: a job has one home, and two sites materialising one is not something this workspace settles",
 			strings.Join(holders, " and "), job)
 	}
 	return home, nil
+}
+
+// noHome is a job no site holds: a fact about the world rather than a question that failed.
+type noHome struct{ job string }
+
+func (e noHome) Error() string {
+	return fmt.Sprintf("no site holds %s: a job is materialised at a site before anybody is on it, and this one is materialised nowhere", e.job)
+}
+
+// homeUnknown is a job whose home could not be established, because a site did not answer. It
+// is not the same as nobody holding it, and a caller must be able to tell the two apart without
+// reading the sentence — which is what these types are for.
+type homeUnknown struct {
+	job    string
+	silent []string
+}
+
+func (e homeUnknown) Error() string {
+	return fmt.Sprintf("no site that answered holds %s, and %s did not answer: where it lives cannot be established, and this is not the same as nobody holding it",
+		e.job, strings.Join(e.silent, ", "))
 }
 
 // claimAt writes or clears a job's claim at the site that holds it, which is the only
@@ -127,11 +147,13 @@ func claimAt(l workspace.Layout, home jobHome, req daemon.Request) (daemon.Respo
 func whoIsOn(l workspace.Layout, job string) (string, error) {
 	home, err := resolveJob(l, job)
 	if err != nil {
+		var nowhere noHome
+		var unknown homeUnknown
 		switch {
-		case strings.Contains(err.Error(), "no site holds"):
+		case errors.As(err, &nowhere):
 			return fmt.Sprintf("nobody is on %s, and no site holds it: a job is materialised at a site before anybody is on it", job), nil
-		case strings.Contains(err.Error(), "did not answer"):
-			return fmt.Sprintf("cannot say who is on %s: %s", job, strings.TrimPrefix(err.Error(), "no site that answered holds "+job+", and ")), nil
+		case errors.As(err, &unknown):
+			return fmt.Sprintf("cannot say who is on %s: %s did not answer, so where it lives cannot be established", job, strings.Join(unknown.silent, ", ")), nil
 		default:
 			return fmt.Sprintf("cannot say who is on %s: %v", job, err), nil
 		}

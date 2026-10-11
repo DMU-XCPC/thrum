@@ -47,7 +47,7 @@ Everything in *What the tooling must not do* below, and two more: it does not ho
 | `create` | Instantiates a workspace from the template: the two bare repositories, the empty runtime directories, the ignore rules in both `.gitignore` and `.git/info/exclude`, the entry point and the skill an actor is handed, this site's own name in `var/site`, and the first coordination commit. | Never a plain file copy. The repositories have to be initialised, not duplicated. |
 | `update` | Brings the unversioned skeleton up to date with the template the tooling carries: the empty directories, the ignore rules in both copies, and the entry point and skill an actor is handed. Reports the copy-me files under `doc/template/` that differ, and writes them only when a person asks, leaving them uncommitted to be recorded. | Never touches a versioned file on its own initiative, and never removes a directory. Restores a rule the workspace has lost, and keeps a rule the tooling no longer has until `--narrow` says otherwise |
 | `verify` | Runs the whole validation list, including the unversioned skeleton — a directory the template defines that is not there, a file the template carries that is not there, and an ignore rule the tooling carries that this workspace has lost in either copy — and the values the conventions declare, since a policy nobody can read is a policy nobody has. | Reports; it does not repair. |
-| `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. |
+| `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. | `--json` is the same picture for whatever asked.
 | `clean` | The guarded clean of untracked files. | Never a bare `git clean` at the workspace root, which would delete `.bare/` and the entire source history with it. |
 | `join` | Makes this machine another site of a workspace that already exists: takes the shared line from the coordination repository, and fills in what a repository cannot carry — the ignore rules, the empty directories, the entry point and skill an actor is handed, the site's own name, and its own copies of the code and asset repositories. | Commits nothing: joining does not begin a history, and a second first commit would be a second workspace. Refuses a site the roster does not declare, rather than half-joining one. |
 | *every record write* | Begins by bringing this site up to date from the shared line, and ends by putting the event in it or taking it back out. | The tip of the shared branch is the only piece of exclusion state a coordination write needs: an event is in the line if and only if its parent was. A commit that lost a race was never in the line, so redoing it rewrites nothing that has been seen; a commit whose file moved as well is refused and taken back out, because two versions of one file cannot both be in one line. Nothing is merged, ever |
@@ -83,8 +83,8 @@ Actors reach each other through the tooling rather than through the records: a m
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
 | `open` | Writes the brief, creates the branch, and materialises a labelled working directory. | One commit — unless the label has to be declared first, because that is a different event with a commit of its own. |
-| `claim` | Sets `owner` on a job that has none. | The tooling settles simultaneous claims; nothing on disk can. |
-| `reassign`, `relinquish` | Changes or clears `owner`, on the owner's decision, or on a person's when the owner has become unreachable. | One commit. A job owned by an actor who no longer exists would otherwise be stuck forever. |
+| `job claim` | Sets `owner` on a job that has none. | The tooling settles simultaneous claims; nothing on disk can. |
+| `reassign`, `job relinquish` | Changes or clears `owner`, on the owner's decision, or on a person's when the owner has become unreachable. | One commit. A job owned by an actor who no longer exists would otherwise be stuck forever. |
 | `close` | Sets the final `status`, moves the brief to `doc/archive/task/<job-id>/`, releases the label and any lease the job still holds. | One `close` commit. It merges nothing. A brief that has already closed is refused, before anything is written. |
 | `add worktree` | Checks the job's branch out into a label, for the job to work in, or detached, for comparison or reproduction. | Refuses a label that already holds a job branch. A label that is clean and detached is free, once the cleaning the drift rules require has been done. |
 | `release worktree` | Leaves the working directory clean and detached, and destroys it when the declaration says one-off. | |
@@ -148,7 +148,8 @@ Merging a job's branch, starting and stopping services, running tests, running a
 
 Four commands are groups, and each one's subcommands are the operations named above:
 `actor list`, `actor show`, `actor online`, `actor offline`; `worktree add`, `worktree release`, `worktree list`,
-`worktree prune`; `job list`, `job show`, `job occupy`, `job vacate`;
+`worktree prune`; `job list`, `job show`, `job occupy`, `job vacate`, `job claim`,
+`job relinquish`;
 `lease take`, `lease renew`, `lease release`, `lease list`; `resource declare`,
 `resource remove`, `resource list`; `asset ingest`, `asset publish`, `asset materialise`,
 `asset withdraw`, `asset store`, `asset prune`; `bundle export`, `bundle import`;
@@ -166,7 +167,6 @@ directory) and `--actor` (the name to act as, defaulting to `$THRUM_ACTOR`, then
 | `actor` | Say which names exist, where each was last heard from, and what they are on |
 | `asset` | Put durable data in the store, publish it, and take it out again |
 | `bundle` | Carry a job's payload to another site, and take one in |
-| `claim` | Take responsibility for a job, or hand it to somebody else |
 | `clean` | Remove what the coordination repository neither tracks nor ignores |
 | `close` | Close a job: set its final status, archive the brief, release the working directory |
 | `collect` | Apply the retention policy to the payloads of closed jobs |
@@ -179,7 +179,6 @@ directory) and `--actor` (the name to act as, defaulting to `$THRUM_ACTOR`, then
 | `lease` | Take, renew, release and list the units of a declared resource |
 | `message` | Send another actor a message, read your own, and keep the mailbox in order |
 | `open` | Open a job: the brief, the branch, and a labelled working directory |
-| `relinquish` | Give up ownership, leaving the job claimable |
 | `resource` | Declare or remove the resources a workspace shares |
 | `site` | Say how this machine is reached, and how it reaches the others |
 | `status` | Print the derived views: the task board, worktrees, leases, occupancy, payloads |

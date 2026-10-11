@@ -87,8 +87,6 @@ func newRootCmd() *cobra.Command {
 		newOpenCmd(),
 		newHandoffCmd(),
 		newCloseCmd(),
-		newClaimCmd(),
-		newRelinquishCmd(),
 		newWorktreeCmd(),
 		newWhereCmd(),
 		newWorkCmd(),

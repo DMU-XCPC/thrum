@@ -243,7 +243,9 @@ func printActors(cmd *cobra.Command, l workspace.Layout) {
 }
 
 func newStatusCmd() *cobra.Command {
-	return &cobra.Command{
+	var asJSON bool
+
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Print the derived views: the task board, worktrees, leases, occupancy, payloads",
 		Long: "Status reads rather than maintains. The brief says whether a job is still meant to\n" +
@@ -253,17 +255,25 @@ func newStatusCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := layout()
 			report, err := status.Gather(l)
-			if err == nil {
-				annotateOccupants(l, report)
-			}
 			if err != nil {
 				return err
 			}
-			report.Print(cmd.OutOrStdout())
+			annotateOccupants(l, report)
 			// Names and reachability are questions about the present, so they are
-			// answered here rather than in a file.
+			// answered here rather than in a file — in the text and in the JSON alike.
+			entries, reports := rosterEverywhere(l)
+			if asJSON {
+				return printJSON(cmd, map[string]any{
+					"report": report,
+					"actors": entries,
+					"sites":  reports,
+				})
+			}
+			report.Print(cmd.OutOrStdout())
 			printActors(cmd, l)
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print the same picture as JSON, names and reachability included")
+	return cmd
 }

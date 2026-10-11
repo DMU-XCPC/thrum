@@ -52,7 +52,8 @@ func newJobCmd() *cobra.Command {
 			"job in full; `job occupy <id>` and `job vacate <id>` are the claim that somebody is on it,\n" +
 			"which is written where the job is so that one site decides.",
 	}
-	cmd.AddCommand(newJobListCmd(), newJobShowCmd(), newJobOccupyCmd(), newJobVacateCmd())
+	cmd.AddCommand(newJobListCmd(), newJobShowCmd(), newJobOccupyCmd(), newJobVacateCmd(),
+		newJobClaimCmd(), newJobRelinquishCmd())
 	return cmd
 }
 
@@ -82,7 +83,7 @@ func newJobListCmd() *cobra.Command {
 				if owner != "" && job.Owner != owner {
 					continue
 				}
-				if lastSaid != "" && job.Status != lastSaid {
+				if lastSaid != "" && job.State() != lastSaid {
 					continue
 				}
 				jobs = append(jobs, job)
@@ -107,13 +108,13 @@ func newJobListCmd() *cobra.Command {
 				if job.Next != "" {
 					next = "  next: " + firstLine(job.Next)
 				}
-				fmt.Printf("%-28s %-14s %-14s %s%s\n", job.ID, job.Status, who, where, next)
+				fmt.Printf("%-28s %-14s %-14s %s%s\n", job.ID, job.State(), who, where, next)
 			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&owner, "owner", "", "only jobs this name owns")
-	cmd.Flags().StringVar(&lastSaid, "status", "", "only jobs whose last handoff said this")
+	cmd.Flags().StringVar(&lastSaid, "status", "", "only jobs the board describes this way, such as blocked or not started")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the same answer as JSON")
 	return cmd
 }
@@ -370,4 +371,64 @@ func firstLine(text string) string {
 		}
 	}
 	return ""
+}
+
+// newJobClaimCmd is ownership: a job with no owner is one nobody is responsible for.
+func newJobClaimCmd() *cobra.Command {
+	var owner string
+
+	cmd := &cobra.Command{
+		Use:   "claim <id>",
+		Short: "Take responsibility for a job, or hand it to somebody else",
+		Long: "A job with no owner is one nobody is responsible for. Whoever takes it up writes\n" +
+			"itself in without asking, because there is nobody left to ask; an owner may also\n" +
+			"reassign a job it holds.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jobID := args[0]
+			who := owner
+			if who == "" {
+				who = actor
+			}
+			id, err := jobs.SetOwner(layout(), jobID, who, actor, "")
+			if err != nil {
+				return err
+			}
+			if id == "" {
+				fmt.Printf("%s is already owned by %s\n", jobID, who)
+				return nil
+			}
+			fmt.Printf("%s is now owned by %s (%s)\n", jobID, who, short(id))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&owner, "owner", "", "who takes it (default: this actor)")
+	return cmd
+}
+
+// newJobRelinquishCmd gives ownership up, which is what makes a job claimable.
+func newJobRelinquishCmd() *cobra.Command {
+
+	cmd := &cobra.Command{
+		Use:   "relinquish <id>",
+		Short: "Give up ownership, leaving the job claimable",
+		Long: "Giving ownership up is what makes a job claimable, and it is the owner's act. When\n" +
+			"the owner is an actor who no longer exists, a person gives it up on their behalf,\n" +
+			"since the job would otherwise be stuck forever.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jobID := args[0]
+			id, err := jobs.SetOwner(layout(), jobID, "", actor, "")
+			if err != nil {
+				return err
+			}
+			if id == "" {
+				fmt.Printf("%s was already unowned\n", jobID)
+				return nil
+			}
+			fmt.Printf("%s is now unowned (%s)\n", jobID, short(id))
+			return nil
+		},
+	}
+	return cmd
 }
