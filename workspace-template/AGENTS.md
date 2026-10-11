@@ -29,6 +29,10 @@ session goes on, and one harness hosts many sessions at once, so a name taken fr
 and merges actors that are not the same one. If the person who dispatched you gave a name, that is
 the name; if not, pick one you can keep for the whole session — `agent-3`, `dana`, `ws-7`.
 
+**One name, and it is yours.** Never act as another actor, and never watch a name that is not this
+session's: taking one over, or listening on it, makes another actor's records read as yours. If a
+name you reach for is already in use, somebody is working under it — ask them.
+
 **This file is the workspace's; the project's `AGENTS.md` inside the working directory is the
 project's** — versioned with the code, and read beside this one. They govern different things: this
 one says where work goes and how it is recorded, the project's says how the code is built and

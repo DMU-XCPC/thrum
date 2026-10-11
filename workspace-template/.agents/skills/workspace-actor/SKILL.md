@@ -77,6 +77,9 @@ export THRUM_ACTOR=agent-3        # or --actor <name> on every command
   swapped under a session, and one harness hosts many sessions at once, so a name taken from either
   goes stale and merges actors that are not the same one. Keep the name you were given, or pick one
   you can keep for the whole session; `names.md` has the rule and its reason.
+- **One name, and it is yours.** Never act as another actor and never watch a name that is not this
+  session's: if a name is already in use, somebody is working under it, and the answer is to ask
+  them.
 
 ## What you may touch
 
