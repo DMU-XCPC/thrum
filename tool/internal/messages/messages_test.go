@@ -163,3 +163,63 @@ func TestAMessageNeedsAnIdentityASenderARecipientAndASubject(t *testing.T) {
 		}
 	}
 }
+
+// A watcher asks the same question on every pass — what is here that I have not seen —
+// so the listing it uses reads names rather than records, and a mailbox nobody has
+// written to is empty rather than an error.
+func TestAMailboxCanBeListedByIDBeforeAnybodyWritesToIt(t *testing.T) {
+	l := fixture(t)
+
+	ids, err := messages.IDs(l, "nobody-has-written-to-me")
+	if err != nil {
+		t.Fatalf("a mailbox that does not exist yet is empty, not an error: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("want nothing, got %v", ids)
+	}
+
+	for _, id := range []string{"m-ccc", "m-aaa", "m-bbb"} {
+		deliver(t, l, "watcher", id)
+	}
+	ids, err = messages.IDs(l, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(ids, " ") != "m-aaa m-bbb m-ccc" {
+		t.Errorf("ids should be in a stable order, got %v", ids)
+	}
+
+	// What is not a message is not listed: an attachment directory, an unrelated file,
+	// and the temporary file an atomic write leaves behind.
+	if err := os.MkdirAll(filepath.Join(l.Mailbox("watcher"), "m-aaa"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"notes.txt", ".m-ddd.md.tmp1234"} {
+		if err := os.WriteFile(filepath.Join(l.Mailbox("watcher"), name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ids, err = messages.IDs(l, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(ids, " ") != "m-aaa m-bbb m-ccc" {
+		t.Errorf("only messages are listed, got %v", ids)
+	}
+}
+
+// deliver writes one message into a mailbox, with nothing but its identity.
+func deliver(t *testing.T, l workspace.Layout, to, id string) {
+	t.Helper()
+	m := messages.Message{
+		ID:      id,
+		From:    "sender",
+		To:      to,
+		Site:    "build-01",
+		Sent:    messages.Sent(time.Date(2026, 10, 9, 2, 0, 0, 0, time.UTC)),
+		Subject: "subject of " + id,
+	}
+	if err := messages.Deliver(l, m, "body of "+id, nil); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/commit"
+	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -58,6 +60,8 @@ func newCommitCmd() *cobra.Command {
 			// "nothing to commit" reads like a fault.
 			if nothing, err := commit.Nothing(l, paths...); err != nil {
 				return err
+			} else if missing := missingPath(l, paths); missing != "" {
+				return fmt.Errorf("%s is not in this workspace, so there is nothing to record for it", missing)
 			} else if nothing {
 				fmt.Printf("nothing to record: %s is already what the line has\n", strings.Join(paths, ", "))
 				return nil
@@ -76,4 +80,18 @@ func newCommitCmd() *cobra.Command {
 	cmd.Flags().StringVar(&summary, "summary", "", "what changed, in plain language (required)")
 	_ = cmd.MarkFlagRequired("summary")
 	return cmd
+}
+
+// missingPath is the first named path that is not in the workspace, if any.
+//
+// A commit names documents, so a document that is not there is a path that was mistyped
+// rather than an event: saying "nothing to record" about a file that does not exist tells
+// the reader the opposite of what happened.
+func missingPath(l workspace.Layout, paths []string) string {
+	for _, p := range paths {
+		if _, err := os.Stat(filepath.Join(l.Root, p)); err != nil {
+			return p
+		}
+	}
+	return ""
 }

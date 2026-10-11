@@ -13,7 +13,7 @@ is built on them.
 
 ## The designed workspace
 
-The rest of this document describes a workspace created from the template, not this repository. Four words are used throughout. An **actor** is a person or an agent acting through the tooling, identified by a stable name rather than by one run of one process; which actors exist, and where each of them is, is the tooling's knowledge, and this workspace writes down names and nothing else about them. A **job** is one unit of work, and it is what holds everything at runtime: the working directory it occupies, its leases, its payload. An actor holds none of those. A **workspace** is one project's shared thing — the code repository, the asset repository, and the coordination plane — while a **site** is one machine's copy of it, with its own checkouts, working directories, payloads and runtime state. A project may have more than one workspace; a workspace has one or more sites. Records travel between sites through git, and `job/`, `worktree/` and `var/` never leave the machine on their own — the one exception is a payload deliberately bundled for another site.
+The rest of this document describes a workspace created from the template, not this repository. Four words are used throughout. An **actor** is a person or an agent acting through the tooling, identified by one name for as long as it is working rather than by one run of one process; which actors exist, and where each of them is, is the tooling's knowledge, and this workspace writes down names and nothing else about them. A **job** is one unit of work, and it is what holds everything at runtime: the working directory it occupies, its leases, its payload. An actor holds none of those. A **workspace** is one project's shared thing — the code repository, the asset repository, and the coordination plane — while a **site** is one machine's copy of it, with its own checkouts, working directories, payloads and runtime state. A project may have more than one workspace; a workspace has one or more sites. Records travel between sites through git, and `job/`, `worktree/` and `var/` never leave the machine on their own — the one exception is a payload deliberately bundled for another site.
 
 ### Workspace tree
 
@@ -23,6 +23,8 @@ The directory name of a workspace is chosen when it is created; `workspace/` bel
 workspace/
     .git/                            # Coordination repository: versions doc/ and handoff/
     .gitignore                       # Ignore rules, reproduced from the template; never tracked
+    AGENTS.md                        # The entry point for an actor; from the template; never tracked
+    .agents/skills/                  # The workspace's own rules, read on demand; never tracked
     .bare/                           # Code repository (bare), checked out into worktree/
 
     # ── Coordination plane: versioned, identified by job-id, small
@@ -101,11 +103,44 @@ The code repository's commit conventions are the project's own business, and not
 
 ## Workflow
 
+### Handing a workspace to an actor
+
+Whoever starts an actor gives it two facts: the workspace root and a job id. Everything else
+it derives from the workspace, because anything pushed into a prompt is a copy that goes
+stale, while the workspace is where the current answer already is.
+
+An actor also works under a **name**, and the name is what the workspace records — a handoff's
+`agent`, an occupancy's `occupant`, a job's `owner`. One name holds for as long as that actor is
+long as that actor is working: every command of one stretch records the same one. A later session
+may use a different name, and the roster simply stops hearing from the old one. A name is not a
+permission: nothing is refused for being unknown, and the first time one is used it exists.
+
+What the workspace carries to meet it is an **entry point** at its root and the **skill** that
+entry point names: the workspace's own rules, written once — how a name is made, where a thing
+goes, what a record has to say, and in what order to ask — together with whatever the tooling has
+to say about itself, such as that it is still being built. They are the tooling's, reproduced
+from the template the tooling carries; what they state is what is true of every workspace,
+because this document is in none of them, and what they say about the tooling changes with it
+rather than with the workspace, which is why it has no other home. A rule this project decides for
+itself belongs to `doc/convention/`, and what is true only of one job belongs to its brief;
+neither is restated there, and the entry point says where each is. A project that wants its own
+agent guidance writes it where its own guidance already goes: in `doc/convention/`, read in number
+order before the work starts.
+
+The entry point is not the code repository's `AGENTS.md`. That one sits inside a worktree, next
+to the code, is versioned with it, and belongs to the project; a workspace never writes it and
+never reads it. The one at the workspace root is unversioned skeleton, on the same footing as
+the ignore rules: the tooling's, restored rather than merged, and never carried by git.
+
+Nothing depends on the entry point being loaded automatically, and no rule is enforced by
+whether it was. It is there to be read. An actor that never sees it is given the same two facts
+and finds the same records, and the refusals it meets are the same refusals.
+
 ### Opening a job
 
 A job begins when an actor writes down what it is: an id, a goal, what is out of scope, the acceptance criteria, the paths it may touch, and who owns it. Opening produces the brief at `doc/task/<job-id>/brief.md`, the branch `job/<job-id>`, and a labelled working directory, and it is one commit — unless the label it needs has not been declared yet, because declaring a resource is a different event with a commit of its own.
 
-**A label is free when `git worktree list` shows no job branch in it**, after the cleaning the drift rules already call for: an idle working directory is clean and detached. It is occupied when it shows one, and an occupied label is never taken from under the job holding it — the job that wants it ends the stretch as `blocked`, naming that job. Wanting a different area is not a conflict at all: that is a new declaration, and its own commit.
+**A label is free when the code repository's `git worktree list` shows no job branch in it**, after the cleaning the drift rules already call for: an idle working directory is clean and detached. It is occupied when it shows one, and an occupied label is never taken from under the job holding it — the job that wants it ends the stretch as `blocked`, naming that job. Wanting a different area is not a conflict at all: that is a new declaration, and its own commit.
 
 The owner need not be the actor that does the work, and it can be reassigned or given up. While a job has an owner, that is who the next actor asks when the brief is unclear. An owner that gives the job up makes it unowned, and an unowned job may be claimed by whoever takes it up, without asking anyone. What the owner is for is accountability: a job with nobody behind it is a job nobody has promised anything about, and that is a state worth being able to reach deliberately.
 
@@ -113,7 +148,7 @@ The owner need not be the actor that does the work, and it can be reassigned or 
 
 A handoff is what ends a stretch of work, and it is written when the work stops — not between rounds. Until then, work.
 
-1. **Locate.** Your context is two facts: the workspace root and a job id. `git worktree list` shows which label has `job/<job-id>` checked out, and that is where you work. No label may have it — the job may be unstarted, already closed, or its work may have moved to another site — and `handoff/<job-id>/` is what tells you which, because it is empty only in the first case.
+1. **Locate.** Your context is two facts: the workspace root and a job id. `git -C .bare worktree list` shows which label has `job/<job-id>` checked out, and that is where you work. No label may have it — the job may be unstarted, already closed, or its work may have moved to another site — and `handoff/<job-id>/` is what tells you which, because it is empty only in the first case.
 2. **Read.** The brief at `doc/task/<job-id>/brief.md`, then the last file in `handoff/<job-id>/`; its `next` is the baton whoever stopped last left you.
 3. **Take what you need.** If the work needs a unit of a declared resource, take its lease before starting rather than once you are stuck.
 4. **Work.** Stay inside `owned_paths`, commit to `job/<job-id>`, and keep everything that is not source outside the worktree.
@@ -136,6 +171,8 @@ The working directory holds source and the documents that change with it, and no
 **How.** Point the tools there before running them. `TMPDIR`, `XDG_CACHE_HOME` and `XDG_STATE_HOME` cover most of it, and a tool with its own variable has one — `PIP_CACHE_DIR`, `npm_config_cache`, `GOCACHE`, `CARGO_TARGET_DIR`, `PYTHONPYCACHEPREFIX`, `GRADLE_USER_HOME` and so on. The base variables belong to whoever starts the work — a shell, a scheduler, the person at the keyboard — and the tooling can print them for a job; the tool-specific ones are set when the tool is invoked. A job that runs a tool without redirecting it has written outside the workspace, and the next actor cannot see what it left behind.
 
 ### Closing a job
+
+**A job closes once.** Closing a brief that is already `done` or `abandoned` is refused, and nothing is written before the refusal is known — a refused operation that has already changed a record has changed a record, which is exactly what a workspace must not do.
 
 Close when the acceptance criteria hold, or as `abandoned` when they will not. One commit, and it does three things: the brief's `status` is set to `done` or `abandoned`, the brief moves to `doc/archive/task/<job-id>/`, and the payload becomes collectible — `tmp/`, `cache/` and `ckpt/` at once, the rest once the retention window has passed. The move is what keeps `doc/task/` a list of work in flight rather than a list of everything ever done, and it is the only reason `doc/archive/` is mentioned when a job id's uniqueness is checked.
 
@@ -181,8 +218,8 @@ What this buys is one line with no merges and nothing rewritten that has been se
 
 A site is added in two places, and the order matters: the workspace has to know the site exists before the site knows the workspace does.
 
-1. **Declare it, from a site that is already in the workspace.** `doc/resource/site.yaml` is what every site reads to decide who exists, so the declaration comes first: one commit, and one push.
-2. **Join from the new machine, pointing at the coordination repository.** Joining fetches the shared line, checks out, and fills in what a repository cannot carry — the ignore rules, the empty directories, the site's own name, and its own copies of the code and asset repositories. **It commits nothing**: joining does not begin a history, because a second first commit would be a second workspace, with its own idea of which names are taken and which jobs are done, and the two would never agree because neither is wrong. A site the roster does not declare is refused here rather than half-joined.
+1. **Declare it, from a site that is already in the workspace.** `doc/resource/site.yaml` is what every site reads to decide who exists, so the declaration comes first: one commit, and one push. **An empty roster declares nobody**, so a workspace whose roster has never named a site is one no second site can join until somebody names the first — the same rule, read strictly rather than leniently.
+2. **Join from the new machine, pointing at the coordination repository.** Joining fetches the shared line, checks out, and fills in what a repository cannot carry — the ignore rules, the empty directories, the entry point and the skill an actor is handed, the site's own name, and its own copies of the code and asset repositories. **It commits nothing**: joining does not begin a history, because a second first commit would be a second workspace, with its own idea of which names are taken and which jobs are done, and the two would never agree because neither is wrong. A site the roster does not declare is refused here rather than half-joined.
 3. **Enter the reach, on both sides.** How to reach a machine is that machine's own business, so each side writes its own `var/config/<peer>.yaml`; a pair that has to share a claim or a lease has to be able to reach each other, and nothing relays.
 4. **Exchange keys.** SSH is the whole authentication model: the new site's public key goes into each peer's `authorized_keys`, and theirs into its own.
 5. **Let it accept peers, if it should.** A site that accepts none runs no daemon and declares no reach, and everything that needs only its own machine still works.
@@ -208,6 +245,8 @@ Everything inside the brief: how to implement it, what to verify, when to hand o
 Abandoning a job is not in that category: it is the owner's decision, because the owner is who the work was promised to. An actor that wants to abandon a job it does not own asks the owner, and when the owner is an agent, ends the stretch as `blocked` with `blocked_by` naming the job. An unowned job is the exception: nobody has been promised anything, so whoever has claimed it may abandon it.
 
 **You cannot proceed at all.** Stop and record it instead of spinning: `blocked` with `blocked_by` costs one handoff, while a spinning actor costs a context window and tells whoever continues nothing.
+
+**The tooling itself is wrong.** A command that fails, a refusal that contradicts the records, or a file the tooling cannot read is a defect rather than something the actor did — and the workspace has no issue tracker to put it in. Keep the evidence instead of working around it in silence: what was run, what came back, and whatever it left behind, under `job/<job-id>/` and named in the handoff by `artifacts`, so the raw hash outlives the file. It is not a blocked stretch — `blocked_by` names jobs, and a defect is not one — so the status is the one the work actually reached, and what should change is written among the handoff's open questions. A workaround nobody wrote down is a workaround nobody can remove. The format and its tooling are young, and this is the one place a report of that kind has a home.
 
 ### Outside the workflow
 
@@ -326,10 +365,10 @@ Documents that change with the source — a component design, an API reference, 
 
 - Keep the `doc/` hierarchy organized by task and topic. The shape of the tree is the index; listings are read with `ls`, never maintained by hand.
 - A file earns its place only when it carries a decision. Content that is identical in every workspace is a template, not a document; content that changes with the shape of the tree is derived and is never written by hand.
-- Start an agent by giving it two facts: the workspace root and a job id. Everything else it derives — the working directory from `git worktree list`, the rules from `doc/convention/`. Do not rely on a file being auto-loaded: the code repository may ship an `AGENTS.md` of its own, and it is not this workspace's.
+- Start an agent by giving it two facts: the workspace root and a job id. Everything else it derives — the working directory from the code repository's `git worktree list`, the rules from `doc/convention/`. Do not rely on a file being auto-loaded: the entry point at the workspace root and the code repository's `AGENTS.md` are two different files, and it is the second that a worktree holds.
 - Retired documents move to `doc/archive/` rather than being deleted: a retired specification is often the only record of a decision.
 - Files under `job/` are never versioned, and anything that must outlive a job belongs in `store/`.
-- A worktree label names an area of work, never the job occupying it, and is created and removed through the tooling, by an actor. `doc/resource/worktree.yaml` records what each label is for and whether it is one-off; the current occupant is never recorded there, because `git worktree list` already reports it — the checked-out branch is `job/<job-id>`, and a worktree at rest holds no job branch.
+- A worktree label names an area of work, never the job occupying it, and is created and removed through the tooling, by an actor. `doc/resource/worktree.yaml` records what each label is for and whether it is one-off; the current occupant is never recorded there, because the code repository's `git worktree list` already reports it — the checked-out branch is `job/<job-id>`, and a worktree at rest holds no job branch.
 - A job may hold several worktrees, but only one of them can carry the job's branch: git refuses to check out the same branch twice. The others are detached checkouts, used for comparison or reproduction.
 
 ## Naming
@@ -357,7 +396,7 @@ stamp := YYYY "-" MM "-" DD "T" HH "-" MM "-" SS "Z"    # UTC, colons replaced b
 | Convention file | two digits + `-` + `slug` + `.md` | `01-placement.md` |
 | Topic | `slug` | `upload-protocol` |
 | Topic document | `slug` + `.md` | `retry.md` |
-| Actor | `slug`, a stable identity rather than one run of one process | `claude-opus` |
+| Actor | `slug`, one name for as long as that actor works | `claude-opus` |
 
 ### Invariants
 
@@ -403,7 +442,7 @@ Everything mechanical that a record has to satisfy, in one list: a checker has o
 - every `artifacts[]` path lies under `job/<job-id>/`, and every `artifacts[].sha256` is 64 hexadecimal digits;
 - a handoff's body holds its four sections, and a brief's its three;
 - a lease's `resource` names an entry in `doc/resource/`, and its `unit` is no greater than that entry's `capacity`;
-- a lease's `occupant` and a handoff's `agent` are actor names;
+- a handoff's `agent` is an actor name;
 - a manifest's `asset` and `version` equal its directory and file names, and its tag equals `asset` + `@` + `version`;
 - a bundle's `handoff` names a file that exists;
 - every directory under `worktree/` has an entry in `doc/resource/worktree.yaml` — but not the reverse, since a declared entry with no directory is simply not materialised here;
@@ -518,10 +557,11 @@ has to read. A new convention takes the highest number in use plus one, and the 
 writes or rewrites one.
 
 **What an agent is told is not this.** The rules here are the workspace's, and an agent
-reaches them through the workspace itself. How a particular agent or team works is an
-agreement between that agent and whoever runs it, and where it is written down is their
-business — the code repository may ship an `AGENTS.md` of its own, and it is not this
-workspace's.
+reaches them through the workspace itself — through `doc/convention/`, through the brief,
+through the entry point and the skill at the workspace root, and through the refusals it
+gets. How a particular agent or team works is an agreement between that agent and whoever
+runs it, and where it is written down is their business — the code repository may ship an
+`AGENTS.md` of its own, and it is not this workspace's.
 
 ### Brief — `doc/task/<job-id>/brief.md`
 
@@ -589,7 +629,7 @@ A handoff covers one stretch of work. It lives at `handoff/<job-id>/<started-utc
 
 One file per handoff, carrying machine-readable front-matter and a human-readable body. There is no `.md`/`.json` pair; two files drift apart.
 
-One job is worked by one actor at a time, and keeping that true is the tooling's business: nothing on disk can enforce it, because nothing on disk can tell a working actor from a dead one. The site-local record at `var/occupy/<job-id>.yaml` states the claim rather than enforcing it: whoever continues reads the previous handoff before starting, and the tooling records who is on the job. What the files give is narrower but real — a job owns one branch, and that branch has at most one carrying worktree per site, which is what makes `git worktree list` a reliable answer to where the work is. And if the target file name already exists, the writer fails rather than overwrites: never overwriting is the minimum requirement of an append-only record.
+One job is worked by one actor at a time, and keeping that true is the tooling's business: nothing on disk can enforce it, because nothing on disk can tell a working actor from a dead one. The site-local record at `var/occupy/<job-id>.yaml` states the claim rather than enforcing it: whoever continues reads the previous handoff before starting, and the tooling records who is on the job. What the files give is narrower but real — a job owns one branch, and that branch has at most one carrying worktree per site, which is what makes the code repository's `git worktree list` a reliable answer to where the work is. And if the target file name already exists, the writer fails rather than overwrites: never overwriting is the minimum requirement of an append-only record.
 
 #### Front-matter
 
@@ -633,6 +673,10 @@ Four sections, with fixed names and order, so that any handoff can be parsed bli
 All four must be present, and `None.` is a legal body. The last two matter most: "verified" separates *I changed it* from *I proved it works*, and "open questions" is the most useful thing to hand over and the easiest to drop.
 
 #### Lifecycle
+
+**Only a job that is still meant to happen is worked.** A handoff records a stretch of work, so one is refused for a brief whose `status` is not `active` — the same rule a lease already follows. A correction is the exception in form rather than in substance: it covers no work at all, and a correction to a record on a finished job is written by hand and committed like any other document.
+
+**A stretch that is not finished leaves a baton.** `next` is `none` exactly when the status is `done`, and every other stretch says what whoever continues does first — a stretch that stops without saying so tells whoever continues nothing, which is the one thing a handoff is for. Both directions are refused when they are wrong, not only reported later.
 
 1. **Write one whenever you stop**, and not before: stopping to hand over, stopping for the day, stopping because you are blocked, stopping because your context is nearly full, or stopping because the job is finished. Work that runs for many rounds without stopping needs nothing in between.
 2. **Commit before handing off**, because `head` must point at an existing commit: commit first, then write the handoff.
@@ -800,19 +844,18 @@ Only the first three change what the workspace does; `purpose` is there for whoe
 
 **Which site holds a resource is the machine's own business, and it is read from the machines rather than declared.** A declaration travels by git, so every site has every one of them; what a machine actually has does not travel, and cannot be written into the declaration without publishing it. A site therefore says it holds a resource in one of two ways, both of them local: the resource is materialised there, or this site's own half at `var/config/<name>.yaml` says so — which is how a borrowed machine or a shared dependency, with nothing on disk, says where it is. That is the fact home-site leasing is settled from, and asking each site in parallel is what keeps that answer local too.
 
-**The declaration is a recipe, not an inventory.** `git worktree list` says what this site has materialised; the file says what the project intends to exist. A declared entry with no directory is therefore normal — not yet materialised here, or removed and expected back. A directory with no entry is the error, and the tooling reports it.
+**The declaration is a recipe, not an inventory.** The code repository's `git worktree list` says what this site has materialised; the file says what the project intends to exist. A declared entry with no directory is therefore normal — not yet materialised here, or removed and expected back. A directory with no entry is the error, and the tooling reports it.
 
 **Only the tooling writes these files.** Declaring or removing a resource goes through it, one change per commit, and in a multi-site workspace they are not edited by hand — which is what keeps two sites from colliding over a list they both append to. Removing a resource whose directory exists is refused rather than permitted: pulling a working directory out from under whatever is using it is not a thing a permission makes safe.
 
 ### Lease — `var/lease/<resource>.<unit>.yaml`
 
-A lease records that someone holds one unit of a declared resource until a stated time. It is the only runtime record with a mechanism behind it; everything else under `var/` is an agreement about where files go.
+A lease records that one job holds one unit of a declared resource until a stated time. It is the only runtime record with a mechanism behind it; everything else under `var/` is an agreement about where files go.
 
 ```yaml
 # var/lease/gpu.2.yaml
 resource: gpu
 unit: "2"
-occupant: claude-opus
 job: sweep-learning-rate
 since: 2026-10-09T10:00:00Z
 expires: 2026-10-09T12:00:00Z
@@ -822,16 +865,17 @@ expires: 2026-10-09T12:00:00Z
 | --- | --- | --- |
 | `resource` | Always | Must name an entry in `doc/resource/` |
 | `unit` | Always | Which unit, from `1` to the resource's `capacity`; an exclusive resource has only unit `1` |
-| `occupant` | Always | The actor holding it |
-| `job` | Always | The job it is held for; a lease always belongs to a job |
+| `job` | Always | The job that holds it; a lease always belongs to a job |
 | `since` | Always | When it was taken |
 | `expires` | Always | When it becomes reclaimable |
 
 One file per unit, named `<resource>.<unit>.yaml`. The dot separates the two because a resource name is a slug and a slug never contains a dot, so the name is unambiguous and reversible. The unit is quoted because YAML would otherwise read `2` as a number and `01` as octal.
 
-**Expiry is reclaim that works without anyone remembering.** A lease is held across commands rather than for the life of one process, so nothing can release it when its holder dies. A record whose `expires` has passed is free; taking it means overwriting the record, and releasing early means deleting the file.
+**The job is what holds it.** Which actor happens to be working that job is the claim at `var/occupy/` — site-local, and changing with every stretch — so a name written here as well would be a second record of one fact, and the two would disagree the first time a stretch ended without releasing. Everything done to a lease is therefore done by the job that holds it: taking it, renewing it, releasing it.
 
-A lease also belongs to a job, so it dies with one: a lease whose job is `done` or `abandoned` is as free as an expired one. Without that rule, a finished job would keep its unit out of reach until the expiry passed.
+**Expiry is reclaim that works without anyone remembering.** A lease is held across commands rather than for the life of one process, so nothing can release it when the actor working it stops. A record whose `expires` has passed is free; taking it means overwriting the record, and releasing early means deleting the file.
+
+**A lease dies with its job**, so a lease whose job is `done` or `abandoned` is as free as an expired one. Without that rule, a finished job would keep its unit out of reach until the expiry passed.
 
 A lease whose `resource` names nothing in `doc/resource/` is not valid. That is how *everything unversioned must be anchored by something versioned* is checked mechanically, and it is the reason the declarations exist at all.
 
@@ -877,7 +921,9 @@ A bundle carries whatever the job wrote — logs and inputs included — so it i
 
 **Nothing is stored to make that checkable.** The tooling carries the template, so what a workspace is missing is derived by comparing the two, rather than remembered in a version number that would go stale on every site separately. `verify` reports the difference, and one operation brings it up to date.
 
-**What may be written follows from who owns it, and that splits the template in two.** The unversioned skeleton — the empty directories, and the ignore rules in both `.gitignore` and `.git/info/exclude` — belongs to the tooling, so bringing it up to date loses nothing. `doc/template/` belongs to the project: it is versioned, in the shared line, and a workspace may keep a different one on purpose, so a difference there is reported and written only when a person asks for it, and what is written is left uncommitted to be recorded as the event it is. Adopting it at one site is enough: from there it travels like any other record.
+**What may be written follows from who owns it, and that splits the template in two.** The unversioned skeleton — the empty directories, the ignore rules in both `.gitignore` and `.git/info/exclude`, and the entry point and skill an actor is handed — belongs to the tooling, so bringing it up to date loses nothing. `doc/template/` belongs to the project: it is versioned, in the shared line, and a workspace may keep a different one on purpose, so a difference there is reported and written only when a person asks for it, and what is written is left uncommitted to be recorded as the event it is. Adopting it at one site is enough: from there it travels like any other record.
+
+**A map, not a second source of truth.** What the entry point and the skill state is what is true of every workspace, and they never restate a record: the brief, the handoff and the conventions stay the only places a project's rule, a job's intent or a job's evidence is stated. And because the skeleton is the tooling's, a map that has fallen behind is not repaired by editing it — the same comparison that restores a lost ignore rule replaces it whole. What keeps it from falling behind is the same discipline the templates get: a change here that changes what an actor has to do changes the manual in the same commit, because the manual is the only place any of it reaches a workspace.
 
 **Widening what is ignored happens on its own; narrowing it is a decision.** A rule the tooling has and the workspace has lost is restored, because a rule that is gone is a file that could be committed. A rule the workspace has and the tooling does not is kept and reported until somebody decides otherwise. A machine that needs rules of its own uses git's own `core.excludesFile`, which is that machine's business and never travels.
 
@@ -938,6 +984,7 @@ var/msg/<actor>/<id>/<file>      # its attachments, if any
 
 - **It is delivered or refused, and never queued.** The sender's tooling hands the message to the recipient's site; when that site cannot be reached the send fails and says so, because a workspace that assumes delivery is a workspace that loses messages quietly. Once accepted, the message is in the recipient's mailbox and stays there until somebody removes it.
 - **It cannot be retracted or edited, because it may already have started something.** An agent's own tooling may act on a message the moment it arrives, so a correction is another message with `reply_to` set.
+- **It appears whole, or not at all.** Its attachments are written first and the record that names them last, each of them by a rename, so a tool watching a mailbox never sees a message whose bytes have not arrived. That is what lets a harness be woken by a mailbox rather than made to poll it.
 - **Attachments are bytes and nothing more.** They are not assets: no content addressing, no tag, no manifest, and never `store/`. Sending a file this way is the transport, not the record — anything that has to survive is published as an asset and referred to by name.
 - **Nothing parses `subject`, and nothing depends on `id` being readable.** Tools refer to `id`; people read `subject`.
 
@@ -949,5 +996,5 @@ The workspace does not manage processes, evict caches or read secrets. It only s
 
 The following are left open deliberately rather than guessed at:
 
-- **The startup context given to an agent** — what an actor is told when it takes up a job. The workspace's half is settled: two facts, the root and a job id, and everything else is derived from what is in the workspace, including the rules. The base environment variables are not part of it either: the tooling prints them for a job. What is left open is whether the tooling should assemble and hand over that context itself, rather than leaving it to whoever starts the agent.
+- **Whether the tooling assembles a startup context for one job.** The workspace's half is settled twice over: an actor is given two facts, the root and a job id, and the workspace carries an entry point and a skill saying where everything else is derived from, including the rules. The base environment variables are not part of it either: the tooling prints them for a job. What is left open is whether the tooling should gather a job's own context — the brief, the baton, the working directory, the environment — and hand it over itself, rather than leaving the reading to the actor.
 - **How a site discovers the others.** Today the roster is a git declaration, each site enters its own reach by hand, and keys are exchanged once; that is enough for a site to be added reliably, which is what `Joining a site` describes. A discovery protocol is deliberately not designed, and nothing depends on one existing.

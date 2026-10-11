@@ -158,12 +158,12 @@ The parts:
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `create` | Instantiates a workspace from the template: the two bare repositories, the empty runtime directories, the ignore rules in both `.gitignore` and `.git/info/exclude`, this site's own name in `var/site`, and the first coordination commit. | Never a plain file copy. The repositories have to be initialised, not duplicated. |
-| `update` | Brings the unversioned skeleton up to date with the template the tooling carries: the empty directories, and the ignore rules in both copies. Reports the copy-me files under `doc/template/` that differ, and writes them only when a person asks, leaving them uncommitted to be recorded. | Never touches a versioned file on its own initiative, and never removes a directory. Restores a rule the workspace has lost, and keeps a rule the tooling no longer has until `--narrow` says otherwise |
-| `verify` | Runs the whole validation list, including the unversioned skeleton — a directory the template defines that is not there, and an ignore rule the tooling carries that this workspace has lost in either copy — and the values the conventions declare, since a policy nobody can read is a policy nobody has. | Reports; it does not repair. |
+| `create` | Instantiates a workspace from the template: the two bare repositories, the empty runtime directories, the ignore rules in both `.gitignore` and `.git/info/exclude`, the entry point and the skill an actor is handed, this site's own name in `var/site`, and the first coordination commit. | Never a plain file copy. The repositories have to be initialised, not duplicated. |
+| `update` | Brings the unversioned skeleton up to date with the template the tooling carries: the empty directories, the ignore rules in both copies, and the entry point and skill an actor is handed. Reports the copy-me files under `doc/template/` that differ, and writes them only when a person asks, leaving them uncommitted to be recorded. | Never touches a versioned file on its own initiative, and never removes a directory. Restores a rule the workspace has lost, and keeps a rule the tooling no longer has until `--narrow` says otherwise |
+| `verify` | Runs the whole validation list, including the unversioned skeleton — a directory the template defines that is not there, a file the template carries that is not there, and an ignore rule the tooling carries that this workspace has lost in either copy — and the values the conventions declare, since a policy nobody can read is a policy nobody has. | Reports; it does not repair. |
 | `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. |
 | `clean` | The guarded clean of untracked files. | Never a bare `git clean` at the workspace root, which would delete `.bare/` and the entire source history with it. |
-| `join` | Makes this machine another site of a workspace that already exists: takes the shared line from the coordination repository, and fills in what a repository cannot carry — the ignore rules, the empty directories, the site's own name, and its own copies of the code and asset repositories. | Commits nothing: joining does not begin a history, and a second first commit would be a second workspace. Refuses a site the roster does not declare, rather than half-joining one. |
+| `join` | Makes this machine another site of a workspace that already exists: takes the shared line from the coordination repository, and fills in what a repository cannot carry — the ignore rules, the empty directories, the entry point and skill an actor is handed, the site's own name, and its own copies of the code and asset repositories. | Commits nothing: joining does not begin a history, and a second first commit would be a second workspace. Refuses a site the roster does not declare, rather than half-joining one. |
 | *every record write* | Begins by bringing this site up to date from the shared line, and ends by putting the event in it or taking it back out. | The tip of the shared branch is the only piece of exclusion state a coordination write needs: an event is in the line if and only if its parent was. A commit that lost a race was never in the line, so redoing it rewrites nothing that has been seen; a commit whose file moved as well is refused and taken back out, because two versions of one file cannot both be in one line. Nothing is merged, ever |
 | `sync` | Pushes the coordination repository, and at a job move the branch too, at the moments records have to travel: a handoff, a close, a promotion, a job moving. Fetches when a record has to arrive. | A floor rather than a ceiling — pushing more often only makes the backup fresher. Nothing requires a fetch in order to start work. |
 
@@ -184,7 +184,7 @@ Actors reach each other through the tooling rather than through the records: a m
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
 | `send` | Writes a message into another actor's mailbox, at this site or at the recipient's. | Delivered or refused, never queued: a recipient whose site cannot be reached is an error, not a backlog |
-| `inbox`, `read` | Lists a mailbox, and reads one message. | Process information, not records: never committed, never collected, kept until somebody removes it |
+| `inbox`, `read` | Lists a mailbox and reads one message — and can keep reporting what arrives, for a harness that has to be woken rather than to ask. | Process information, not records: never committed, never collected, kept until somebody removes it |
 | `reply` | Sends a message whose `reply_to` names the one being answered. | A message cannot be retracted or edited, because it may already have started something; a correction is another message |
 | `attach` | Carries bytes with a message. | Not an asset: no content addressing, no tag, no manifest, and never `store/`. Anything that has to survive is published as an asset and referred to by name |
 | `purge` | Removes a message and its attachments from a mailbox. | Manual on purpose: nothing collects messages, because nothing can know which of them still matter |
@@ -197,7 +197,7 @@ Actors reach each other through the tooling rather than through the records: a m
 | `open` | Writes the brief, creates the branch, and materialises a labelled working directory. | One commit — unless the label has to be declared first, because that is a different event with a commit of its own. |
 | `claim` | Sets `owner` on a job that has none. | The tooling settles simultaneous claims; nothing on disk can. |
 | `reassign`, `relinquish` | Changes or clears `owner`, on the owner's decision, or on a person's when the owner has become unreachable. | One commit. A job owned by an actor who no longer exists would otherwise be stuck forever. |
-| `close` | Sets the final `status`, moves the brief to `doc/archive/task/<job-id>/`, releases the label and any lease the job still holds. | One `close` commit. It merges nothing. |
+| `close` | Sets the final `status`, moves the brief to `doc/archive/task/<job-id>/`, releases the label and any lease the job still holds. | One `close` commit. It merges nothing. A brief that has already closed is refused, before anything is written. |
 | `add worktree` | Checks the job's branch out into a label, for the job to work in, or detached, for comparison or reproduction. | Refuses a label that already holds a job branch. A label that is clean and detached is free, once the cleaning the drift rules require has been done. |
 | `release worktree` | Leaves the working directory clean and detached, and destroys it when the declaration says one-off. | |
 
@@ -213,11 +213,11 @@ Actors reach each other through the tooling rather than through the records: a m
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `declare`, `remove` | Adds or removes an entry in `doc/resource/<kind>.yaml`. | One change per commit, serialised: it is the one file that holds several entries. Removal is refused while the resource is materialised, because pulling a working directory out from under its user is not something a permission makes safe. |
+| `declare`, `remove` | Adds or removes an entry in `doc/resource/<kind>.yaml`. | One change per commit, serialised: it is the one file that holds several entries. A name already used by another kind is refused, because a name is unique across every kind. Removal is refused while the resource is materialised, because pulling a working directory out from under its user is not something a permission makes safe. |
 | `resources` | Lists what the project has declared, by kind. | |
 | `take lease` | Picks a free unit up to the resource's `capacity` and writes the record with an expiry. | Refuses an occupied unit. Writes the unit quoted, or YAML reads `02` as octal. |
-| `renew`, `release` | Extends a lease, or deletes the record. | Releasing early means deleting the file. |
-| `leases` | Lists who holds what. | An expired record is free, and so is one whose job has closed. |
+| `renew`, `release` | Extends the lease a job holds, or deletes the record. | A lease is renewed or released by the job that holds it, and by no other. Releasing early means deleting the file. |
+| `leases` | Lists what each job holds. | An expired record is free, and so is one whose job has closed. |
 
 ## Assets
 
@@ -233,7 +233,7 @@ Actors reach each other through the tooling rather than through the records: a m
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `write handoff` | Writes `handoff/<job-id>/<started-utc>.md`, the time coming from the file name's form. | Refuses an existing file name: never overwriting is the minimum an append-only record owes. |
+| `write handoff` | Writes `handoff/<job-id>/<started-utc>.md`, the time coming from the file name's form. | Refuses an existing file name: never overwriting is the minimum an append-only record owes. Refuses a brief that is not `active`, because a handoff covers a stretch of work, and refuses a `next` that disagrees with the status: `none` belongs to `done`, and every other stretch leaves a baton. |
 | `commit` | Stages the files of one coordination event and commits them with the message form. | One event per commit. Serialising concurrent commits is the tooling's. |
 | `collect` | Applies the retention policy to the payloads of closed jobs: the cheap half goes at the close, and the rest once the window has passed. The window is a policy value, so it is read from the conventions — `collect.window` — and `--window` overrides it once. | Never collects a payload whose brief says `keep: true`, and never makes a record false: every artifact a handoff names keeps its raw hash, so a collected artifact is a detectable absence. A window the conventions state but the tooling cannot read is an error rather than a default. |
 

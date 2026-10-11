@@ -309,7 +309,7 @@ func newLeaseCmd() *cobra.Command {
 				resp, err := daemon.NewPeers(l).Ask(where.ref, daemon.Request{
 					Verb: daemon.VerbLeaseTake,
 					Args: daemon.Args(map[string]any{
-						"resource": resource, "unit": unit, "occupant": actor,
+						"resource": resource, "unit": unit,
 						"job": jobID, "ttl_seconds": int(ttl.Seconds()),
 					}),
 				})
@@ -324,7 +324,7 @@ func newLeaseCmd() *cobra.Command {
 				return nil
 			}
 			lease, err := leases.Take(l, leases.Request{
-				Resource: resource, Unit: unit, Occupant: actor, Job: jobID, TTL: ttl,
+				Resource: resource, Unit: unit, Job: jobID, TTL: ttl,
 			}, time.Now().UTC())
 			if err != nil {
 				return err
@@ -337,7 +337,7 @@ func newLeaseCmd() *cobra.Command {
 
 	renew := &cobra.Command{
 		Use:   "renew",
-		Short: "Extend a lease you hold",
+		Short: "Extend the lease a job holds",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := layout()
@@ -349,7 +349,7 @@ func newLeaseCmd() *cobra.Command {
 				resp, err := daemon.NewPeers(l).Ask(where.ref, daemon.Request{
 					Verb: daemon.VerbLeaseRenew,
 					Args: daemon.Args(map[string]any{
-						"resource": resource, "unit": unit, "occupant": actor,
+						"resource": resource, "unit": unit,
 						"job": jobID, "ttl_seconds": int(ttl.Seconds()),
 					}),
 				})
@@ -364,7 +364,7 @@ func newLeaseCmd() *cobra.Command {
 				return nil
 			}
 			lease, err := leases.Renew(l, leases.Request{
-				Resource: resource, Unit: unit, Occupant: actor, Job: jobID, TTL: ttl,
+				Resource: resource, Unit: unit, Job: jobID, TTL: ttl,
 			}, time.Now().UTC())
 			if err != nil {
 				return err
@@ -377,7 +377,7 @@ func newLeaseCmd() *cobra.Command {
 
 	release := &cobra.Command{
 		Use:   "release",
-		Short: "Release a lease you hold",
+		Short: "Release the lease a job holds",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := layout()
@@ -389,7 +389,7 @@ func newLeaseCmd() *cobra.Command {
 				if _, err := daemon.NewPeers(l).Ask(where.ref, daemon.Request{
 					Verb: daemon.VerbLeaseRelease,
 					Args: daemon.Args(map[string]string{
-						"resource": resource, "unit": unit, "occupant": actor,
+						"resource": resource, "unit": unit, "job": jobID,
 					}),
 				}); err != nil {
 					return err
@@ -397,7 +397,7 @@ func newLeaseCmd() *cobra.Command {
 				fmt.Printf("released %s.%s at %s\n", resource, unit, where.remote)
 				return nil
 			}
-			if err := leases.Release(l, resource, unit, actor); err != nil {
+			if err := leases.Release(l, resource, unit, jobID); err != nil {
 				return err
 			}
 			fmt.Printf("released %s.%s\n", resource, unit)
@@ -406,8 +406,10 @@ func newLeaseCmd() *cobra.Command {
 	}
 	release.Flags().StringVar(&resource, "resource", "", "the resource (required)")
 	release.Flags().StringVar(&unit, "unit", "", "which unit (required)")
+	release.Flags().StringVar(&jobID, "job", "", "the job that holds it (required)")
 	_ = release.MarkFlagRequired("resource")
 	_ = release.MarkFlagRequired("unit")
+	_ = release.MarkFlagRequired("job")
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -424,8 +426,8 @@ func newLeaseCmd() *cobra.Command {
 				if free, _ := leases.Free(layout(), lease, now); free {
 					state = "free"
 				}
-				fmt.Printf("%-20s %-6s %-14s %-28s until %s\n",
-					lease.Resource+"."+lease.Unit, state, lease.Occupant, lease.Job, lease.Expires)
+				fmt.Printf("%-20s %-6s %-28s until %s\n",
+					lease.Resource+"."+lease.Unit, state, lease.Job, lease.Expires)
 			}
 			return nil
 		},
@@ -463,7 +465,12 @@ func newCollectCmd() *cobra.Command {
 			// The window is policy, and policy lives with the rule that uses it: the
 			// convention says how long a payload is kept, and --window overrides it once.
 			if !cmd.Flags().Changed("window") {
-				values, _, err := convention.Read(l)
+				// The problems are not decoration: a key declared twice means the file
+				// order decides the policy, and a value nobody can read is not a default.
+				values, problems, err := convention.Read(l)
+				if err == nil && len(problems) > 0 {
+					return fmt.Errorf("%s", problems[0].What)
+				}
 				if err != nil {
 					return err
 				}

@@ -139,6 +139,32 @@ func List(l workspace.Layout, actor string) ([]Message, error) {
 	return out, nil
 }
 
+// IDs are the messages in a mailbox, by id, in a stable order.
+//
+// It reads names rather than records, which is what a caller that is watching a mailbox
+// needs: the question it asks on every pass is "is there anything here I have not seen",
+// and parsing every message to answer it would grow with the mailbox rather than with
+// what arrived. A message is complete when its name is there — see Deliver.
+func IDs(l workspace.Layout, actor string) ([]string, error) {
+	entries, err := os.ReadDir(l.Mailbox(actor))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // a mailbox nobody has written to yet
+		}
+		return nil, err
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		out = append(out, strings.TrimSuffix(name, ".md"))
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 // Read returns one message and its body.
 func Read(l workspace.Layout, actor, id string) (Message, []byte, error) {
 	path := filepath.Join(l.Mailbox(actor), id+".md")

@@ -61,8 +61,9 @@ func Current(l workspace.Layout) error {
 	if dirty := trackedDirty(l); dirty != "" {
 		return fmt.Errorf("this site has %d record commits that are not published, and %s is uncommitted: records that are not yet in the line are brought up to date before files are written, and that cannot be done with a change in the way", ahead, dirty)
 	}
-	if _, err := gitx.Run(l.Root, "rebase", "--quiet", up); err != nil {
-		_, _ = gitx.Run(l.Root, "rebase", "--abort")
+	args := append(gitx.IdentityArgs(l.Root, ""), "rebase", "--quiet", up)
+	if _, err := gitx.Run(l.Root, args...); err != nil {
+		_, _ = gitx.Run(l.Root, append(gitx.IdentityArgs(l.Root, ""), "rebase", "--abort")...)
 		return fmt.Errorf("the %d record commits this site has not published do not go together with what was published elsewhere: nothing was changed here, and nothing was merged", ahead)
 	}
 	return nil

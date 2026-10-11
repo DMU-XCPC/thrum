@@ -19,21 +19,18 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
-// Request is what taking or renewing a lease needs.
+// Request is what taking or renewing a lease needs. A lease is held by a job, so the
+// job is the whole of who is asking.
 type Request struct {
 	Resource string
 	// Unit is which unit, or empty to take the first free one.
-	Unit     string
-	Occupant string
-	Job      string
-	TTL      time.Duration
+	Unit string
+	Job  string
+	TTL  time.Duration
 }
 
 // Take writes a lease, refusing a unit that somebody else holds.
 func Take(l workspace.Layout, r Request, now time.Time) (format.Lease, error) {
-	if !format.ValidSlug(r.Occupant) {
-		return format.Lease{}, fmt.Errorf("%q is not an actor name", r.Occupant)
-	}
 	if r.Job == "" {
 		return format.Lease{}, fmt.Errorf("a lease always belongs to a job")
 	}
@@ -53,6 +50,18 @@ func Take(l workspace.Layout, r Request, now time.Time) (format.Lease, error) {
 	capacity, err := Capacity(l, r.Resource)
 	if err != nil {
 		return format.Lease{}, err
+	}
+	// An explicit unit is bounded here rather than only noticed by verify afterwards: a
+	// unit above the capacity is not a unit, and holding one would hold nothing — which is
+	// the one thing a lease exists to prevent.
+	if r.Unit != "" {
+		n, err := strconv.Atoi(r.Unit)
+		if err != nil || n < 1 {
+			return format.Lease{}, fmt.Errorf("%q is not a unit: a unit is a number from 1 up", r.Unit)
+		}
+		if n > capacity {
+			return format.Lease{}, fmt.Errorf("%s has %d unit(s), so %q is not one of them", r.Resource, capacity, r.Unit)
+		}
 	}
 
 	units := []string{r.Unit}
@@ -85,7 +94,6 @@ func takeUnit(l workspace.Layout, r Request, unit string, now time.Time) (format
 	lease := format.Lease{
 		Resource: r.Resource,
 		Unit:     unit,
-		Occupant: r.Occupant,
 		Job:      r.Job,
 		Since:    now.UTC().Format(format.RFC3339UTC),
 		Expires:  now.Add(r.TTL).UTC().Format(format.RFC3339UTC),
@@ -108,7 +116,7 @@ func takeUnit(l workspace.Layout, r Request, unit string, now time.Time) (format
 			return nil, err
 		}
 		if !free {
-			return nil, fmt.Errorf("%s.%s is held by %s until %s", r.Resource, unit, held.Occupant, held.Expires)
+			return nil, fmt.Errorf("%s.%s is held for %s until %s", r.Resource, unit, held.Job, held.Expires)
 		}
 		// Taking an expired record means overwriting it.
 		return encoded, nil
@@ -131,8 +139,8 @@ func Renew(l workspace.Layout, r Request, now time.Time) (format.Lease, error) {
 		if err := format.DecodeLoose(current, &held); err != nil {
 			return nil, err
 		}
-		if held.Occupant != r.Occupant {
-			return nil, fmt.Errorf("%s.%s is held by %s, not %s", r.Resource, r.Unit, held.Occupant, r.Occupant)
+		if held.Job != r.Job {
+			return nil, fmt.Errorf("%s.%s is held for %s, not %s", r.Resource, r.Unit, held.Job, r.Job)
 		}
 		held.Expires = now.Add(r.TTL).UTC().Format(format.RFC3339UTC)
 		out = held
@@ -141,8 +149,12 @@ func Renew(l workspace.Layout, r Request, now time.Time) (format.Lease, error) {
 	return out, err
 }
 
-// Release deletes a lease. Releasing early means deleting the file.
-func Release(l workspace.Layout, resource, unit, occupant string) error {
+// Release deletes a lease, and only the job that holds it may. Releasing early means
+// deleting the file.
+func Release(l workspace.Layout, resource, unit, job string) error {
+	if job == "" {
+		return fmt.Errorf("a lease is released by the job that holds it, so releasing one names a job")
+	}
 	path := l.LeaseFile(resource, unit)
 	return atomic.Replace(path, func(current []byte) ([]byte, error) {
 		if current == nil {
@@ -152,8 +164,8 @@ func Release(l workspace.Layout, resource, unit, occupant string) error {
 		if err := format.DecodeLoose(current, &held); err != nil {
 			return nil, err
 		}
-		if occupant != "" && held.Occupant != occupant {
-			return nil, fmt.Errorf("%s.%s is held by %s, not %s", resource, unit, held.Occupant, occupant)
+		if held.Job != job {
+			return nil, fmt.Errorf("%s.%s is held for %s, not %s", resource, unit, held.Job, job)
 		}
 		return nil, nil
 	})

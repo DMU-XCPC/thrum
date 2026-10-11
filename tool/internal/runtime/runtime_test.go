@@ -199,14 +199,14 @@ func TestLeasesExcludeAndExpire(t *testing.T) {
 	openJob(t, l, "job-two")
 	// A lease always belongs to a job the workspace knows.
 	if _, err := leases.Take(l, leases.Request{
-		Resource: "gpu", Occupant: "claude-opus", Job: "no-such-job", TTL: time.Hour,
+		Resource: "gpu", Job: "no-such-job", TTL: time.Hour,
 	}, time.Now().UTC()); err == nil {
 		t.Error("a lease for a job the workspace does not know should be refused")
 	}
 	now := time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC)
 
 	first, err := leases.Take(l, leases.Request{
-		Resource: "gpu", Occupant: "claude-opus", Job: "job-one", TTL: time.Hour,
+		Resource: "gpu", Job: "job-one", TTL: time.Hour,
 	}, now)
 	if err != nil {
 		t.Fatal(err)
@@ -217,30 +217,35 @@ func TestLeasesExcludeAndExpire(t *testing.T) {
 
 	// A second holder is refused while the first is live.
 	if _, err := leases.Take(l, leases.Request{
-		Resource: "gpu", Occupant: "claude-sonnet", Job: "job-two", TTL: time.Hour,
+		Resource: "gpu", Job: "job-two", TTL: time.Hour,
 	}, now); err == nil {
 		t.Fatal("taking a held unit should be refused")
 	}
 
 	// Once its time has passed it is free, and taking it overwrites the record.
-	taken, err := leases.Take(l, leases.Request{
-		Resource: "gpu", Occupant: "claude-sonnet", Job: "job-two", TTL: time.Hour,
-	}, now.Add(2*time.Hour))
-	if err != nil {
+	if _, err := leases.Take(l, leases.Request{
+		Resource: "gpu", Job: "job-two", TTL: time.Hour,
+	}, now.Add(2*time.Hour)); err != nil {
 		t.Fatalf("an expired lease should be free: %v", err)
 	}
-	if taken.Occupant != "claude-sonnet" {
-		t.Errorf("occupant: %q", taken.Occupant)
-	}
 
-	// Renewal belongs to the holder.
+	// Renewal belongs to the job that holds it, and to no other.
 	if _, err := leases.Renew(l, leases.Request{
-		Resource: "gpu", Unit: "1", Occupant: "claude-opus", Job: "job-one", TTL: time.Hour,
-	}, now); err == nil {
-		t.Error("renewing somebody else's lease should be refused")
+		Resource: "gpu", Unit: "1", Job: "job-one", TTL: time.Hour,
+	}, now.Add(2*time.Hour)); err == nil {
+		t.Error("renewing another job's lease should be refused")
+	}
+	if _, err := leases.Renew(l, leases.Request{
+		Resource: "gpu", Unit: "1", Job: "job-two", TTL: time.Hour,
+	}, now.Add(2*time.Hour)); err != nil {
+		t.Errorf("the job holding it should be able to renew: %v", err)
 	}
 
-	if err := leases.Release(l, "gpu", "1", "claude-sonnet"); err != nil {
+	// So does release.
+	if err := leases.Release(l, "gpu", "1", "job-one"); err == nil {
+		t.Error("releasing another job's lease should be refused")
+	}
+	if err := leases.Release(l, "gpu", "1", "job-two"); err != nil {
 		t.Fatal(err)
 	}
 	held, err := leases.Held(l)
@@ -262,18 +267,18 @@ func TestCapacityAllowsSeveralHolders(t *testing.T) {
 	openJob(t, l, "job-three")
 	now := time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC)
 
-	a, err := leases.Take(l, leases.Request{Resource: "gpu", Occupant: "one", Job: "job-one", TTL: time.Hour}, now)
+	a, err := leases.Take(l, leases.Request{Resource: "gpu", Job: "job-one", TTL: time.Hour}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := leases.Take(l, leases.Request{Resource: "gpu", Occupant: "two", Job: "job-two", TTL: time.Hour}, now)
+	b, err := leases.Take(l, leases.Request{Resource: "gpu", Job: "job-two", TTL: time.Hour}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a.Unit == b.Unit {
 		t.Errorf("two holders were given the same unit: %q", a.Unit)
 	}
-	if _, err := leases.Take(l, leases.Request{Resource: "gpu", Occupant: "three", Job: "job-three", TTL: time.Hour}, now); err == nil {
+	if _, err := leases.Take(l, leases.Request{Resource: "gpu", Job: "job-three", TTL: time.Hour}, now); err == nil {
 		t.Error("a full resource should refuse a third holder")
 	}
 }
@@ -294,7 +299,7 @@ func TestAClosedJobIsNotLeasedFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := leases.Take(l, leases.Request{
-		Resource: "gpu", Occupant: "one", Job: "old-job", TTL: time.Hour,
+		Resource: "gpu", Job: "old-job", TTL: time.Hour,
 	}, time.Now().UTC()); err == nil {
 		t.Error("a lease for a closed job should be refused")
 	}
@@ -302,7 +307,7 @@ func TestAClosedJobIsNotLeasedFor(t *testing.T) {
 	// But a record that closed job left behind is free for a live one.
 	openJob(t, l, "live-job")
 	if _, err := leases.Take(l, leases.Request{
-		Resource: "gpu", Occupant: "one", Job: "live-job", TTL: time.Hour,
+		Resource: "gpu", Job: "live-job", TTL: time.Hour,
 	}, time.Now().UTC()); err != nil {
 		t.Fatalf("a live job should be able to take it: %v", err)
 	}
@@ -315,7 +320,7 @@ func TestAClosedJobIsNotLeasedFor(t *testing.T) {
 	}
 	openJob(t, l, "next-job")
 	if _, err := leases.Take(l, leases.Request{
-		Resource: "gpu", Occupant: "two", Job: "next-job", TTL: time.Hour,
+		Resource: "gpu", Job: "next-job", TTL: time.Hour,
 	}, time.Now().UTC()); err != nil {
 		t.Fatalf("a closed job's lease should be free: %v", err)
 	}
@@ -331,10 +336,10 @@ func TestALeaseDiesWithItsJob(t *testing.T) {
 	// A job that is live holds its lease.
 	openJob(t, l, "job-one")
 	openJob(t, l, "job-two")
-	if _, err := leases.Take(l, leases.Request{Resource: "gpu", Occupant: "one", Job: "job-one", TTL: time.Hour}, now); err != nil {
+	if _, err := leases.Take(l, leases.Request{Resource: "gpu", Job: "job-one", TTL: time.Hour}, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := leases.Take(l, leases.Request{Resource: "gpu", Occupant: "two", Job: "job-two", TTL: time.Hour}, now); err == nil {
+	if _, err := leases.Take(l, leases.Request{Resource: "gpu", Job: "job-two", TTL: time.Hour}, now); err == nil {
 		t.Fatal("a live job's lease should hold")
 	}
 
@@ -342,7 +347,7 @@ func TestALeaseDiesWithItsJob(t *testing.T) {
 	if err := os.RemoveAll(l.TaskDir("job-one")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := leases.Take(l, leases.Request{Resource: "gpu", Occupant: "two", Job: "job-two", TTL: time.Hour}, now); err != nil {
+	if _, err := leases.Take(l, leases.Request{Resource: "gpu", Job: "job-two", TTL: time.Hour}, now); err != nil {
 		t.Fatalf("a closed job's lease should be free: %v", err)
 	}
 }

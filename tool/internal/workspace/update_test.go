@@ -65,6 +65,57 @@ func TestDriftIsDerivedAndTheSkeletonIsRestored(t *testing.T) {
 	}
 }
 
+// The agent entry point and the skill it names are the tooling's, like the ignore rules:
+// losing one is derived rather than remembered, reported by verify, and restored by
+// update. Nothing reads what a workspace wrote there, which is what keeps the map a map.
+func TestTheAgentSkeletonIsRestoredAndNeverMerged(t *testing.T) {
+	l := workspaceFor(t, "build-01")
+
+	entry := filepath.Join(l.Root, "AGENTS.md")
+	if err := os.Remove(entry); err != nil {
+		t.Fatal(err)
+	}
+	skill := filepath.Join(l.Root, ".agents", "skills", "workspace-actor", "SKILL.md")
+	mine := []byte("---\nname: workspace-actor\ndescription: ours\n---\n\nWe say it differently here.\n")
+	if err := os.WriteFile(skill, mine, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	drift, err := workspace.Compare(l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(drift.Skeleton) != 2 {
+		t.Fatalf("both files should have drifted: %+v", drift.Skeleton)
+	}
+
+	// verify reports it, and says which one is simply gone.
+	findings := validate.Validate(l)
+	if !mentions(findings, "AGENTS.md") || !mentions(findings, "SKILL.md") {
+		t.Errorf("verify should report the skeleton: %v", findings)
+	}
+	if !mentions(findings, "is not there") {
+		t.Errorf("verify should say the entry point is not there: %v", findings)
+	}
+
+	res, err := workspace.Update(l, workspace.UpdateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.SkeletonWritten) != 2 {
+		t.Fatalf("update should restore the skeleton: %+v", res)
+	}
+	if got, err := os.ReadFile(skill); err != nil || string(got) == string(mine) {
+		t.Errorf("update should have replaced the workspace's copy: %v", err)
+	}
+	if drift, err = workspace.Compare(l); err != nil || !drift.Empty() {
+		t.Errorf("after updating there should be no drift: %+v %v", drift, err)
+	}
+	if findings := validate.Validate(l); len(findings) != 0 {
+		t.Errorf("after updating verify should be quiet: %v", findings)
+	}
+}
+
 // Losing an ignore rule is the safety half: it is reported, restored, and the workspace's
 // own extra rules survive unless narrowing is asked for.
 func TestTheIgnoreRulesAreRestoredAndExtrasAreKept(t *testing.T) {

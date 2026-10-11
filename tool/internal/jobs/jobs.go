@@ -169,8 +169,16 @@ func WriteHandoff(l workspace.Layout, o HandoffOptions) (string, error) {
 	if err := commit.Current(l); err != nil {
 		return "", err
 	}
-	if workspace.JobExists(l, o.Job) == false {
-		return "", fmt.Errorf("no brief for job %q", o.Job)
+	brief, _, err := workspace.ReadBrief(l, o.Job)
+	if err != nil {
+		return "", err
+	}
+	// Only a job that is still meant to happen is worked, so only its stretches are
+	// recorded: a job that is done or abandoned has none. A correction to a record on a
+	// finished job covers no work at all, and is written by hand and committed like any
+	// other document rather than through here.
+	if brief.Status != format.StatusActive {
+		return "", fmt.Errorf("%s is %s, and only a job that is still meant to happen is worked", o.Job, brief.Status)
 	}
 	if !format.ValidSlug(o.Agent) {
 		return "", fmt.Errorf("%q is not an actor name: an actor name is a slug", o.Agent)
@@ -221,6 +229,15 @@ func WriteHandoff(l workspace.Layout, o HandoffOptions) (string, error) {
 	if h.Status == format.HandoffDone && h.Next == "" {
 		h.Next = "none"
 	}
+	// Whatever case it arrives in, the record carries the one the design gives.
+	if strings.EqualFold(strings.TrimSpace(h.Next), "none") {
+		h.Next = "none"
+	}
+	for _, a := range h.Artifacts {
+		if !strings.HasPrefix(a.Path, "job/"+o.Job+"/") || strings.HasPrefix(a.Path, "../") || filepath.IsAbs(a.Path) {
+			return "", fmt.Errorf("an artifact path lies under `job/%s/`, relative to the workspace root, and %q does not", o.Job, a.Path)
+		}
+	}
 	if err := validateStatus(h); err != nil {
 		return "", err
 	}
@@ -269,8 +286,15 @@ func Close(l workspace.Layout, job, status, summary string) (string, error) {
 		return "", fmt.Errorf("a job closes as %q or %q, not %q",
 			format.StatusDone, format.StatusAbandoned, status)
 	}
-	if _, _, err := workspace.ReadBrief(l, job); err != nil {
+	brief, _, err := workspace.ReadBrief(l, job)
+	if err != nil {
 		return "", err
+	}
+	// Nothing is written before this is known. A refusal that has already changed a record
+	// is worse than a refusal: a job is closed once, and asking twice must leave the brief
+	// exactly as it was.
+	if brief.Status != format.StatusActive {
+		return "", fmt.Errorf("%s is %s already: a job is closed once", job, brief.Status)
 	}
 	if _, err := workspace.EditBrief(l, job, func(b *format.Brief) error {
 		b.Status = status
@@ -338,7 +362,7 @@ func releaseLeases(l workspace.Layout, job string) error {
 		if lease.Job != job {
 			continue
 		}
-		if err := leases.Release(l, lease.Resource, lease.Unit, ""); err != nil {
+		if err := leases.Release(l, lease.Resource, lease.Unit, job); err != nil {
 			return err
 		}
 	}
@@ -348,12 +372,25 @@ func releaseLeases(l workspace.Layout, job string) error {
 // SetOwner sets or clears a job's owner. A job with no owner is one nobody is
 // responsible for: it has either never been assigned or been given up, and either way
 // whoever takes it up may claim it without asking.
-func SetOwner(l workspace.Layout, job, owner, summary string) (string, error) {
+func SetOwner(l workspace.Layout, job, owner, by, summary string) (string, error) {
 	if err := commit.Current(l); err != nil {
 		return "", err
 	}
 	if owner != "" && !format.ValidSlug(owner) {
 		return "", fmt.Errorf("%q is not an actor name", owner)
+	}
+	brief, _, err := workspace.ReadBrief(l, job)
+	if err != nil {
+		return "", err
+	}
+	// An owner is who the work was promised to, so ownership changes in only two ways: the
+	// owner reassigns it or gives it up, or somebody takes up a job that has no owner. Any
+	// other actor taking an owned job is taking a promise it did not make.
+	if brief.Owner != "" && brief.Owner != by {
+		return "", fmt.Errorf("%s is owned by %s, and only its owner may reassign it or give it up", job, brief.Owner)
+	}
+	if brief.Owner == owner {
+		return "", nil // nothing to change, and nothing to record
 	}
 	path, err := workspace.EditBrief(l, job, func(b *format.Brief) error {
 		b.Owner = owner
@@ -465,8 +502,19 @@ func validateStatus(h format.Handoff) error {
 	default:
 		return fmt.Errorf("a handoff is done, partial, blocked or aborted, not %q", h.Status)
 	}
-	if h.Status == format.HandoffDone && h.Next != "none" {
+	// `none` is a value rather than a spelling, and the two directions of this rule are
+	// one rule: it is what a finished stretch says, and what no other stretch may say.
+	nextIsNone := strings.EqualFold(strings.TrimSpace(h.Next), "none")
+	if h.Status == format.HandoffDone && !nextIsNone {
 		return fmt.Errorf("a finished handoff says next: none")
+	}
+	if h.Status != format.HandoffDone {
+		if nextIsNone {
+			return fmt.Errorf("`next` is `none` exactly when the status is `done`, and this stretch is %s", h.Status)
+		}
+		if strings.TrimSpace(h.Next) == "" {
+			return fmt.Errorf("a stretch that is not finished leaves a baton: say what whoever continues does first")
+		}
 	}
 	if (h.Status == format.HandoffBlocked) != (len(h.BlockedBy) > 0) {
 		return fmt.Errorf("blocked_by belongs to a blocked handoff and to no other")

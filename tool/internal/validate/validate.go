@@ -92,11 +92,11 @@ func (v *validator) run() {
 }
 
 // checkSkeleton reports the unversioned skeleton the tooling carries: the directories a
-// workspace is made of, and the ignore rules that keep build state out of the source
-// history.
+// workspace is made of, the files it materialises for an actor, and the ignore rules that
+// keep build state out of the source history.
 //
-// Neither is in a repository, so neither can be checked against a record — which is
-// exactly why both are what drifts when the tooling moves on, and why this check exists
+// None of them is in a repository, so none can be checked against a record — which is
+// exactly why they are what drifts when the tooling moves on, and why this check exists
 // rather than being left to the tooling that wrote them.
 func (v *validator) checkSkeleton() {
 	drift, err := workspace.Compare(v.l)
@@ -105,6 +105,13 @@ func (v *validator) checkSkeleton() {
 	}
 	for _, dir := range drift.MissingDirs {
 		v.add(dir, "the workspace has every directory the template defines", "the directory is not there")
+	}
+	for _, file := range drift.Skeleton {
+		what := "it is not the copy the tooling carries"
+		if len(file.Workspace) == 0 {
+			what = "it is not there"
+		}
+		v.add(file.Path, "the workspace holds the skeleton the tooling materialises", "%s", what)
 	}
 	if len(drift.IgnoreMissing) > 0 {
 		v.add("", "the ignore rules are the tooling's list, in both copies",
@@ -391,9 +398,6 @@ func (v *validator) checkLeases() {
 					"unit %d, capacity %d", n, cap)
 			}
 		}
-		if !format.ValidSlug(lease.Occupant) {
-			v.add(where, "an occupant is an actor name", "%q is not one", lease.Occupant)
-		}
 	}
 }
 
@@ -442,6 +446,11 @@ func (v *validator) checkConventions() {
 		}
 		seen[n] = name
 		v.checkH1File(where, path)
+		// A convention is a rule rather than a record: what it has to say about itself is
+		// its number, and that is in its name.
+		if raw, err := os.ReadFile(path); err == nil && strings.HasPrefix(strings.TrimSpace(string(raw)), "---") {
+			v.add(where, "a convention carries no front-matter", "it starts with one")
+		}
 	}
 
 	// The values a convention declares are how a project's policy reaches the tooling, so
@@ -465,7 +474,20 @@ func (v *validator) checkConventions() {
 func (v *validator) checkTopics() {
 	base := v.l.Topic()
 	_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			// The first component is the topic, so the topic's own directory is the one
+			// directly under doc/topic/ — and it says what it covers in its overview.md.
+			if path != base && filepath.Dir(path) == filepath.Clean(base) {
+				if _, err := os.Stat(filepath.Join(path, "overview.md")); err != nil {
+					v.add(v.rel(path), "a topic says what it covers in `overview.md`", "there is none")
+				}
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".md") {
 			return nil
 		}
 		v.checkH1File(v.rel(path), path)

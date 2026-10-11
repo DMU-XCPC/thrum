@@ -1,0 +1,20 @@
+{
+  "name": "thrum-mailbox-dsh",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wake a DSH session when the actor it works as receives a message in a thrum workspace",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2"
+  }
+}

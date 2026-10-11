@@ -314,8 +314,8 @@ func (r *Report) Print(w io.Writer) {
 		if Expired(lease, now) {
 			free = "expired"
 		}
-		fmt.Fprintf(w, "  %-20s %-10s %-14s %s\n",
-			lease.Resource+"."+lease.Unit, free, lease.Occupant, lease.Expires)
+		fmt.Fprintf(w, "  %-20s %-10s %-28s %s\n",
+			lease.Resource+"."+lease.Unit, free, lease.Job, lease.Expires)
 	}
 
 	fmt.Fprintf(w, "occupancy\n")

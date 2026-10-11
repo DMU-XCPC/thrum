@@ -102,12 +102,13 @@ type Manifest struct {
 	License    string      `yaml:"license,omitempty"`
 }
 
-// Lease is var/lease/<resource>.<unit>.yaml. It is site-local, it always belongs to
-// a job, and Unit is a string because YAML would otherwise read 02 as octal.
+// Lease is var/lease/<resource>.<unit>.yaml. It is site-local, it always belongs to a
+// job — which is what holds it, rather than the actor working that job, because that
+// actor is the claim at var/occupy/ and would be a second record of one fact — and Unit
+// is a string because YAML would otherwise read 02 as octal.
 type Lease struct {
 	Resource string `yaml:"resource"`
 	Unit     string `yaml:"unit"`
-	Occupant string `yaml:"occupant"`
 	Job      string `yaml:"job"`
 	Since    string `yaml:"since"`
 	Expires  string `yaml:"expires"`

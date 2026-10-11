@@ -140,6 +140,9 @@ func newUpdateCmd() *cobra.Command {
 			if res.IgnoreWritten {
 				fmt.Printf("%srewrite .gitignore and .git/info/exclude from the tooling's list\n", prefix)
 			}
+			for _, path := range res.SkeletonWritten {
+				fmt.Printf("%swrite %s from the tooling's copy\n", prefix, path)
+			}
 			for _, rule := range res.IgnoreKept {
 				fmt.Printf("kept the rule %q, which this workspace had and the tooling does not: --narrow drops it\n", rule)
 			}
@@ -159,7 +162,7 @@ func newUpdateCmd() *cobra.Command {
 			} else if len(res.Templates) > 0 && !adoptTemplate {
 				fmt.Println("the tooling's copy is not written on its own initiative: --adopt-template writes it, uncommitted")
 			}
-			if len(res.DirsCreated) == 0 && !res.IgnoreWritten && len(res.Templates) == 0 {
+			if len(res.DirsCreated) == 0 && !res.IgnoreWritten && len(res.Templates) == 0 && len(res.SkeletonWritten) == 0 {
 				fmt.Println("up to date: the directories and the ignore rules are the tooling's")
 			}
 			return nil

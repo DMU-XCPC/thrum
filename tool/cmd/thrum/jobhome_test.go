@@ -173,3 +173,29 @@ func runGit(dir string, args ...string) error {
 	cmd := exec.Command("git", all...)
 	return cmd.Run()
 }
+
+// A name is what a handoff records, so where it comes from is behaviour rather than a detail:
+// the manual an actor reads states this order, and a silent change to it would let every agent
+// on a machine be recorded as the person logged into it.
+func TestTheActorNameComesFromTheEnvironmentAndNowhereElse(t *testing.T) {
+	t.Setenv("THRUM_ACTOR", "")
+	t.Setenv("USER", "Ada.Lovelace")
+	t.Setenv("LOGNAME", "ignored")
+	if got := defaultActor(); got != "ada-lovelace" {
+		t.Errorf("$USER should be the fallback, slugified, and it gave %q", got)
+	}
+
+	t.Setenv("THRUM_ACTOR", "Claude Opus")
+	if got := defaultActor(); got != "claude-opus" {
+		t.Errorf("$THRUM_ACTOR should win over $USER, and it gave %q", got)
+	}
+
+	// An actor that is not a name at all is not a name: the workspace would have nothing to
+	// record, and every actor would collide on the same word.
+	t.Setenv("THRUM_ACTOR", "!!!")
+	t.Setenv("USER", "")
+	t.Setenv("LOGNAME", "")
+	if got := defaultActor(); got != "unknown" {
+		t.Errorf("nothing usable should fall back to unknown, and it gave %q", got)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	root "github.com/multiagentworkspace/thrum"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
@@ -45,9 +46,27 @@ func Join(opts JoinOptions) (Layout, error) {
 	if _, err := os.Stat(filepath.Join(l.Root, ".git")); err == nil {
 		return l, fmt.Errorf("%s already holds a repository: joining is for a machine that has none", l.Root)
 	}
+	existed := true
+	if _, err := os.Stat(l.Root); os.IsNotExist(err) {
+		existed = false
+	}
 	if err := os.MkdirAll(l.Root, 0o755); err != nil {
 		return l, err
 	}
+	// A site that could not join is not half a site. What was made for it goes away, so
+	// that the same directory can be joined once the reason has been dealt with — and so
+	// that nothing is left that looks like a workspace and is not one.
+	done := false
+	defer func() {
+		if done {
+			return
+		}
+		if existed {
+			_ = os.RemoveAll(filepath.Join(l.Root, ".git"))
+			return
+		}
+		_ = os.RemoveAll(l.Root)
+	}()
 
 	if err := gitx.OK(l.Root, "init", "-b", "main", "--quiet"); err != nil {
 		return l, fmt.Errorf("initialising the coordination repository: %w", err)
@@ -85,23 +104,26 @@ func Join(opts JoinOptions) (Layout, error) {
 		return l, err
 	}
 
-	// The roster is what says which sites exist, so a site that is not in it is a site
-	// the others would refuse to talk to. Only a workspace that has never declared one
-	// may be joined without a declaration, because then there is nothing to be in.
-	if err := declaredOrNew(l, opts.Site); err != nil {
+	// The roster is what says which sites exist, so a site that is not in it is a site the
+	// others would refuse to talk to. It comes before the repositories, and the rollback
+	// above takes care of what was already written when it refuses.
+	if err := declared(l, opts.Site); err != nil {
 		return l, err
 	}
 
 	if err := repositories(l, opts); err != nil {
 		return l, err
 	}
+	done = true
 	return l, nil
 }
 
 // remoteHead is the branch the shared line is on, which is what this site works on too.
 func remoteHead(l Layout) (string, error) {
 	if out, err := gitx.Run(l.Root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
-		if name := trimSpace(out); name != "" {
+		// It answers `origin/main`: the remote's name is on the front, and the branch is
+		// what is wanted, because the caller already knows which remote it asked.
+		if name := strings.TrimPrefix(trimSpace(out), "origin/"); name != "" {
 			return name, nil
 		}
 	}
@@ -113,12 +135,15 @@ func remoteHead(l Layout) (string, error) {
 	return "", fmt.Errorf("the coordination repository has no branch to join: an empty shared line is not a workspace yet")
 }
 
-// declaredOrNew refuses a site the roster does not declare, because the roster is what
-// the other sites read to decide who exists.
-func declaredOrNew(l Layout, site string) error {
+// declared refuses a site the roster does not declare, because the roster is what the
+// other sites read to decide who exists.
+//
+// An empty roster declares nothing, so it declares nobody: the first site is declared by
+// whoever is already in the workspace, and that is a step rather than an oversight.
+func declared(l Layout, site string) error {
 	entries, err := ReadResources(l, "site")
-	if err != nil || len(entries) == 0 {
-		return nil // nothing declared yet: this is the first site to be named here
+	if err != nil {
+		return err
 	}
 	if _, ok := entries[site]; !ok {
 		return fmt.Errorf("the roster does not declare %q: declare it at a site that is already in the workspace, and sync, before joining with it", site)
@@ -156,12 +181,36 @@ func repositories(l Layout, opts JoinOptions) error {
 	return nil
 }
 
+// writeExclude fills in the ignore rules a repository cannot carry, in both copies. The
+// list is composed rather than read back from `.gitignore`, because the rules that keep
+// the tooling's own materialised files out of `git status` are part of it — and because
+// the two copies must agree.
 func writeExclude(l Layout) error {
-	ignore, err := os.ReadFile(l.GitIgnore())
+	known := map[string]bool{}
+	for _, rule := range skeletonIgnoreRules() {
+		known[rule] = true
+	}
+	if tooling, err := toolingIgnore(); err == nil {
+		for _, rule := range ignoreRules(tooling) {
+			known[rule] = true
+		}
+	}
+	// Anything this workspace already carries that the tooling does not is kept: joining
+	// is not the moment to narrow what a site ignores.
+	var extra []string
+	if current, err := os.ReadFile(l.GitIgnore()); err == nil {
+		for _, rule := range ignoreRules(current) {
+			if !known[rule] {
+				known[rule] = true
+				extra = append(extra, rule)
+			}
+		}
+	}
+	content, err := ignoreContent(extra)
 	if err != nil {
 		return fmt.Errorf("the workspace has no .gitignore: %w", err)
 	}
-	return os.WriteFile(filepath.Join(l.Root, ".git", "info", "exclude"), ignore, 0o644)
+	return writeIgnore(l, content)
 }
 
 // fillGaps copies the template's files into an existing tree, and leaves alone anything

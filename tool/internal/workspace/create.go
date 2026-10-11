@@ -58,14 +58,16 @@ func Create(opts CreateOptions) (Layout, error) {
 	if err := gitx.OK(l.Root, "init", "-b", "main", "--quiet"); err != nil {
 		return l, fmt.Errorf("initialising the coordination repository: %w", err)
 	}
-	ignore, err := os.ReadFile(l.GitIgnore())
+	// The list the tooling carries, written into both copies — the one the coordination
+	// repository would track, and the one git keeps out of it — so that one bad edit to a
+	// tracked file cannot expose the source history. It is composed rather than copied
+	// because the skeleton's own files are part of it, and because it is the same list
+	// that `update` restores.
+	content, err := ignoreContent(nil)
 	if err != nil {
 		return l, fmt.Errorf("the template carries no .gitignore: %w", err)
 	}
-	// The same list twice, so that one bad edit to a tracked file cannot expose the
-	// source history.
-	exclude := filepath.Join(l.Root, ".git", "info", "exclude")
-	if err := os.WriteFile(exclude, ignore, 0o644); err != nil {
+	if err := writeIgnore(l, content); err != nil {
 		return l, err
 	}
 

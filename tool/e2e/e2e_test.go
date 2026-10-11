@@ -8,8 +8,11 @@
 package e2e_test
 
 import (
+	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -88,6 +91,10 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 		"--purpose", "Uploader reliability work", "--field", "owned-by=the platform team")
 	// A kind has no default: declaring a GPU must never write a worktree entry.
 	refuses(t, "kind", "--root", root, "resource", "declare", "--name", "guesswork", "--purpose", "Which kind?")
+	// A name is unique across every kind, and the tooling is the only writer of the
+	// registries: writing one its own verify calls broken is not a thing it should do.
+	refuses(t, "unique across every kind", "--root", root, "resource", "declare",
+		"--kind", "cpu", "--name", "uploader", "--purpose", "The same name, another kind")
 	run(t, "--root", root, "resource", "declare", "--name", "gpu",
 		"--kind", "gpu", "--purpose", "The only GPU", "--capacity", "1")
 	registry, err := os.ReadFile(filepath.Join(root, "doc", "resource", "worktree.yaml"))
@@ -128,21 +135,24 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	// A label is held by its job, and a second job may not take it.
 	refuses(t, "holds", "--root", root, "worktree", "add", "--label", "uploader", "--job", "another-job")
 
-	// The claim, and the lease: the two things that say who is working, and what the
-	// work holds.
+	// The claim, and the lease: who is working, and what the work holds.
 	run(t, "--root", root, "occupancy", "occupy", "--job", "add-retry")
 	refuses(t, "occupied", "--root", root, "occupancy", "occupy", "--job", "add-retry", "--actor", "somebody-else")
 	run(t, "--root", root, "lease", "take", "--resource", "gpu", "--job", "add-retry", "--ttl", "1h")
-	refuses(t, "held by", "--root", root, "lease", "take", "--resource", "gpu", "--job", "add-retry", "--ttl", "1h",
+	// A lease is held by the job, so a unit already held is refused to everyone — and
+	// which actor is asking does not enter into it.
+	refuses(t, "held for", "--root", root, "lease", "take", "--resource", "gpu", "--job", "add-retry", "--ttl", "1h",
 		"--actor", "somebody-else")
+	refuses(t, "held for", "--root", root, "lease", "take", "--resource", "gpu", "--job", "add-retry", "--ttl", "1h")
 
 	// A stretch of work, recorded where the next actor will look for it.
 	run(t, "--root", root, "handoff", "--job", "add-retry", "--status", "partial",
 		"--next", "compare against the baseline", "--started", "2026-10-09T02:10:00Z",
 		"--worktrees", "uploader", "--summary", "the flaky timeout remains")
-	// The same start twice is a collision, not an edit.
+	// The same start twice is a collision, not an edit. Everything else about this record is
+	// valid, so that the collision is what the refusal is about.
 	refuses(t, "already exists", "--root", root, "handoff", "--job", "add-retry", "--status", "partial",
-		"--started", "2026-10-09T02:10:00Z")
+		"--next", "compare against the baseline", "--started", "2026-10-09T02:10:00Z")
 
 	// An asset: published, and unpacked into the payload rather than checked out
 	// anywhere permanent.
@@ -317,10 +327,102 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 		t.Errorf("and the path it is relative to the workspace root:\n%s", handoff)
 	}
 
+	// A unit above the resource's capacity is not a unit, a path outside the payload is not
+	// an artifact, and an owner is not something another actor takes: each of these is a
+	// record the tooling used to write and its own verify then rejected.
+	refuses(t, "not one of them", "--root", root, "lease", "take", "--resource", "gpu",
+		"--job", "second-job", "--unit", "2", "--ttl", "1h")
+	refuses(t, "lies under", "--root", root, "handoff", "--job", "second-job", "--status", "partial",
+		"--next", "carry on", "--started", "2026-10-09T05:00:00Z", "--artifact", "/etc/hostname")
+	run(t, "--root", root, "claim", "--job", "second-job") // nobody owns it, so anybody may
+	refuses(t, "only its owner", "--root", root, "claim", "--job", "second-job",
+		"--owner", "somebody-else", "--actor", "somebody-else")
+
+	// The baton and the status are one rule with two directions, and the tooling refuses
+	// both rather than writing a record its own verify calls broken.
+	refuses(t, "exactly when the status is `done`", "--root", root, "handoff", "--job", "second-job",
+		"--status", "partial", "--next", "none", "--started", "2026-10-11T01:00:00Z")
+	refuses(t, "leaves a baton", "--root", root, "handoff", "--job", "second-job",
+		"--status", "aborted", "--started", "2026-10-11T02:00:00Z")
+
 	// And the job can be closed, which is the end of it.
 	run(t, "--root", root, "close", "--job", "second-job")
 	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
 		t.Errorf("the workspace should validate with everything in it, and said:\n%s", out)
+	}
+
+	// A job closes once, and a job that has closed is not worked. Both are refused before
+	// anything is written, because a refusal that has already changed a record has changed
+	// a record — so the brief and the working tree are what this checks.
+	archived := filepath.Join(root, "doc", "archive", "task", "second-job", "brief.md")
+	before, err := os.ReadFile(archived)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refuses(t, "closed once", "--root", root, "close", "--job", "second-job", "--abandoned")
+	refuses(t, "still meant to happen is worked", "--root", root, "handoff", "--job", "second-job",
+		"--status", "partial", "--next", "still poking", "--started", "2026-10-11T00:00:00Z")
+	after, err := os.ReadFile(archived)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("a refused close changed the archived brief:\n%s", after)
+	}
+	if out, err := exec.Command("git", "-C", root, "status", "--porcelain").CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "" {
+		t.Errorf("a refused operation should leave nothing behind, and left:\n%s%v", out, err)
+	}
+}
+
+// A workspace arrives ready to hand to an actor: the entry point and the skill it names
+// are materialised, they are the tooling's rather than the project's, and a build state
+// clean leaves them where they are.
+func TestTheAgentSkeletonArrivesAndIsRestored(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+
+	entry := filepath.Join(root, "AGENTS.md")
+	skill := filepath.Join(root, ".agents", "skills", "workspace-actor", "SKILL.md")
+	for _, path := range []string{entry, skill, filepath.Join(root, ".agents", "skills", "workspace-actor", "records.md")} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("a fresh workspace should carry %s: %v", path, err)
+		}
+	}
+
+	// It is unversioned skeleton, so the coordination repository tracks neither it nor
+	// anything else outside doc/ and handoff/.
+	tracked, err := exec.Command("git", "-C", root, "ls-files").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(tracked), "\n") {
+		if strings.TrimSpace(line) != "" && !strings.HasPrefix(line, "doc/") && !strings.HasPrefix(line, "handoff/") {
+			t.Errorf("the coordination repository tracks %s", line)
+		}
+	}
+
+	// It is ignored, which is the only thing keeping `clean` off it.
+	if out := run(t, "--root", root, "clean"); strings.Contains(out, "AGENTS.md") {
+		t.Errorf("clean would remove the entry point: %s", out)
+	}
+	if _, err := os.Stat(entry); err != nil {
+		t.Fatalf("clean removed the entry point: %v", err)
+	}
+
+	// Losing it is a finding rather than a silent absence, and update puts it back.
+	if err := os.Remove(entry); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := try(t, "--root", root, "verify"); err == nil {
+		t.Errorf("verify should report a missing entry point, and said:\n%s", out)
+	} else if !strings.Contains(out, "AGENTS.md") {
+		t.Errorf("the finding should name the file, and said:\n%s", out)
+	}
+	if out := run(t, "--root", root, "update"); !strings.Contains(out, "AGENTS.md") {
+		t.Errorf("update should say what it restored, and said:\n%s", out)
+	}
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the workspace should validate once the skeleton is back, and said:\n%s", out)
 	}
 }
 
@@ -554,5 +656,133 @@ func copyTree(t *testing.T, from, to string) {
 		if err := os.WriteFile(dst, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// A harness that has to be woken rather than to ask reads a mailbox as a stream. The
+// watch prints what is already there — the only chance to see it, because nothing is
+// re-delivered — and then one line per message as it arrives, each line one JSON object.
+func TestAWatchingInboxReportsTheMailboxAndThenWhatArrives(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+
+	// A name has to have been seen before anybody can be sent anything.
+	run(t, "--root", root, "--actor", "alice", "inbox")
+	run(t, "--root", root, "--actor", "bob", "inbox")
+	run(t, "--root", root, "--actor", "bob", "send", "--to", "alice",
+		"--subject", "already in the mailbox", "--body", "…")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	watch := exec.CommandContext(ctx, thrum, "--root", root, "inbox", "--watch", "--json")
+	watch.Env = append(os.Environ(), "THRUM_ACTOR=alice")
+	stdout, err := watch.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cancel()
+		_ = watch.Wait()
+	}()
+
+	lines := make(chan string, 8)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			lines <- scanner.Text()
+		}
+		close(lines)
+	}()
+
+	first := nextLine(t, lines, 5*time.Second)
+	if !strings.Contains(first, "already in the mailbox") {
+		t.Errorf("a watch should print the mailbox it finds, and printed: %s", first)
+	}
+
+	run(t, "--root", root, "--actor", "bob", "send", "--to", "alice",
+		"--subject", "sent while watching", "--body", "…")
+
+	second := nextLine(t, lines, 10*time.Second)
+	var got struct{ ID, From, Subject string }
+	if err := json.Unmarshal([]byte(second), &got); err != nil {
+		t.Fatalf("each line should be one JSON object: %v in %q", err, second)
+	}
+	if got.Subject != "sent while watching" || got.From != "bob" || got.ID == "" {
+		t.Errorf("the stream should carry the message that arrived, and carried %+v", got)
+	}
+}
+
+// The mailbox is created by the first message delivered into it, so a watch that starts
+// before anybody has ever written to this actor has nothing to watch. It must still report
+// that first message: it watches the way down to the mailbox and moves as it appears.
+func TestAWatchingInboxReportsTheFirstMessageEverDelivered(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+	run(t, "--root", root, "--actor", "alice", "inbox")
+	run(t, "--root", root, "--actor", "bob", "inbox")
+	if _, err := os.Stat(filepath.Join(root, "var", "msg")); err == nil {
+		t.Fatal("nothing should have created a mailbox yet")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	watch := exec.CommandContext(ctx, thrum, "--root", root, "inbox", "--watch", "--json")
+	watch.Env = append(os.Environ(), "THRUM_ACTOR=alice")
+	stdout, err := watch.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cancel()
+		_ = watch.Wait()
+	}()
+
+	lines := make(chan string, 8)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			lines <- scanner.Text()
+		}
+		close(lines)
+	}()
+
+	// Nobody has written anything, so the stream should be silent until somebody does.
+	select {
+	case line := <-lines:
+		t.Fatalf("a mailbox nobody has written to should print nothing, and printed: %s", line)
+	case <-time.After(time.Second):
+	}
+
+	run(t, "--root", root, "--actor", "bob", "send", "--to", "alice",
+		"--subject", "the first message ever", "--body", "…")
+
+	line := nextLine(t, lines, 10*time.Second)
+	var got struct{ ID, Subject string }
+	if err := json.Unmarshal([]byte(line), &got); err != nil {
+		t.Fatalf("each line should be one JSON object: %v in %q", err, line)
+	}
+	if got.Subject != "the first message ever" || got.ID == "" {
+		t.Errorf("the stream should carry the first message, and carried %+v", got)
+	}
+}
+
+// nextLine reads one line from a watcher, or fails the test rather than hanging.
+func nextLine(t *testing.T, lines <-chan string, within time.Duration) string {
+	t.Helper()
+	select {
+	case line, ok := <-lines:
+		if !ok {
+			t.Fatal("the watching inbox stopped")
+		}
+		return line
+	case <-time.After(within):
+		t.Fatal("the watching inbox said nothing in time")
+		return ""
 	}
 }

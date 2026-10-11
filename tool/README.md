@@ -54,6 +54,33 @@ thrum actor ask --job add-retry      # who is on it, from the claim every site h
 means somebody was working; nothing on disk can say whether they still are, and the
 tooling does not pretend otherwise.
 
+## What an actor is handed
+
+A workspace materialises two things for whoever starts an agent: `AGENTS.md` at its root, the
+entry point, and `.agents/skills/workspace-actor/`, the skill it names. The skill is the
+workspace's own rules written once — the loop, and one file per decision an actor has to make:
+where a thing goes, what a record has to say, how a name is made, what outlives a job, how an
+asset is kept, what a claim is, and what a second site changes. `SKILL.md` is the index as well
+as the loop; an actor reads the file it needs when that decision comes up.
+
+They state what is true of **every** workspace, because the design they come from is in none of
+them — and they never restate a record: this project's rules stay in `doc/convention/`, and this
+job's intent in its brief. They carry what the tooling says about itself as well: that it is
+still being built, and what an actor should do with a defect it meets — keep the evidence, name
+it in the handoff, say what was expected — because a workspace has no issue tracker and a
+workaround nobody wrote down is a workaround nobody can remove.
+
+They are the tooling's, not the project's: unversioned, ignored like the rest of the skeleton, and
+**restored by `update` rather than merged**, because a manual that has fallen behind is replaced
+whole. `verify` reports one that is missing or has been edited.
+
+```sh
+thrum update                # rewrites the entry point and the skill from the binary
+```
+
+A project's own agent guidance is not written there. It is a convention, in `doc/convention/`,
+which is versioned, travels with the records, and belongs to whoever writes it.
+
 ## Where your tools write
 
 ```sh
@@ -74,10 +101,20 @@ somebody removes it.
 ```sh
 thrum send --to claude-opus --subject "the timeout is explained" --body "…" [--file report.csv]
 thrum inbox [--json]                 # ids and subjects, which are separate things
+thrum inbox --watch --json           # keep reporting arrivals, one JSON object per line
 thrum read <id> [--json] [--out dir] # and take its attachments
 thrum reply <id> --body "…"
 thrum purge <id>                     # nothing collects messages for you
 ```
+
+- **`inbox --watch` is the stream a harness reads to be woken.** It prints the mailbox it
+  finds — the only chance to see what arrived while nobody was watching, because nothing is
+  re-delivered — then one line per message as it arrives, and it does not exit. With `--json`,
+  each line is one message, so the stream is JSON Lines and a reader takes one object per line;
+  the body is still `thrum read <id>`. A mailbox is created by the first message delivered into
+  it, so the watch follows the way down to it: where the system reports changes to a directory
+  the kernel reports them, and where it does not, the same stream is fed by looking again on a
+  timer. A reader cannot tell which it got.
 
 - **Delivered or refused, never queued.** A recipient at another site is reached through
   that site's daemon; if it cannot be reached the send fails and says so.
@@ -147,8 +184,8 @@ a policy nobody can read is a policy nobody has.
 | `peers` | the `sites` section of `thrum status` |
 
 `--root` is global and defaults to `$THRUM_ROOT`, then the current directory. `--actor` is
-global and defaults to `$THRUM_ACTOR`, then `$USER`: an actor is a stable name, not a
-per-command choice.
+global and defaults to `$THRUM_ACTOR`, then `$USER`: an actor is one name for the work it is
+doing, not a per-command choice.
 
 **Every command that records something** brings this site up to date from the shared line
 first, and then puts the event in it or takes it back out. So a workspace whose sites share
@@ -221,14 +258,22 @@ command="thrum daemon exec",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed
 - A job id that has been used before; a label that is not declared, or that holds another
   job; opening a job without saying what it is for is allowed but writes a brief that
   says nothing.
-- A resource declared without a kind: a kind is never guessed.
+- A resource declared without a kind: a kind is never guessed. A name already declared as
+  another kind, because a resource name is unique across every kind and the tooling is the only
+  writer of those files.
 - Overwriting occupancy that names another actor; taking over is explicit.
 - Removing a resource whose directory exists.
 - A lease for a job the workspace does not know or one that has closed, for an occupied
-  unit, or renewal by anybody but its holder.
+  unit, for a unit above the resource's capacity, or renewal or release by a job that does
+  not hold it.
+- An artifact path outside `job/<job-id>/`, or an absolute one: a record names this job's
+  payload and not the machine.
+- Ownership taken from an owner by anybody but that owner: an owner is who the work was
+  promised to.
 - Publishing a version twice, reusing a withdrawn version number, or moving a tag.
 - Replacing a payload without being asked; importing one whose records have not arrived.
-- Writing a handoff over an existing handoff.
+- Writing a handoff over an existing handoff, or for a job that has already closed; closing a job that has already closed, which is refused before anything is written.
+- A handoff whose `next` disagrees with its status: `none` belongs to `done`, and every other stretch leaves a baton.
 - Sending to a name nobody has seen: the roster is what makes a typo an error rather than
   a message into an empty mailbox.
 - Committing two documents of different events together.
@@ -240,7 +285,10 @@ command="thrum daemon exec",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed
 
 Under `--root`, and nowhere else: `doc/`, `handoff/` and `store/` are the versioned half,
 `var/` is this site's runtime — including the actor roster and the mailboxes — and
-`job/<job-id>/` is a job's payload.
+`job/<job-id>/` is a job's payload. `AGENTS.md` and `.agents/` are the unversioned skeleton
+the tooling materialises, beside the empty directories and the ignore rules; the rules that
+keep them out of `git status` — and therefore out of `clean` — are written with the rest of
+the list, in both copies.
 
 `var/secrets/` holds machine-local credentials, including the daemon's own host key and
 its `authorized_keys`. Prefer keeping it outside the workspace; it is gitignored either

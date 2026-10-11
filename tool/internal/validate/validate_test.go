@@ -142,7 +142,7 @@ func TestAGoodWorkspaceReportsNothing(t *testing.T) {
 	write(t, l, "doc/asset/sample/2026-10-09.md",
 		"---\nasset: sample\nversion: \"2026-10-09\"\nlocation: store\nref: sample@2026-10-09\nsha256: "+strings.Repeat("a", 64)+"\nbytes: 8\n---\n\n# sample 2026-10-09\n\n## Description\n")
 	write(t, l, "doc/resource/gpu.yaml", "gpu:\n  - name: gpu\n    purpose: The only GPU\n    capacity: 1\n")
-	write(t, l, "var/lease/gpu.1.yaml", "resource: gpu\nunit: \"1\"\noccupant: tester\njob: add-retry\nsince: 2026-10-09T02:00:00Z\nexpires: 2026-10-09T04:00:00Z\n")
+	write(t, l, "var/lease/gpu.1.yaml", "resource: gpu\nunit: \"1\"\njob: add-retry\nsince: 2026-10-09T02:00:00Z\nexpires: 2026-10-09T04:00:00Z\n")
 	write(t, l, "var/occupy/add-retry.yaml", "occupant: tester\nsince: 2026-10-09T02:00:00Z\n")
 
 	clean(t, l)
@@ -300,18 +300,16 @@ func TestALeaseIsCheckedAgainstItsResource(t *testing.T) {
 	write(t, l, "doc/resource/gpu.yaml", "gpu:\n  - name: gpu\n    purpose: The only GPU\n    capacity: 2\n")
 
 	// The file name and the fields agree, the resource exists, the unit is inside the
-	// capacity, and the occupant is an actor name.
-	write(t, l, "var/lease/gpu.3.yaml", "resource: gpu\nunit: \"3\"\noccupant: tester\njob: x\n")
+	// capacity.
+	write(t, l, "var/lease/gpu.3.yaml", "resource: gpu\nunit: \"3\"\njob: x\n")
 	wants(t, l, "capacity")
 
-	write(t, l, "var/lease/nothing.1.yaml", "resource: nothing\nunit: \"1\"\noccupant: tester\njob: x\n")
+	write(t, l, "var/lease/nothing.1.yaml", "resource: nothing\nunit: \"1\"\njob: x\n")
 	wants(t, l, "declared")
 
-	write(t, l, "var/lease/gpu.1.yaml", "resource: something-else\nunit: \"1\"\noccupant: tester\njob: x\n")
+	write(t, l, "var/lease/gpu.1.yaml", "resource: something-else\nunit: \"1\"\njob: x\n")
 	wants(t, l, "file name")
 
-	write(t, l, "var/lease/gpu.2.yaml", "resource: gpu\nunit: \"2\"\noccupant: Not An Actor\njob: x\n")
-	wants(t, l, "occupant")
 }
 
 func TestOccupancyIsAnchoredByItsJob(t *testing.T) {
@@ -382,7 +380,7 @@ func TestADirectoryWithNoDeclarationIsTheErrorDirection(t *testing.T) {
 // The formats and the checks are one list in the design, so a value that cannot survive
 // the round trip is a finding rather than a surprise later.
 func TestAUnitIsQuotedSoThatYamlDoesNotReadItAsOctal(t *testing.T) {
-	encoded, err := format.Encode(format.Lease{Resource: "gpu", Unit: "02", Occupant: "tester", Job: "x"})
+	encoded, err := format.Encode(format.Lease{Resource: "gpu", Unit: "02", Job: "x"})
 	if err != nil {
 		t.Fatal(err)
 	}

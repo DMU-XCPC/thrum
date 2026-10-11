@@ -30,6 +30,7 @@ func TestCreateLeavesBehindWhatTheDesignNames(t *testing.T) {
 
 	for _, p := range []string{
 		".gitignore", ".git", ".bare", "store", "var/site",
+		"AGENTS.md", ".agents/skills/workspace-actor/SKILL.md", ".agents/skills/workspace-actor/records.md",
 		"doc/convention", "doc/task", "doc/topic", "doc/asset", "doc/archive", "doc/resource",
 		"doc/template/brief.md", "doc/template/handoff.md", "doc/template/manifest.md",
 		"handoff", "var/lease", "var/occupy", "var/state", "var/env", "var/cache",
@@ -65,9 +66,35 @@ func TestTheIgnoreRulesAreInBothPlaces(t *testing.T) {
 	if string(gi) != string(ex) {
 		t.Error("`.gitignore` and `.git/info/exclude` should hold the same list")
 	}
-	for _, want := range []string{".gitignore", "/.bare/", "/store/", "/var/", "/job/", "/worktree/"} {
+	for _, want := range []string{".gitignore", "/.bare/", "/store/", "/var/", "/job/", "/worktree/", "/AGENTS.md", "/.agents/"} {
 		if !strings.Contains(string(gi), want) {
 			t.Errorf("the ignore rules do not cover %s", want)
+		}
+	}
+}
+
+// The skeleton is untracked, so the only thing keeping it out of `clean`'s reach is that
+// the tooling ignores it: a skeleton file that is not ignored is a skeleton file the
+// guarded clean would delete.
+func TestTheGuardedCleanLeavesTheSkeletonAlone(t *testing.T) {
+	l := create(t)
+
+	paths, err := workspace.Clean(l, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		if strings.Contains(path, "AGENTS.md") || strings.Contains(path, ".agents") {
+			t.Errorf("clean would remove %s", path)
+		}
+	}
+
+	if _, err := workspace.Clean(l, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"AGENTS.md", ".agents/skills/workspace-actor/SKILL.md"} {
+		if _, err := os.Stat(filepath.Join(l.Root, p)); err != nil {
+			t.Errorf("clean removed %s: %v", p, err)
 		}
 	}
 }
@@ -223,7 +250,7 @@ func TestValidationCatchesADocumentWithoutAnH1(t *testing.T) {
 
 func TestValidationCatchesALeaseWithNoDeclaration(t *testing.T) {
 	l := create(t)
-	lease := []byte("resource: gpu\nunit: \"1\"\noccupant: tester\njob: some-job\nsince: 2026-10-09T10:00:00Z\nexpires: 2026-10-09T12:00:00Z\n")
+	lease := []byte("resource: gpu\nunit: \"1\"\njob: some-job\nsince: 2026-10-09T10:00:00Z\nexpires: 2026-10-09T12:00:00Z\n")
 	write(t, l.LeaseFile("gpu", "1"), string(lease))
 
 	findings := validate.Validate(l)
@@ -259,7 +286,7 @@ func write(t *testing.T, path, content string) {
 
 func mentions(findings []validate.Finding, needle string) bool {
 	for _, f := range findings {
-		if strings.Contains(f.Rule+" "+f.What, needle) {
+		if strings.Contains(f.Where+" "+f.Rule+" "+f.What, needle) {
 			return true
 		}
 	}

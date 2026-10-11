@@ -155,12 +155,12 @@ func (s *Service) Handle(req Request) Response {
 		var args struct {
 			Resource string `json:"resource"`
 			Unit     string `json:"unit"`
-			Occupant string `json:"occupant"`
+			Job      string `json:"job"`
 		}
 		if err := req.DecodeArgs(&args); err != nil {
 			return Fail(err)
 		}
-		return Fail(leases.Release(s.L, args.Resource, args.Unit, args.Occupant))
+		return Fail(leases.Release(s.L, args.Resource, args.Unit, args.Job))
 
 	case VerbDeliver:
 		return s.deliver(req)
@@ -173,7 +173,6 @@ func (s *Service) Handle(req Request) Response {
 type leaseArgs struct {
 	Resource string `json:"resource"`
 	Unit     string `json:"unit"`
-	Occupant string `json:"occupant"`
 	Job      string `json:"job"`
 	TTL      int    `json:"ttl_seconds"`
 }
@@ -182,7 +181,6 @@ func (a leaseArgs) request() leases.Request {
 	return leases.Request{
 		Resource: a.Resource,
 		Unit:     a.Unit,
-		Occupant: a.Occupant,
 		Job:      a.Job,
 		TTL:      time.Duration(a.TTL) * time.Second,
 	}

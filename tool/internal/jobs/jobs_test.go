@@ -143,6 +143,7 @@ func TestTheLifeOfAJob(t *testing.T) {
 		Job: "add-retry-to-uploader", Agent: "claude-opus",
 		Status:    format.HandoffBlocked,
 		BlockedBy: []string{"fix-ci-timeouts"},
+		Next:      "rerun once fix-ci-timeouts is done",
 		Started:   "2026-10-09T04:00:00Z",
 	}); err != nil {
 		t.Fatalf("blocked handoff: %v", err)
@@ -257,14 +258,25 @@ func TestOwnershipCanBeGivenUpAndClaimed(t *testing.T) {
 	}
 
 	// Nothing owns it, so anybody may take it without asking.
-	if _, err := jobs.SetOwner(l, "job-one", "claude-opus", ""); err != nil {
+	if _, err := jobs.SetOwner(l, "job-one", "claude-opus", "claude-opus", ""); err != nil {
 		t.Fatal(err)
 	}
 	if b, _, _ := workspace.ReadBrief(l, "job-one"); b.Owner != "claude-opus" {
 		t.Errorf("owner: %q", b.Owner)
 	}
 
-	if _, err := jobs.SetOwner(l, "job-one", "", ""); err != nil {
+	// Somebody else may not take it: an owner is who the work was promised to, so taking
+	// an owned job is taking a promise that was not made to you.
+	if _, err := jobs.SetOwner(l, "job-one", "somebody-else", "somebody-else", ""); err == nil {
+		t.Error("an owned job should not be claimable by another actor")
+	}
+	// And an owner asking for what it already has changes nothing, rather than failing on
+	// a commit that has nothing in it.
+	if id, err := jobs.SetOwner(l, "job-one", "claude-opus", "claude-opus", ""); err != nil || id != "" {
+		t.Errorf("re-owning should be a no-op, and gave %q, %v", id, err)
+	}
+
+	if _, err := jobs.SetOwner(l, "job-one", "", "claude-opus", ""); err != nil {
 		t.Fatal(err)
 	}
 	b, _, err := workspace.ReadBrief(l, "job-one")

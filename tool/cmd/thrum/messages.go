@@ -12,6 +12,7 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/messages"
 	"github.com/multiagentworkspace/thrum/tool/internal/roster"
+	"github.com/multiagentworkspace/thrum/tool/internal/watch"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -85,40 +86,117 @@ func newSendCmd() *cobra.Command {
 	return cmd
 }
 
+// oneLine is one message as a line for a person: its id, who sent it, when, and what it
+// is about. The id is what every other command takes.
+func oneLine(m messages.Message) string {
+	reply := ""
+	if m.ReplyTo != "" {
+		reply = "  (reply to " + m.ReplyTo + ")"
+	}
+	return fmt.Sprintf("%-20s %-16s %s  %s%s", m.ID, m.From, m.Sent, m.Subject, reply)
+}
+
 func newInboxCmd() *cobra.Command {
-	var asJSON bool
+	var (
+		asJSON   bool
+		watching bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "inbox",
-		Short: "List this actor's mailbox",
+		Short: "List this actor's mailbox, or keep reporting what arrives in it",
 		Long: "Nothing is deleted and nothing is marked read: a message is process information\n" +
 			"that stays until somebody removes it, and which of them still matter is not\n" +
-			"something a tool can know.",
+			"something a tool can know.\n\n" +
+			"--watch is for a harness that has to be woken rather than to ask. It prints the\n" +
+			"mailbox it finds — the only chance to see what arrived while nobody was\n" +
+			"watching, since nothing is re-delivered — then one line per message as it\n" +
+			"arrives, and does not exit. With --json each line is one message, so the stream\n" +
+			"is JSON Lines and a reader takes one object per line.\n\n" +
+			"A mailbox is created by the first message delivered into it, so the watch follows\n" +
+			"the way down to it: it reports by event where the system reports changes to a\n" +
+			"directory, and by looking again where it does not.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := layout()
+			out := cmd.OutOrStdout()
+			seen := map[string]bool{}
+			emit := func(m messages.Message) error {
+				seen[m.ID] = true
+				if asJSON {
+					line, err := json.Marshal(m)
+					if err != nil {
+						return err
+					}
+					_, err = fmt.Fprintf(out, "%s\n", line)
+					return err
+				}
+				_, err := fmt.Fprintln(out, oneLine(m))
+				return err
+			}
+
 			list, err := messages.List(l, actor)
 			if err != nil {
 				return err
 			}
-			if asJSON {
-				return printJSON(cmd, list)
-			}
-			if len(list) == 0 {
-				fmt.Println("nothing")
+			if !watching {
+				if asJSON {
+					return printJSON(cmd, list)
+				}
+				if len(list) == 0 {
+					fmt.Fprintln(out, "nothing")
+					return nil
+				}
+				for _, m := range list {
+					fmt.Fprintln(out, oneLine(m))
+				}
 				return nil
 			}
+
 			for _, m := range list {
-				reply := ""
-				if m.ReplyTo != "" {
-					reply = "  (reply to " + m.ReplyTo + ")"
+				if err := emit(m); err != nil {
+					return err
 				}
-				fmt.Printf("%-20s %-16s %s  %s%s\n", m.ID, m.From, m.Sent, m.Subject, reply)
 			}
-			return nil
+			// Deepest first: the mailbox itself once it exists, and the directories that
+			// have to gain it before it can. A workspace's var/ is created with the
+			// workspace, so there is always something to watch.
+			follower, err := watch.Follow([]string{l.Mailbox(actor), l.Mailboxes(), l.Var()})
+			if err != nil {
+				return err
+			}
+			defer follower.Close()
+
+			for {
+				select {
+				case <-cmd.Context().Done():
+					return nil
+				case _, live := <-follower.Changed():
+					if !live {
+						return fmt.Errorf("stopped watching %s", l.Mailbox(actor))
+					}
+				}
+				ids, err := messages.IDs(l, actor)
+				if err != nil {
+					return err
+				}
+				for _, id := range ids {
+					if seen[id] {
+						continue
+					}
+					m, _, err := messages.Read(l, actor, id)
+					if err != nil {
+						continue // it was removed between the listing and the read
+					}
+					if err := emit(m); err != nil {
+						return err
+					}
+				}
+			}
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the mailbox as JSON, for other tooling")
+	cmd.Flags().BoolVar(&watching, "watch", false, "keep reporting messages as they arrive, and never exit")
 	return cmd
 }
 

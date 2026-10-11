@@ -356,9 +356,13 @@ func newClaimCmd() *cobra.Command {
 			if who == "" {
 				who = actor
 			}
-			id, err := jobs.SetOwner(layout(), jobID, who, "")
+			id, err := jobs.SetOwner(layout(), jobID, who, actor, "")
 			if err != nil {
 				return err
+			}
+			if id == "" {
+				fmt.Printf("%s is already owned by %s\n", jobID, who)
+				return nil
 			}
 			fmt.Printf("%s is now owned by %s (%s)\n", jobID, who, short(id))
 			return nil
@@ -381,9 +385,13 @@ func newRelinquishCmd() *cobra.Command {
 			"since the job would otherwise be stuck forever.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := jobs.SetOwner(layout(), jobID, "", "")
+			id, err := jobs.SetOwner(layout(), jobID, "", actor, "")
 			if err != nil {
 				return err
+			}
+			if id == "" {
+				fmt.Printf("%s was already unowned\n", jobID)
+				return nil
 			}
 			fmt.Printf("%s is now unowned (%s)\n", jobID, short(id))
 			return nil

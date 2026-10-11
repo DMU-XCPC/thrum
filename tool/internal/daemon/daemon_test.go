@@ -382,7 +382,7 @@ func TestAResourceIsLeasedWhereItLives(t *testing.T) {
 	if resp, err := peers.Ask(ref, daemon.Request{
 		Verb: daemon.VerbLeaseTake,
 		Args: daemon.Args(map[string]any{
-			"resource": "gpu", "occupant": "claude-opus", "job": "job-a", "ttl_seconds": 3600,
+			"resource": "gpu", "job": "job-a", "ttl_seconds": 3600,
 		}),
 	}); err != nil {
 		t.Fatalf("taking the lease at the lab: %v", err)
@@ -402,7 +402,7 @@ func TestAResourceIsLeasedWhereItLives(t *testing.T) {
 	if _, err := peers.Ask(ref, daemon.Request{
 		Verb: daemon.VerbLeaseTake,
 		Args: daemon.Args(map[string]any{
-			"resource": "gpu", "occupant": "claude-sonnet", "job": "job-a", "ttl_seconds": 3600,
+			"resource": "gpu", "job": "job-a", "ttl_seconds": 3600,
 		}),
 	}); err == nil {
 		t.Error("a second holder should be refused by the home site")

@@ -15,8 +15,8 @@ everything else falls into three planes, each with its own lifecycle rule:
 
 A **job** is one unit of work, and it is what holds the runtime state: a working directory
 of its own, its leases, its payload. Two jobs run side by side without touching each other,
-and an **actor** — a person or an agent, known by a stable name — can pick one up, hand it
-over, or work it from another machine.
+and an **actor** — a person or an agent, known by a name rather than by a process — can pick one
+up, hand it over, or work it from another machine.
 
 People edit the workspace as much as agents do, so every name and every file stays readable
 in place, and nothing requires a helper tool to be understood.
@@ -73,9 +73,12 @@ thrum handoff --job add-retry --status done --next none
 thrum close --job add-retry
 ```
 
-A new workspace arrives ready to hand to an agent: it carries the record templates, an empty
-`doc/convention/` for whatever the project decides, and a tool that refuses the things an
-agent would otherwise have to be told not to do.
+A new workspace arrives ready to hand to an agent: it carries an entry point and the skill it
+names, the record templates, an empty `doc/convention/` for whatever the project decides, and a
+tool that refuses the things an agent would otherwise have to be told not to do. The entry point
+is a map rather than a second copy of the rules — it says where each answer is, never what the
+answer is — so the brief, the handoffs and the conventions stay the only places an intent or a
+rule is stated.
 
 Several sites of one workspace — the same records, on more than one machine — are joined
 with `thrum join`, and reach each other directly over SSH. `tool/README.md` has the whole
@@ -92,13 +95,16 @@ layouts are independent.
 | `doc/tooling.md` | The operations a workspace needs its tooling to provide, derived from the design |
 | `tool/` | The implementation of those operations, including the one that creates a workspace |
 | `workspace-template/` | The template that operation creates a workspace from |
+| `harness/` | Companions for particular agent harnesses. **Not the format**: they consume what the design already promises, and a workspace neither ships nor knows about them |
 | `Makefile`, `go.mod` | Build |
 
 Creating a workspace is not a plain file copy. `.bare/` and `store/` have to be initialised
 as bare repositories, and the empty directories — `doc/task/`, `var/lease/`, `job/`,
 `worktree/` and the rest — have to be created rather than copied, because a repository
 cannot carry an empty directory. What the template holds is the files that are copied
-verbatim: the ignore rules, and the record templates under `doc/template/`.
+verbatim: the entry point an agent is handed and the skill it names, the record templates
+under `doc/template/`, and the ignore rules, which are written into `.gitignore` and
+`.git/info/exclude` together.
 
 ## Reading order
 

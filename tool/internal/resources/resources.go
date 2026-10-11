@@ -49,6 +49,24 @@ func Declare(l workspace.Layout, kind string, e Entry) error {
 		return err
 	}
 
+	// A name is unique across every kind, not only within one: a lease refers to a unit by
+	// naming a resource, so a name that meant two things would make the lease refer to
+	// whichever entry the reader happened to reach first. The tooling is the only writer of
+	// these files, and writing a registry its own verify calls broken is not a thing it
+	// should be able to do.
+	declared, err := All(l)
+	if err != nil {
+		return err
+	}
+	for other, entries := range declared {
+		if other == kind {
+			continue // the write below refuses a duplicate within the kind, in its own words
+		}
+		if _, taken := entries[e.Name]; taken {
+			return fmt.Errorf("%q is already declared as a %s: a resource name is unique across every kind", e.Name, other)
+		}
+	}
+
 	path := l.ResourceKind(kind)
 	return atomic.Replace(path, func(current []byte) ([]byte, error) {
 		doc, err := parse(current, kind)

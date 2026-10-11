@@ -5,6 +5,7 @@ package workspace
 
 import (
 	"path/filepath"
+	"strings"
 )
 
 // A Layout is a workspace root.
@@ -110,6 +111,50 @@ func (l Layout) JobSub(job, sub string) string {
 
 // Payload subdirectories, in the order the design lists them.
 var JobSubdirs = []string{"log", "tmp", "cache", "data", "state", "ckpt", "out"}
+
+// SkeletonFile is one file the tooling materialises outside the repositories: the entry point
+// an actor is handed, and the skill it names. It is not a record and not the project's — it is
+// the workspace's own rules, reproduced from the template the tooling carries — and it is
+// unversioned, so it is restored rather than merged.
+type SkeletonFile struct {
+	// Path is relative to the workspace root.
+	Path string
+}
+
+// Ignore is the rule that keeps this file out of `git status`, and therefore out of `clean`,
+// which removes what the coordination repository neither tracks nor ignores: the file itself
+// when it stands at the root, and the top-level directory holding it when it lives in one. It
+// is derived rather than listed, so a further reference file under the skill needs no rule of
+// its own.
+func (f SkeletonFile) Ignore() string {
+	if i := strings.IndexByte(f.Path, '/'); i >= 0 {
+		return "/" + f.Path[:i] + "/"
+	}
+	return "/" + f.Path
+}
+
+// SkeletonFiles are the files the tooling materialises outside the repositories.
+//
+// The list is written out rather than derived from the template, because it is the register of
+// what the tooling owns: a template file that is not here is a file no workspace ever gets, and
+// a test says so. Deriving it instead would make a stray file in the template silently become
+// something every workspace must carry.
+func SkeletonFiles() []SkeletonFile {
+	const skill = ".agents/skills/workspace-actor/"
+	return []SkeletonFile{
+		// The entry point: what an actor is expected to find on its own.
+		{Path: "AGENTS.md"},
+		// The skill: the loop, and one file per decision an actor has to make.
+		{Path: skill + "SKILL.md"},
+		{Path: skill + "placement.md"},
+		{Path: skill + "records.md"},
+		{Path: skill + "names.md"},
+		{Path: skill + "knowledge.md"},
+		{Path: skill + "assets.md"},
+		{Path: skill + "claims.md"},
+		{Path: skill + "sites.md"},
+	}
+}
 
 // Labelled working directories.
 func (l Layout) Worktrees() string { return filepath.Join(l.Root, "worktree") }

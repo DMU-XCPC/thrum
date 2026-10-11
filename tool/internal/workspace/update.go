@@ -43,6 +43,9 @@ type Drift struct {
 	IgnoreExtra []string
 	// Templates are the copy-me files that differ from the tooling's, or are absent.
 	Templates []TemplateDrift
+	// Skeleton is the tooling's own materialised files that are absent, or are not the
+	// copy the tooling carries.
+	Skeleton []SkeletonDrift
 }
 
 // TemplateDrift is one `doc/template/` file that is not the tooling's.
@@ -53,10 +56,20 @@ type TemplateDrift struct {
 	Workspace []byte // nil when the workspace has none
 }
 
+// SkeletonDrift is one file the tooling materialises outside the repositories that is not
+// the copy the tooling carries.
+type SkeletonDrift struct {
+	// Path is relative to the workspace root.
+	Path      string
+	Tooling   []byte
+	Workspace []byte // nil when the workspace has none
+}
+
 // Empty reports whether there is nothing to bring up to date. Template differences are
 // not part of it: they are never applied on the tooling's initiative.
 func (d Drift) Empty() bool {
-	return len(d.MissingDirs) == 0 && len(d.IgnoreMissing) == 0 && len(d.IgnoreExtra) == 0 && len(d.Templates) == 0
+	return len(d.MissingDirs) == 0 && len(d.IgnoreMissing) == 0 && len(d.IgnoreExtra) == 0 &&
+		len(d.Templates) == 0 && len(d.Skeleton) == 0
 }
 
 // Compare reports what this workspace is missing relative to the tooling's template.
@@ -78,6 +91,7 @@ func Compare(l Layout) (Drift, error) {
 	if err != nil {
 		return d, err
 	}
+	rules := append(ignoreRules(tooling), skeletonIgnoreRules()...)
 	// A rule counts as missing when either copy has lost it. Both copies carry the whole
 	// list on purpose — one bad edit to one of them must not expose the source history —
 	// so a rule that survives in only one is half the protection it is meant to be.
@@ -89,7 +103,7 @@ func Compare(l Layout) (Drift, error) {
 				have[rule] = true
 			}
 		}
-		for _, rule := range ignoreRules(tooling) {
+		for _, rule := range rules {
 			if !have[rule] {
 				missing[rule] = true
 			}
@@ -99,7 +113,7 @@ func Compare(l Layout) (Drift, error) {
 		d.IgnoreMissing = append(d.IgnoreMissing, rule)
 	}
 	mine := map[string]bool{}
-	for _, rule := range ignoreRules(tooling) {
+	for _, rule := range rules {
 		mine[rule] = true
 	}
 	seen := map[string]bool{}
@@ -137,6 +151,25 @@ func Compare(l Layout) (Drift, error) {
 		}
 		d.Templates = append(d.Templates, TemplateDrift{Path: rel, Tooling: tooling, Workspace: current})
 	}
+
+	// The skeleton is the tooling's, so it is compared the same way a lost ignore rule
+	// is: what is derived is only whether this workspace holds the copy the tooling
+	// carries. Nothing reads what a workspace has written there, which is what makes the
+	// entry point a map rather than a second version of the truth.
+	for _, file := range SkeletonFiles() {
+		tooling, err := fs.ReadFile(root.Template, root.TemplateDir+"/"+file.Path)
+		if err != nil {
+			return d, err
+		}
+		current, err := os.ReadFile(filepath.Join(l.Root, filepath.FromSlash(file.Path)))
+		if err == nil && string(current) == string(tooling) {
+			continue
+		}
+		if err != nil {
+			current = nil
+		}
+		d.Skeleton = append(d.Skeleton, SkeletonDrift{Path: file.Path, Tooling: tooling, Workspace: current})
+	}
 	return d, nil
 }
 
@@ -162,6 +195,7 @@ type UpdateResult struct {
 	IgnoreKept       []string
 	Templates        []TemplateDrift
 	TemplatesAdopted []string
+	SkeletonWritten  []string
 }
 
 // Update brings the unversioned skeleton up to date, and reports the rest.
@@ -189,6 +223,8 @@ func Update(l Layout, o UpdateOptions) (UpdateResult, error) {
 	if o.Narrow {
 		keep = nil
 	}
+	// The skeleton's own rules are part of the list, so a workspace that has lost one
+	// gets it back here — the same path that restores a rule the workspace has lost.
 	if len(drift.IgnoreMissing) > 0 || (o.Narrow && len(drift.IgnoreExtra) > 0) {
 		content, err := ignoreContent(keep)
 		if err != nil {
@@ -200,6 +236,23 @@ func Update(l Layout, o UpdateOptions) (UpdateResult, error) {
 			if err := writeIgnore(l, content); err != nil {
 				return res, err
 			}
+		}
+	}
+
+	// The skeleton belongs to the tooling, so it is restored rather than reported: a map
+	// that has fallen behind is replaced whole, and nothing here is the project's to
+	// keep.
+	for _, file := range drift.Skeleton {
+		res.SkeletonWritten = append(res.SkeletonWritten, file.Path)
+		if o.DryRun {
+			continue
+		}
+		target := filepath.Join(l.Root, filepath.FromSlash(file.Path))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return res, err
+		}
+		if err := os.WriteFile(target, file.Tooling, 0o644); err != nil {
+			return res, err
 		}
 	}
 
@@ -222,25 +275,47 @@ func toolingIgnore() ([]byte, error) {
 	return fs.ReadFile(root.Template, root.TemplateDir+"/.gitignore")
 }
 
-// ignoreContent is the file to write: the tooling's rules, and any of this workspace's
-// own that are being kept rather than dropped.
+// skeletonIgnoreRules is the rules that keep the tooling's own materialised files out of
+// the coordination repository's sight. They live here rather than in the template's
+// `.gitignore` because that file is payload — see SkeletonFiles.
+func skeletonIgnoreRules() []string {
+	var rules []string
+	seen := map[string]bool{}
+	for _, file := range SkeletonFiles() {
+		rule := file.Ignore()
+		if seen[rule] {
+			continue // one directory, however many files the tooling puts in it
+		}
+		seen[rule] = true
+		rules = append(rules, rule)
+	}
+	return rules
+}
+
+// ignoreContent is the file to write: the tooling's rules, the rules that keep the
+// tooling's own materialised files out of `git status`, and any of this workspace's own
+// that are being kept rather than dropped.
 func ignoreContent(keep []string) ([]byte, error) {
 	tooling, err := toolingIgnore()
 	if err != nil {
 		return nil, err
-	}
-	if len(keep) == 0 {
-		return tooling, nil
 	}
 	var b strings.Builder
 	b.Write(tooling)
 	if !strings.HasSuffix(string(tooling), "\n") {
 		b.WriteString("\n")
 	}
-	b.WriteString("\n# Kept here: rules this workspace had and the tooling does not. Removing one\n")
-	b.WriteString("# is a decision rather than an update, so they are reported until it is made.\n")
-	for _, rule := range keep {
+	b.WriteString("\n# The tooling's own materialised files. They are restored rather than committed, so\n")
+	b.WriteString("# an unignored one is a file `clean` would remove.\n")
+	for _, rule := range skeletonIgnoreRules() {
 		b.WriteString(rule + "\n")
+	}
+	if len(keep) > 0 {
+		b.WriteString("\n# Kept here: rules this workspace had and the tooling does not. Removing one\n")
+		b.WriteString("# is a decision rather than an update, so they are reported until it is made.\n")
+		for _, rule := range keep {
+			b.WriteString(rule + "\n")
+		}
 	}
 	return []byte(b.String()), nil
 }
