@@ -2,6 +2,7 @@ package roster_test
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,4 +96,86 @@ func TestWhereAnActorIsIsTheNewestHearing(t *testing.T) {
 	if _, ok := roster.Find("nobody", early, late); ok {
 		t.Error("a name nobody has seen is not in the roster")
 	}
+}
+
+// A session has two ends and says both; a name that has said neither is not offline.
+func TestWhatANameSaysAboutItself(t *testing.T) {
+	l := fixture(t, "build-01")
+	at := time.Date(2026, 10, 9, 2, 0, 0, 0, time.UTC)
+
+	if err := roster.Seen(l, "alice", "j1", at); err != nil {
+		t.Fatal(err)
+	}
+	entry := findEntry(t, l, "alice")
+	if entry.State != "" {
+		t.Errorf("acting is not saying you are working: %+v", entry)
+	}
+	if !strings.Contains(roster.Presence(entry), "has not said") {
+		t.Errorf("a name that has said nothing should read as exactly that: %s", roster.Presence(entry))
+	}
+
+	if err := roster.SetState(l, "alice", roster.StateOnline, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	entry = findEntry(t, l, "alice")
+	if entry.State != roster.StateOnline || entry.Since == "" {
+		t.Errorf("saying online is recorded with when it was said: %+v", entry)
+	}
+	if entry.LastSeen != entry.Since {
+		t.Errorf("saying something is being heard from: %+v", entry)
+	}
+
+	if err := roster.SetState(l, "alice", roster.StateOffline, at.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	entry = findEntry(t, l, "alice")
+	if entry.State != roster.StateOffline {
+		t.Errorf("the newest thing said wins: %+v", entry)
+	}
+	if roster.Said(entry) == roster.Said(roster.Entry{}) {
+		t.Error("offline and never having said must not read the same")
+	}
+}
+
+// Saying either thing makes a name exist, and what it says travels with it.
+func TestSayingSomethingMakesANameExistAndTravels(t *testing.T) {
+	l := fixture(t, "build-01")
+	at := time.Date(2026, 10, 9, 2, 0, 0, 0, time.UTC)
+
+	if err := roster.SetState(l, "carol", roster.StateOnline, at); err != nil {
+		t.Fatal(err)
+	}
+	entry := findEntry(t, l, "carol")
+	if entry.FirstSeen == "" || entry.State != roster.StateOnline {
+		t.Fatalf("saying online makes a name exist: %+v", entry)
+	}
+
+	learned, err := roster.Learn(l, "lab-02", []roster.Entry{{
+		Name: "carol", Site: "lab-02",
+		FirstSeen: at.Format(time.RFC3339), LastSeen: at.Add(time.Hour).Format(time.RFC3339),
+		State: roster.StateOffline, Since: at.Add(time.Hour).Format(time.RFC3339),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if learned != 1 {
+		t.Errorf("a newer fact about carol is a change, and it counted %d", learned)
+	}
+	entry = findEntry(t, l, "carol")
+	if entry.Site != "lab-02" || entry.State != roster.StateOffline {
+		t.Errorf("the newest fact, what it says about itself included, wins: %+v", entry)
+	}
+}
+
+func findEntry(t *testing.T, l workspace.Layout, name string) roster.Entry {
+	t.Helper()
+	entries, err := roster.Local(l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := roster.Find(name, entries)
+	if !ok {
+		t.Fatalf("%s should be on the roster: %+v", name, entries)
+	}
+	return entry
 }

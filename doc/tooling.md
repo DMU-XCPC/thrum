@@ -55,7 +55,10 @@ Everything in *What the tooling must not do* below, and two more: it does not ho
 
 ## Actors
 
-An actor is a name: nothing is started, and nothing is bound to a process. Which names exist, and where each was last heard from, is the tooling's knowledge — deliberately not a file in the workspace.
+An actor is a name: nothing is started, and nothing is bound to a process. A session of that
+name has two ends, and both are the actor's to state — `actor online` and `actor offline` — and
+nothing expires: what a name says about itself is a statement made at a time, and a name that has
+never said either way reads as exactly that. Which names exist, and where each was last heard from, is the tooling's knowledge — deliberately not a file in the workspace.
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |

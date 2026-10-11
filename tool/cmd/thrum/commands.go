@@ -253,6 +253,9 @@ func newStatusCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := layout()
 			report, err := status.Gather(l)
+			if err == nil {
+				annotateOccupants(l, report)
+			}
 			if err != nil {
 				return err
 			}

@@ -56,7 +56,7 @@ func differences(before, after []Entry) int {
 	n := 0
 	for _, e := range after {
 		old, ok := had[e.Name]
-		if !ok || old.LastSeen != e.LastSeen || old.Site != e.Site || old.Job != e.Job {
+		if !ok || old.LastSeen != e.LastSeen || old.Site != e.Site || old.Job != e.Job || old.State != e.State || old.Since != e.Since {
 			n++
 		}
 	}

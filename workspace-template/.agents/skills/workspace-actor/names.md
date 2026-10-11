@@ -98,3 +98,10 @@ enforce rather than a promise everyone has to keep.
 Out of scope: branch names the project owns (`main`, release branches), the name of the workspace
 directory itself, and the name of a bundle, which is a transport artifact and not a name from
 this register.
+
+**A session has two ends, and you say both.** `thrum actor online` says you are working here now,
+`thrum actor offline` says you have stopped. Nothing expires and nothing is inferred: what a name
+says about itself is a statement made at a time, so a name that has never said either way reads as
+exactly that — and a name that stopped without saying so leaves *online* standing beside an old
+"last heard", which is what it is. Saying either one takes nothing away: a name is not a
+permission, and a message goes into a mailbox whether or not you are working.

@@ -133,6 +133,9 @@ func newOccupancyCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			report, err := status.Gather(layout())
+			if err == nil {
+				annotateOccupants(layout(), report)
+			}
 			if err != nil {
 				return err
 			}

@@ -8,6 +8,7 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
 	"github.com/multiagentworkspace/thrum/tool/internal/roster"
+	"github.com/multiagentworkspace/thrum/tool/internal/status"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -43,7 +44,7 @@ func newActorCmd() *cobra.Command {
 				if e.Job != "" {
 					job = "  on " + e.Job
 				}
-				fmt.Printf("%-20s %-20s %s%s\n", e.Name, e.Site, e.LastSeen, job)
+				fmt.Printf("%-20s %-20s %-34s %s%s\n", e.Name, e.Site, roster.Said(e), e.LastSeen, job)
 			}
 			for _, p := range reports {
 				if !p.Reachable && p.Note != "" {
@@ -68,6 +69,7 @@ func newActorCmd() *cobra.Command {
 			fmt.Printf("site       %s\n", entry.Site)
 			fmt.Printf("first seen %s\n", entry.FirstSeen)
 			fmt.Printf("last seen  %s\n", entry.LastSeen)
+			fmt.Printf("says       %s\n", roster.Said(entry))
 			if entry.Job != "" {
 				fmt.Printf("on         %s\n", entry.Job)
 			}
@@ -101,7 +103,38 @@ func newActorCmd() *cobra.Command {
 	ask.Flags().StringVar(&jobID, "job", "", "the job (required)")
 	_ = ask.MarkFlagRequired("job")
 
-	cmd.AddCommand(listCmd, show, ask)
+	online := &cobra.Command{
+		Use:   "online",
+		Short: "Say that this name is working here now",
+		Long: "A session has a beginning and an end, and both are the actor's to state: this records\n" +
+			"the beginning. Nothing expires, so an entry that says online is a statement made at a\n" +
+			"time rather than a promise about now — and a session that ends without saying so leaves\n" +
+			"exactly that behind.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := roster.SetState(layout(), actor, roster.StateOnline, now()); err != nil {
+				return err
+			}
+			fmt.Printf("%s is online here\n", actor)
+			return nil
+		},
+	}
+	offline := &cobra.Command{
+		Use:   "offline",
+		Short: "Say that this name has stopped",
+		Long: "The other end of a session, stated the same way. It takes nothing away: a name is not a\n" +
+			"permission, no record is touched, and nothing is refused for having stopped.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := roster.SetState(layout(), actor, roster.StateOffline, now()); err != nil {
+				return err
+			}
+			fmt.Printf("%s is offline\n", actor)
+			return nil
+		},
+	}
+
+	cmd.AddCommand(listCmd, show, online, offline, ask)
 	return cmd
 }
 
@@ -198,6 +231,22 @@ func findActor(l workspace.Layout, name string) (roster.Entry, bool, []string) {
 		return entry, true, silent
 	}
 	return roster.Entry{}, false, silent
+}
+
+// annotateOccupants adds what each occupant last said about itself.
+//
+// The report is about the workspace and does not read the roster: what the tooling knows about
+// names is the tooling's, so the command joins the two rather than the report reaching for it.
+func annotateOccupants(l workspace.Layout, report *status.Report) {
+	entries, err := roster.Local(l)
+	if err != nil {
+		return
+	}
+	for i := range report.Occupancy {
+		if entry, ok := roster.Find(report.Occupancy[i].Occupant, entries); ok {
+			report.Occupancy[i].Presence = roster.Presence(entry)
+		}
+	}
 }
 
 // noSuchName is the refusal for a name every site that could be asked has never seen, and the

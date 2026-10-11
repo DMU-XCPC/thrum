@@ -31,6 +31,91 @@ type Entry struct {
 	// Job is what the name says it is on, which is what it last worked: a hint, not a
 	// claim. The claim is `var/occupy/`.
 	Job string `yaml:"job,omitempty" json:"job,omitempty"`
+	// State is what the name last said about itself: StateOnline or StateOffline. Empty
+	// means it has never said, which is not the same as offline.
+	State string `yaml:"state,omitempty" json:"state,omitempty"`
+	// Since is when it said it.
+	Since string `yaml:"since,omitempty" json:"since,omitempty"`
+}
+
+// The two things a name can say about itself. A session has a beginning and an end, and both
+// are the actor's to state: nothing here is inferred, and nothing expires.
+const (
+	StateOnline  = "online"
+	StateOffline = "offline"
+)
+
+// Presence says what a name last said about itself, in the words a reader needs.
+//
+// The three cases are the point. *Online* and *offline* are things the actor said; the third is
+// a name that has been heard from and has never said either way, which is what a session that
+// ended without saying so looks like — and pretending otherwise is how a claim comes to read
+// like a lock.
+// Said is the same thing without the last-seen, for a view that already shows it.
+func Said(e Entry) string {
+	switch e.State {
+	case StateOnline:
+		return "online since " + e.Since
+	case StateOffline:
+		return "offline since " + e.Since
+	default:
+		return "has not said whether it is working"
+	}
+}
+
+// Presence is what a name last said about itself, with when it was last heard from, for a view
+// that does not show that separately.
+func Presence(e Entry) string {
+	switch e.State {
+	case StateOnline:
+		return "online since " + e.Since + ", last heard " + e.LastSeen
+	case StateOffline:
+		return "offline since " + e.Since
+	default:
+		return "last heard " + e.LastSeen + ", and has not said whether it is working"
+	}
+}
+
+// SetState records what a name says about itself: that it is working here, or that it has
+// stopped. Saying either one makes the name exist, as acting does.
+func SetState(l workspace.Layout, name, state string, now time.Time) error {
+	if !format.ValidSlug(name) {
+		return fmt.Errorf("%q is not an actor name: an actor name is a slug", name)
+	}
+	if state != StateOnline && state != StateOffline {
+		return fmt.Errorf("%q is not something a name can say about itself", state)
+	}
+	stamp := now.UTC().Format(format.RFC3339UTC)
+
+	return atomic.Replace(l.ActorRoster(), func(current []byte) ([]byte, error) {
+		entries, err := decode(current)
+		if err != nil {
+			return nil, err
+		}
+		found := false
+		for i := range entries {
+			if entries[i].Name != name {
+				continue
+			}
+			found = true
+			entries[i].Site = Site(l)
+			entries[i].LastSeen = stamp
+			entries[i].State = state
+			entries[i].Since = stamp
+		}
+		if !found {
+			entries = append(entries, Entry{
+				Name:      name,
+				Site:      Site(l),
+				FirstSeen: stamp,
+				LastSeen:  stamp,
+				State:     state,
+				Since:     stamp,
+			})
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+		return yaml.Marshal(map[string][]Entry{"actors": entries})
+	})
 }
 
 // Seen records that a name did something here, making it exist if it did not.

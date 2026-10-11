@@ -8,6 +8,7 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/jobs"
 	"github.com/multiagentworkspace/thrum/tool/internal/leases"
 	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
+	"github.com/multiagentworkspace/thrum/tool/internal/roster"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -28,6 +29,7 @@ type jobView struct {
 	Worktree    string   `json:"worktree,omitempty"`
 	Occupant    string   `json:"occupant,omitempty"`
 	OccupantAt  string   `json:"occupant_since,omitempty"`
+	Presence    string   `json:"occupant_presence,omitempty"`
 	Next        string   `json:"next,omitempty"`
 	Agent       string   `json:"last_agent,omitempty"`
 	LastHandoff string   `json:"last_handoff,omitempty"`
@@ -77,6 +79,11 @@ func newJobCmd() *cobra.Command {
 				return err
 			} else if ok {
 				v.Occupant, v.OccupantAt = note.Occupant, note.Since
+				if entries, err := roster.Local(l); err == nil {
+					if entry, found := roster.Find(note.Occupant, entries); found {
+						v.Presence = roster.Presence(entry)
+					}
+				}
 			}
 			if last, name, err := jobs.LastHandoff(l, jobID); err == nil && last != nil {
 				v.Next, v.Agent, v.LastHandoff = last.Next, last.Agent, name
@@ -115,6 +122,9 @@ func newJobCmd() *cobra.Command {
 			}
 			if v.Occupant != "" {
 				fmt.Printf("occupied  %s since %s\n", v.Occupant, v.OccupantAt)
+				if v.Presence != "" {
+					fmt.Printf("          %s\n", v.Presence)
+				}
 			}
 			if v.Next != "" {
 				fmt.Printf("next      %s\n", firstLine(v.Next))

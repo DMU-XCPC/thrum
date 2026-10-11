@@ -60,6 +60,10 @@ type Occupant struct {
 	Occupant string
 	Since    string
 	Stale    bool // the job is no longer live, so the note is
+	// Presence is what the occupant last said about itself, already worded for a reader
+	// and filled in by the caller: this report is about the workspace, and what the
+	// tooling knows about names is not read here.
+	Presence string
 }
 
 // Gather builds the report.
@@ -326,6 +330,9 @@ func (r *Report) Print(w io.Writer) {
 		note := ""
 		if o.Stale {
 			note = "  (the job is no longer live)"
+		}
+		if o.Presence != "" {
+			note = "  (" + o.Presence + ")" + note
 		}
 		fmt.Fprintf(w, "  %-28s %-14s since %s%s\n", o.Job, o.Occupant, o.Since, note)
 	}
