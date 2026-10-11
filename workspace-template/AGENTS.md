@@ -30,7 +30,7 @@ tell you.
 | **your job's payload** | `job/<job-id>/`: scratch, logs, a tool's output. `thrum env --job <job-id>` points `TMPDIR` and the cache and state directories at it, so a tool that respects them cannot write anywhere else. |
 | **the records you write** | the brief's body, `handoff/<job-id>/…`, and the project's `doc/topic/` and `doc/convention/`. |
 | **nothing under `var/`** | It is the tooling's — *including making a directory there*. An entry a hand invents is invisible to `thrum status` and `verify`, is never collected, and never travels; work left inside one is work the next actor will not find. |
-| **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. A tool run without `thrum env` writes there, where nothing collects what it leaves. Secrets go in none of these files: the only ones inside a workspace are the tooling's own, in `var/secrets/`. |
+| **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. A tool run without `thrum env` writes there, where nothing collects what it leaves. Secrets go in none of these files: the only ones inside a workspace are the tooling's own, in `var/secrets/`. Reading is narrower than writing: the workspace holds what the task needs, and if you must look outside it — a tool's own documentation, a fact about this machine — say so in your handoff rather than going through the user's home for context (`~/.bash_history`, `~/.ssh/*`, another project's tree). |
 
 **Reading is not checking out.** A document on another branch, the brief of a job that has
 closed, a commit you are comparing against: `git -C .bare show <ref>:<path>` prints it, and

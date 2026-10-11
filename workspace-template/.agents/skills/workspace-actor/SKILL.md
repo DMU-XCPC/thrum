@@ -79,7 +79,7 @@ work done in the wrong place is work the next actor will not find, and no comman
 | **your job's payload** | `job/<job-id>/`: scratch, logs, and a tool's output — which is what `thrum env --job <job-id>` points `TMPDIR` and the cache and state directories at, so a tool that respects them cannot write anywhere else. |
 | **the records you write** | the brief's body, `handoff/<job-id>/…`, and the project's `doc/topic/` and `doc/convention/`. |
 | **nothing under `var/`** | It is the tooling's — *including making a directory there*. An entry a hand invents is invisible to `thrum status` and `verify`, is never collected, and never travels. |
-| **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. Secrets go in none of these files; the only ones inside a workspace are the tooling's own, in `var/secrets/`. |
+| **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. Secrets go in none of these files; the only ones inside a workspace are the tooling's own, in `var/secrets/`. Reading is narrower than writing: the workspace holds what the task needs, and if you must look outside it — a tool's own documentation, a fact about this machine — say so in your handoff rather than going through the user's home for context (`~/.bash_history`, `~/.ssh/*`, another project's tree). |
 
 **Reading is not checking out.** A document on another branch, the brief of a job that has
 closed, a commit you are comparing against — `git -C .bare show <ref>:<path>` prints it, and
@@ -124,7 +124,10 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
    and the root is the coordination repository, which holds records and not code. Scratch, logs and
    a tool's output go in `job/<job-id>/`, which is what `thrum env` points `TMPDIR` at; a helper
    script you write for yourself belongs there too, and a secret belongs in no file inside the
-   workspace. Stay inside the brief's `owned_paths`, and commit to `job/<job-id>`.
+   workspace. Stay inside the brief's `owned_paths`, and commit to `job/<job-id>`. That list is
+   this job's scope, and a path outside it is the owner's decision: ask, and put the answer or the
+   question in your handoff. "No live brief claims that path" is a different rule, about claims,
+   and it does not widen a scope.
 9. **Commit, then hand off.** `head` has to name an existing commit, so the commit comes first.
    Then `thrum handoff --job <job-id> --status <done|partial|blocked|aborted> --next '<first thing
    next>'`. One handoff is one coordination event, and therefore one commit.
