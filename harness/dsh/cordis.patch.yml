@@ -1,0 +1,9 @@
+# The bundle layer for this plugin: a profile that installs the package selects this file,
+# and the row below is what the loader mounts.
+#
+# `./index.js` is anchored beside this file, so the row names the plugin itself rather than
+# a copy of it. The row carries no `config` on purpose: `thrum` is taken from PATH, and the
+# bindings live under $DSH_HOME. A deployment that needs something else states it here.
+- insert:
+    - id: thrum-mailbox
+      name: './index.js'

@@ -103,10 +103,17 @@ plugin is one deployment's answer, not the format's.
 
 ## Installing it
 
-It is an ordinary cordis plugin package: the entry exports `apply`, `name` and `inject`.
+It is a DSH bundle as well as a cordis plugin package: the entry exports `apply`, `name` and
+`inject`, and `cordis.patch.yml` beside it carries the row that mounts it, so installing the
+package into a profile is the whole installation:
 
-Three things about installing it are easy to get wrong, and all three were checked against
-a real `dsh` boot rather than against cordis alone:
+```sh
+dsh plugin --profile web add /path/to/harness/dsh
+```
+
+What follows is mounting it by hand instead — in a patch layer of your own, or where the
+package is not installed. Three things about that are easy to get wrong, and all three were
+checked against a real `dsh` boot rather than against cordis alone:
 
 **It is an insert, not a patch.** A bare `- id: … / name: …` entry in a patch layer targets
 an *existing* entry, so a new one is dropped with `patch: entry "thrum-mailbox" not found`.
