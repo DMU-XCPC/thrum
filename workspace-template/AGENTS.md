@@ -13,6 +13,11 @@ export THRUM_ACTOR=claude-opus     # one slug, for every command in this session
 If you were given a name, that is your name. Without `--actor` or `$THRUM_ACTOR`, your work is
 recorded under `$USER`.
 
+**The name is yours, not the name of what you are running in.** `deepseek-harness`, `dsh` and
+`claude-code` name a harness — the thing hosting you, which changes while the work goes on, and
+which hosts several actors at once, so one of those names would merge their handoffs, occupancies
+and leases into one. Name the actor: `dana`, `agent-3`, `claude-opus`.
+
 **This format and `thrum` are under development.** A refusal is still the design being enforced,
 so trust it first; but a command that fails unexpectedly, or a refusal that contradicts the
 records, is a defect. Keep what the tool produced under `job/<job-id>/log/`, name it in your

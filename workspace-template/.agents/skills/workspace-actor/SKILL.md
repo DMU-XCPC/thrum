@@ -72,6 +72,9 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
   `--actor <name>` on each one, with the same value.
 - Without `--actor` or `$THRUM_ACTOR`, the tooling records `$USER`.
 - A later session may use a different name; every command of one session uses the same one.
+- **Not the name of your harness.** `deepseek-harness`, `dsh`, `claude-code` name where you are
+  running, not who is working; the harness changes and one harness hosts many actors, so the name
+  would go stale and merge them. `names.md` has the rule and its reason.
 
 ## What you may touch
 

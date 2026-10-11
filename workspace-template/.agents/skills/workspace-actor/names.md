@@ -76,6 +76,12 @@ work. A later session may choose another, and the roster simply stops hearing fr
 An actor may be a person or an agent. The first time a name is used it exists; nothing is
 registered, and nothing is refused because a name is missing — a name is not a permission.
 
+**Not the name of the harness the actor runs in** — `deepseek-harness`, `dsh`, `claude-code`. A
+harness is a changeable fact about the environment, so a name that encodes it goes stale, which is
+the same reason no name here encodes state at all. It is also one harness to many actors: one such
+name would make their handoffs, occupancies and leases read as one actor's, and the roster — which
+is what the tooling has seen — could no longer tell them apart.
+
 ## What the rules buy
 
 Because a name is reversible, a record can be checked against the path it lives at — a brief's
