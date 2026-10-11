@@ -110,7 +110,7 @@ func newOccupancyCmd() *cobra.Command {
 
 	sweep := &cobra.Command{
 		Use:   "sweep",
-		Short: "Clear the notes of jobs that have left doc/task/",
+		Short: "Clear the stale notes: jobs that have left doc/task/, and jobs this site no longer holds",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			swept, err := occupancy.Sweep(layout())
