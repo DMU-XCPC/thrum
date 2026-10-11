@@ -92,7 +92,10 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
    anything. A tool run without it writes outside, where nothing collects what it leaves.
 7. **Take what you need first.** A lease for a unit of a declared resource, before you start rather
    than once you are stuck: `thrum lease take --resource <name> --job <job-id>`.
-8. **Work.** Stay inside the brief's `owned_paths`, and commit to `job/<job-id>`.
+8. **Work in the directory step 1 named.** That is where the code is; `var/`, `job/` and the
+   workspace root are not places to edit — `var/` is the tooling's, `job/` is this job's payload,
+   and the root is the coordination repository, which holds records and not code. Stay inside the
+   brief's `owned_paths`, and commit to `job/<job-id>`.
 9. **Commit, then hand off.** `head` has to name an existing commit, so the commit comes first.
    Then `thrum handoff --job <job-id> --status <done|partial|blocked|aborted> --next '<first thing
    next>'`. One handoff is one coordination event, and therefore one commit.

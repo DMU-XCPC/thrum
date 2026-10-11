@@ -108,6 +108,13 @@ rather than a silent one — but a hash cannot give the bytes back.
 | Assets — `store/` | durable bytes, content-addressed | yes, as tags | yes, as tags |
 | Runtime — `var/`, `job/`, `worktree/` | working state | no | no |
 
+**Nothing under `var/` is written by hand, and that includes making a directory there.**
+`var/` is the tooling's: each thing in it is the tooling's because a hand would break what it
+carries — an occupancy with an expiry, a site-local half, a mailbox. A scratch directory of your
+own under `var/` is not working state the workspace knows about: `thrum status` and `verify` do
+not report it, nothing collects it, and it never travels. Working *in* one is worse than untidy,
+because the work then lives where no actor after you will look for it.
+
 `.bare/`, `store/`, `var/`, `job/` and `worktree/` are ignored in `.gitignore` and
 `.git/info/exclude`. Never run a bare `git clean` at the workspace root: `-x` would delete
 `.bare/` and the entire source history with it. `thrum clean` is the guarded version, and it
