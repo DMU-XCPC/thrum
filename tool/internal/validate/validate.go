@@ -107,7 +107,7 @@ func (v *validator) checkSkeleton() {
 		v.add(dir, "the workspace has every directory the template defines", "the directory is not there")
 	}
 	for _, file := range drift.Skeleton {
-		what := "it is not the copy the tooling carries"
+		what := "it is not the copy the tooling carries — `thrum update --dry-run` says what the tooling has now"
 		if len(file.Workspace) == 0 {
 			what = "it is not there"
 		}

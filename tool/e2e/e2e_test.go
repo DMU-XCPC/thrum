@@ -1504,3 +1504,19 @@ func TestTakingUpAJobOpenedForSomebodyElse(t *testing.T) {
 		t.Errorf("the owner stays who the work is promised to, and the job says:\n%s", j)
 	}
 }
+
+// A site that cannot name itself cannot find its own half of a declaration, so a name that is not
+// a slug is refused where it is given rather than reported by verify afterwards.
+func TestASiteNameIsASlugLikeEveryOtherName(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "build-01")
+	if out, err := try(t, "create", root, "--site", "ArchX"); err == nil {
+		t.Errorf("a site name that is not a slug should be refused, and it said:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(root, "var", "site")); err == nil {
+		t.Error("a refused create should not have written a site file")
+	}
+	run(t, "create", root, "--site", "build-01")
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("a workspace should be born coherent, and verify said:\n%s", out)
+	}
+}

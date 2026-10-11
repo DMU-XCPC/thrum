@@ -10,6 +10,7 @@ import (
 	"io"
 
 	root "github.com/multiagentworkspace/thrum"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 )
 
@@ -36,6 +37,13 @@ type CreateOptions struct {
 // rather than copied, because a repository cannot carry an empty directory. What the
 // template does hold is the files that are copied verbatim.
 func Create(opts CreateOptions) (Layout, error) {
+	// A site that cannot name itself cannot find its own half of a declaration, and a name that is
+	// not a slug is one no record can carry. Refused before anything is created: a workspace must
+	// not be born with a finding of its own making, and a refusal that leaves a half-made
+	// directory behind is work nobody asked for.
+	if opts.Site != "" && !format.ValidSlug(opts.Site) {
+		return Layout{}, fmt.Errorf("the site name %q is not a slug: lowercase letters, digits and hyphens, like every other name here", opts.Site)
+	}
 	l := New(opts.Root)
 	if opts.Site == "" {
 		return l, fmt.Errorf("a workspace needs a site name: a site that cannot name itself cannot find its own half of a declaration")
