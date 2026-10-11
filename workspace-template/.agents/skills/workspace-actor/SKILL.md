@@ -87,6 +87,7 @@ work done in the wrong place is work the next actor will not find, and no comman
 | **your job's payload** | `job/<job-id>/`: scratch, logs, and a tool's output — which is what `thrum env --job <job-id>` points `TMPDIR` and the cache and state directories at, so a tool that respects them cannot write anywhere else. |
 | **the records you write** | the brief's body, `handoff/<job-id>/…`, and the project's `doc/topic/` and `doc/convention/`. |
 | **nothing under `var/`** | It is the tooling's — *including making a directory there*. An entry a hand invents is invisible to `thrum status` and `verify`, is never collected, and never travels. |
+| **nothing cleaned by hand** | Never `git clean -x` at the workspace root: `-x` deletes `.bare/` and the whole source history with it. `thrum clean` is the guarded version, and it removes only what the coordination repository neither tracks nor ignores. |
 | **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. Secrets go in none of these files; the only ones inside a workspace are the tooling's own, in `var/secrets/`. Reading is narrower than writing: the workspace holds what the task needs, and if you must look outside it — a tool's own documentation, a fact about this machine — say so in your handoff rather than going through the user's home for context (`~/.bash_history`, `~/.ssh/*`, another project's tree). |
 
 **Reading is not checking out.** A document on another branch, the brief of a job that has
@@ -112,7 +113,9 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
 3. **Read this project's rules.** `doc/convention/`, in number order. The order is the priority.
 4. **Check your mail.** `thrum inbox` lists what other actors have sent you, and `thrum read <id>`
    reads one and takes any files it carried. A message is process information and is never in a
-   handoff, so this is the only place it arrives — and it is often why the last actor stopped.
+   handoff, so this is the only place it arrives — and it is often why the last actor stopped. `thrum send --to <actor>` is the other half, and the only
+   way to reach an actor at another site: a message never travels by git and never appears in a
+   handoff.
 5. **Take it up.** `thrum work --job <job-id>` is `open`, `claim` and `occupy` in the order they
    have to happen, and it ends by printing the working directory and the environment line to run:
    it opens the job when it is not open yet, declares the label when you name a new one, claims
@@ -122,12 +125,16 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
    **stale** when this site has no working directory for the job, which is what an actor stopping
    without vacating leaves behind: releasing the directory does not clear the note. `thrum work`
    takes a stale claim over and says whose it was; `thrum occupancy sweep` clears the stale ones a
-   site is carrying; and `thrum occupancy vacate --job <job-id>` ends your own stretch.
+   site is carrying; and `thrum occupancy vacate --job <job-id>` ends your own stretch. A **live** claim — this site has the job's directory — is asked about and
+   never taken: the explicit takeover is `thrum occupancy occupy --job <job-id> --take-over`, and it
+   is a decision, not a repair. A working directory comes from `thrum work`, from `thrum open
+   --create-label`, or from `thrum worktree add` — nothing else.
 6. **Point your tools inside the workspace.** `eval "$(thrum env --job <job-id>)"` before running
    anything. A tool run without it writes outside, where nothing collects what it leaves.
 7. **Take what you need first.** A lease for a unit of a declared resource, before you start rather
    than once you are stuck: `thrum lease take --resource <name> --job <job-id>` — the resource, its
-   units and how long a lease lives are `assets.md`.
+   units and how long a lease lives are `assets.md`. Taking one is a promise to give it back: `thrum
+   close` releases every unit the job still holds, so a lease you forget does not outlive the job.
 8. **Work in the directory step 1 named.** That is where the code is; `var/`, `job/` and the
    workspace root are not places to edit — `var/` is the tooling's, `job/` is this job's payload,
    and the root is the coordination repository, which holds records and not code. Scratch, logs and
@@ -137,9 +144,12 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
    this job's scope, and a path outside it is the owner's decision: ask, and put the answer or the
    question in your handoff. "No live brief claims that path" is a different rule, about claims,
    and it does not widen a scope. **Where a thing goes is `placement.md`**, and that is the file to
-   have read before writing a file anywhere.
+   have read before writing a file anywhere. `out/` is where the work happens, not a delivery: a result
+   that has to outlive the job is published to `store/`, which is `assets.md`.
 9. **Commit, then hand off.** `head` has to name an existing commit, so the commit comes first —
-   the record's shape, its sections and what it refuses are `records.md`.
+   the record's shape, its sections and what it refuses are `records.md`. When an event is refused,
+   your record stays in the working tree uncommitted, to be recorded again once what it clashed with
+   is settled — nothing is lost, and nothing is half-written.
    Then `thrum handoff --job <job-id> --status <done|partial|blocked|aborted> --next '<first thing
    next>'`. One handoff is one coordination event, and therefore one commit.
 10. **Close, or leave the baton.** `thrum close --job <job-id>` only when the acceptance criteria
