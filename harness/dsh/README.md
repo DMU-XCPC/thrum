@@ -150,3 +150,14 @@ What that costs is one child process per binding, so a host that has been used f
 starts as many as there are mailboxes it has ever watched for. `thrum_watch` in a session is
 what adds one, and nothing prunes them yet: a binding is dropped only if somebody writes the
 file without it.
+
+## Two hosts, one home
+
+Two hosts can share one harness home — the web app and something else on one machine, or two
+profiles — and each of them binds actors at its own moments. A save is therefore
+read-merge-write under a lock, not "write back what was loaded at boot": a binding this
+process has never seen is kept, and a binding it knows is its own, which is what lets the cap
+on announced ids actually evict. Without that, the second host's save erased the first host's
+bindings, and an erased binding is a session that stops being woken with nothing said. The
+lock is a directory (creating one is atomic), the merge is what does the work, and a lock left
+behind by a host that died is taken away after five seconds rather than trusted.

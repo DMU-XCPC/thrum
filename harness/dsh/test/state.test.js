@@ -72,3 +72,37 @@ test('the state is written whole or not at all', () => {
   assert.equal(parsed.version, 1)
   assert.equal(parsed.bindings['/ws\u0000alice'].sessionId, 's-1')
 })
+
+// Two hosts can share one harness home. A save is read-merge-write, so the second host's
+// binding does not erase the first's — an erased binding is a session that is never woken
+// and nothing says so.
+test('two hosts sharing a home keep each other\'s bindings', () => {
+  const path = statePath(mkdtempSync(join(tmpdir(), 'thrum-mailbox-')))
+  const first = Bindings.load(path)
+  const second = Bindings.load(path)
+  first.bind('/ws/one', 'alice', 's-1')
+  second.bind('/ws/two', 'bob', 's-2')
+
+  const after = Bindings.load(path)
+  assert.deepEqual(
+    after.entries().map((e) => e.actor).sort(),
+    ['alice', 'bob'],
+    'a save adds what another host recorded rather than replacing it',
+  )
+  assert.equal(after.sessionFor('/ws/one', 'alice'), 's-1')
+  assert.equal(after.sessionFor('/ws/two', 'bob'), 's-2')
+})
+
+// And what one host has announced is not forgotten by the other host's save.
+test('an announcement survives the other host\'s save', () => {
+  const path = statePath(mkdtempSync(join(tmpdir(), 'thrum-mailbox-')))
+  const first = Bindings.load(path)
+  first.bind('/ws/one', 'alice', 's-1')
+  first.announce('/ws/one', 'alice', 'm-1')
+
+  const second = Bindings.load(path)
+  second.bind('/ws/two', 'bob', 's-2')
+
+  const after = Bindings.load(path)
+  assert.equal(after.announced('/ws/one', 'alice', 'm-1'), true)
+})

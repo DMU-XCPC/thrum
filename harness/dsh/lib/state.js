@@ -7,7 +7,7 @@
 // The key is (root, actor), because one actor may work in two workspaces on one host and
 // one workspace may have several actors.
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -25,9 +25,30 @@ export function statePath(dshHome) {
 
 const key = (root, actor) => `${root}\u0000${actor}`
 
+// A save is read-merge-write under a lock, not "write back what I loaded at boot". Two
+// hosts can share one harness home, and each of them binds actors at its own moments, so a
+// plain write would let the second host's save erase the first host's bindings — and a
+// binding that has been erased is a session that is never woken, silently.
+//
+// The lock is a directory, because creating one is atomic on every filesystem this runs on.
+// Not getting it is not a reason to skip the save: the merge is what stops the erasure, and
+// the lock only closes the window between reading and writing. A host that died holding the
+// lock must not stop the next one, so a lock older than STALE_LOCK_MS is taken away.
+const LOCK_WAIT_MS = 1000
+const STALE_LOCK_MS = 5000
+
+/** A synchronous pause, which is what a synchronous save path has to work with. */
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
 export class Bindings {
   #path
   #state
+  // Keys this process has just removed. A merge must not adopt them back from the file it
+  // is about to replace, or an unbind would undo itself; a rebind in the same breath
+  // forgets the removal again.
+  #removed = new Set()
 
   constructor(path, state = { version: VERSION, bindings: {} }) {
     this.#path = path
@@ -54,6 +75,7 @@ export class Bindings {
     entry.actor = actor
     entry.sessionId = sessionId
     this.#state.bindings[key(root, actor)] = entry
+    this.#removed.delete(key(root, actor))
     this.#save()
     return entry
   }
@@ -91,15 +113,70 @@ export class Bindings {
   /** Forget a binding, and everything announced under it. */
   unbind(root, actor) {
     delete this.#state.bindings[key(root, actor)]
+    this.#removed.add(key(root, actor))
     this.#save()
   }
 
   #save() {
     mkdirSync(dirname(this.#path), { recursive: true })
-    // Written the way the workspace writes its own files: a temporary neighbour and a
-    // rename, so a crash leaves the old file or the new one and never half of either.
-    const temporary = `${this.#path}.tmp${process.pid}`
-    writeFileSync(temporary, `${JSON.stringify(this.#state, null, 2)}\n`, { mode: 0o600 })
-    renameSync(temporary, this.#path)
+    const lock = `${this.#path}.lock`
+    const held = this.#lock(lock)
+    try {
+      this.#merge(this.#read())
+      this.#removed.clear()
+      // Written the way the workspace writes its own files: a temporary neighbour and a
+      // rename, so a crash leaves the old file or the new one and never half of either.
+      const temporary = `${this.#path}.tmp${process.pid}`
+      writeFileSync(temporary, `${JSON.stringify(this.#state, null, 2)}\n`, { mode: 0o600 })
+      renameSync(temporary, this.#path)
+    } finally {
+      if (held) rmdirSync(lock)
+    }
+  }
+
+  /** Take the save lock if it can be had, giving up rather than hanging a wake. */
+  #lock(path) {
+    const until = Date.now() + LOCK_WAIT_MS
+    for (;;) {
+      try {
+        mkdirSync(path)
+        return true
+      } catch (error) {
+        if (error?.code !== 'EEXIST') return false
+        try {
+          if (Date.now() - statSync(path).mtimeMs > STALE_LOCK_MS) {
+            rmdirSync(path)
+            continue
+          }
+        } catch {
+          continue // it went away between the two calls, so take it
+        }
+        if (Date.now() >= until) return false
+        sleep(10)
+      }
+    }
+  }
+
+  /** Fold in what another process recorded, so that a save adds rather than replaces. */
+  #merge(onDisk) {
+    for (const [k, entry] of Object.entries(onDisk?.bindings ?? {})) {
+      if (this.#removed.has(k)) continue // this process is the one that dropped it
+      // A binding this process has never seen belongs to another host, and dropping it is
+      // how a session stops being woken without anybody being told. A binding this process
+      // does know is its own: what it holds is what its own last change decided, and that
+      // includes the announced list, whose cap only works if the file cannot re-add what
+      // the cap has just evicted.
+      if (!this.#state.bindings[k]) this.#state.bindings[k] = entry
+    }
+  }
+
+  #read() {
+    try {
+      const parsed = JSON.parse(readFileSync(this.#path, 'utf8'))
+      if (parsed?.version === VERSION && parsed.bindings) return parsed
+    } catch {
+      // Nothing to merge: a missing file is a host that has never bound an actor.
+    }
+    return { version: VERSION, bindings: {} }
   }
 }
