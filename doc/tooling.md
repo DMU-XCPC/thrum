@@ -102,7 +102,7 @@ Every operation in this document works with no daemon running: the command-line 
 
 - **Local**: a socket under `var/`, so the command-line program on the same site can ask and tell. When the socket is not there, the command does the work itself.
 - **Remote**: SSH, with no authentication model of its own. The machines that hold resources are already reachable over SSH — that is what reaching a resource always meant — so the daemon rides on what exists rather than inventing a trust model. A peer runs one command per request, over the same channel it would use to use the resource; a message is one of those requests, with its attachments behind it.
-- **`serve` is therefore nearly free**: the repositories are files at paths the roster declares, and a peer fetches them over SSH like any other remote. Where the sites already share an external git remote, none of it is needed.
+- **`serve` is therefore nearly free**: the repositories are files at paths the roster declares, and a peer fetches them over SSH like any other remote. Where the sites already share an external git remote, none of it is needed. **It is the daemon's own listener that serves them** — a peer asks it for `git-upload-pack` or `git-receive-pack` — because a request through a system sshd runs one forced command and carries the protocol rather than git's. A site that accepts peers through an sshd it already runs therefore answers questions and takes messages through it, and serves its repositories only where its own listener is reachable.
 
 ### What it answers
 

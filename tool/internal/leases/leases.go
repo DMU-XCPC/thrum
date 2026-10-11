@@ -36,7 +36,7 @@ func Take(l workspace.Layout, r Request, now time.Time) (format.Lease, error) {
 	}
 	brief, _, err := workspace.ReadBrief(l, r.Job)
 	if err != nil {
-		return format.Lease{}, fmt.Errorf("no job %q: a lease always belongs to a job the workspace knows", r.Job)
+		return format.Lease{}, fmt.Errorf("no job %q: a lease always belongs to a job the workspace knows, and this site has not seen its brief — publish it with `thrum sync --job %s` where the job is, and have this site fetch the records, before asking again", r.Job, r.Job)
 	}
 	// A job that is done or abandoned is no longer meant to happen, so nothing is held
 	// for it. A record left behind by such a job is still free for others — its holder
