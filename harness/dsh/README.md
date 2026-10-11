@@ -146,6 +146,12 @@ workspace is still there gets its watch back, and a recorded one whose workspace
 is skipped and reported rather than forgotten, because a workspace can live on a volume that
 has not been mounted yet.
 
+A host that is killed outright leaves its watchers behind: they survive their parent and are
+adopted by init, then die on the first message they try to report, because the pipe they were
+writing to has no reader. That costs one idle process per binding until the next message
+arrives, and it cannot cost a wake — every watcher holds its own watch on the mailbox, so the
+host that mounted afterwards reports the message whichever orphan is still around.
+
 What that costs is one child process per binding, so a host that has been used for a long time
 starts as many as there are mailboxes it has ever watched for. `thrum_watch` in a session is
 what adds one, and nothing prunes them yet: a binding is dropped only if somebody writes the
