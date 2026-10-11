@@ -27,8 +27,9 @@ which hosts several actors at once, so one of those names would merge their hand
 and leases into one. Name the actor: `dana`, `agent-3`, `claude-opus`.
 
 **This file is the workspace's; the project's `AGENTS.md` inside the working directory is the
-project's.** Both are read, and they govern different things: this one says where work goes and how
-it is recorded, the project's says how the code is built and delivered.
+project's** — versioned with the code, and read beside this one. They govern different things: this
+one says where work goes and how it is recorded, the project's says how the code is built and
+delivered.
 
 **This format and `thrum` are under development.** A refusal is still the design being enforced,
 so trust it first; but a command that fails unexpectedly, or a refusal that contradicts the
@@ -79,6 +80,3 @@ the next command can see what this one made.
 
 Then read `.agents/skills/workspace-actor/SKILL.md`. It is the loop, and this file is only the
 way in.
-
-This file is not the code repository's `AGENTS.md`, which sits inside a worktree, is versioned
-with the code, and belongs to the project.
