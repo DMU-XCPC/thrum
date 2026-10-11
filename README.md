@@ -76,8 +76,9 @@ answer is — so the brief, the handoffs and the conventions stay the only place
 rule is stated.
 
 Several sites of one workspace — the same records, on more than one machine — are joined
-with `thrum join`, and reach each other directly over SSH. `tool/README.md` has the whole
-command surface and the configuration that goes with it.
+with `thrum join`, and reach each other directly over SSH; `thrum site` writes this machine's
+own half of that. `doc/tooling.md` has every command and the interfaces they are asked
+through.
 
 ## Repository layout
 
