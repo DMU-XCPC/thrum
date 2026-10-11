@@ -8,6 +8,14 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
+// SyncRoster exchanges this site's roster with every peer, once.
+//
+// It is the same exchange the daemon runs on its own timer, and it is safe to call anywhere: it
+// answers no request, refuses nothing, and a peer that does not answer is simply tried again
+// next time. Pulling comes before pushing, which is what carries a name learned from one peer
+// on to the next.
+func SyncRoster(l workspace.Layout) { newRosterSync(l).once() }
+
 // rosterSyncEvery is how often a daemon looks at its own roster. A minute is short enough that
 // a name is known to the peers of the site it is at, and long enough that an idle workspace
 // sends nothing.
