@@ -77,7 +77,27 @@ Everything in *What the tooling must not do* below, and two more: it does not ho
 | `create` | Instantiates a workspace from the template: the two bare repositories, the empty runtime directories, the ignore rules in both `.gitignore` and `.git/info/exclude`, the entry point and the skill an actor is handed, this site's own name in `var/site`, and the first coordination commit. | Never a plain file copy. The repositories have to be initialised, not duplicated. |
 | `update` | Brings the unversioned skeleton up to date with the template the tooling carries: the empty directories, the ignore rules in both copies, and the entry point and skill an actor is handed. Reports the copy-me files under `doc/template/` that differ, and writes them only when a person asks, leaving them uncommitted to be recorded. | Never touches a versioned file on its own initiative, and never removes a directory. Restores a rule the workspace has lost, and keeps a rule the tooling no longer has until `--narrow` says otherwise |
 | `verify` | Runs the whole validation list, including the unversioned skeleton — a directory the template defines that is not there, a file the template carries that is not there, and an ignore rule the tooling carries that this workspace has lost in either copy — and the values the conventions declare, since a policy nobody can read is a policy nobody has. | Reports; it does not repair. |
-| `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. | `--json` is the same picture for whatever asked, as `{"report": …, "actors": […], "sites": […]}` — the report, and the two questions about the present that no report answers.
+| `status` | Prints the current picture: the task board — each brief's status with its latest handoff — which labels this site has materialised and what each holds, which leases are held, which payloads are collectible, and where a directory exists with no declaration. | Reads only. | `--json` is the same picture for whatever asked, in this shape:
+
+```json
+{
+  "report": {
+    "jobs":     [{"id", "state", "status", "owner", "live", "started", "blocked", "last_handoff", "next"}],
+    "worktrees":[{"path", "label", "branch", "detached"}],
+    "leases":   [{"resource", "unit", "job", "since", "expires"}],
+    "occupancy":[{"job", "occupant", "since", "stale", "presence"}],
+    "collectible": [{"job", "closed", "now", "later", "keep"}],
+    "undeclared": […], "unmaterialised": […]
+  },
+  "actors": [{"name", "site", "first_seen", "last_seen", "job", "state", "since"}],
+  "sites":  [{"name", "reachable", "note"}]
+}
+```
+
+The keys and the shapes above are the contract: a key is renamed or a value changes type only
+when something that reads them is changed with it, and a test fails when either happens. A job's
+`state` is the word the board prints (`not started`, `blocked`, its brief's status), and its
+`status` is the brief's own — the two differ for a live job on purpose.
 | `clean` | The guarded clean of untracked files. | Never a bare `git clean` at the workspace root, which would delete `.bare/` and the entire source history with it. |
 | `join` | Makes this machine another site of a workspace that already exists: takes the shared line from the coordination repository, and fills in what a repository cannot carry — the ignore rules, the empty directories, the entry point and skill an actor is handed, the site's own name, and its own copies of the code and asset repositories. | Commits nothing: joining does not begin a history, and a second first commit would be a second workspace. Refuses a site the roster does not declare, rather than half-joining one. |
 | *every record write* | Begins by bringing this site up to date from the shared line, and ends by putting the event in it or taking it back out. | The tip of the shared branch is the only piece of exclusion state a coordination write needs: an event is in the line if and only if its parent was. A commit that lost a race was never in the line, so redoing it rewrites nothing that has been seen; a commit whose file moved as well is refused and taken back out, because two versions of one file cannot both be in one line. Nothing is merged, ever |

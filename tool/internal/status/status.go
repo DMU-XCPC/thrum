@@ -24,12 +24,15 @@ import (
 
 // Job is one line of the task board.
 type Job struct {
-	ID          string `json:"id"`
-	Status      string `json:"status"`
-	Owner       string `json:"owner,omitempty"`
-	Live        bool   `json:"live"`
-	Started     bool   `json:"started"`
-	Blocked     bool   `json:"blocked"`
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Owner   string `json:"owner,omitempty"`
+	Live    bool   `json:"live"`
+	Started bool   `json:"started"`
+	Blocked bool   `json:"blocked"`
+	// State is Board's answer, carried rather than derived by the reader: the text and the
+	// JSON describe a job the same way, and only one of them can call a method.
+	State       string `json:"state"`
 	LastHandoff string `json:"last_handoff,omitempty"`
 	Next        string `json:"next,omitempty"`
 }
@@ -54,10 +57,11 @@ type Report struct {
 	Collectible []Collectible     `json:"collectible,omitempty"`
 }
 
-// State is how the board describes a job: a closed job by its brief, since the state of its
+// Board is how the board describes a job: a closed job by its brief, since the state of its
 // last stretch is a detail of how it got there, and a live one by what the derived facts say,
-// because for one of those they are the interesting part.
-func (j Job) State() string {
+// because for one of those they are the interesting part. It is carried in State so that what
+// a reader sees and what a machine reads are the same word.
+func (j Job) Board() string {
 	if !j.Live {
 		return j.Status
 	}
@@ -125,6 +129,7 @@ func (r *Report) gatherJobs(l workspace.Layout) error {
 			line.LastHandoff = last.Status
 			line.Next = last.Next
 		}
+		line.State = line.Board()
 		r.Jobs = append(r.Jobs, line)
 
 		if !isLive && (b.Status == format.StatusDone || b.Status == format.StatusAbandoned) {
@@ -275,7 +280,7 @@ func (r *Report) Print(w io.Writer) {
 		fmt.Fprintf(w, "  (no jobs)\n")
 	}
 	for _, j := range r.Jobs {
-		state := j.State()
+		state := j.State
 		owner := j.Owner
 		if owner == "" {
 			owner = "unowned"

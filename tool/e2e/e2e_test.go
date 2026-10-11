@@ -1249,13 +1249,16 @@ func TestStatusIsReadableByAMachine(t *testing.T) {
 			Jobs []struct {
 				ID    string `json:"id"`
 				Owner string `json:"owner"`
+				State string `json:"state"`
 			} `json:"jobs"`
 			Worktrees []struct {
 				Label string `json:"label"`
+				Path  string `json:"path"`
 			} `json:"worktrees"`
 		} `json:"report"`
 		Actors []struct {
-			Name string `json:"name"`
+			Name  string `json:"name"`
+			State string `json:"state"`
 		} `json:"actors"`
 	}
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
@@ -1269,6 +1272,29 @@ func TestStatusIsReadableByAMachine(t *testing.T) {
 	}
 	if len(got.Actors) == 0 {
 		t.Error("the names should be in it, which is a question about the present and not a file")
+	}
+	// The board's word is carried, not left for the reader to derive: what a person sees
+	// and what a machine reads are the same state.
+	if got.Report.Jobs[0].State != "not started" {
+		t.Errorf("a job with nothing done yet is described as not started, and it says %q", got.Report.Jobs[0].State)
+	}
+	if got.Report.Worktrees[0].Path == "" {
+		t.Error("a working directory is named by its path")
+	}
+
+	// The shapes inside are the contract too, so a renamed key fails here.
+	var deep struct {
+		Report struct {
+			Jobs []map[string]json.RawMessage `json:"jobs"`
+		} `json:"report"`
+	}
+	if err := json.Unmarshal([]byte(out), &deep); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"id", "state", "status", "owner", "live", "started", "blocked"} {
+		if _, ok := deep.Report.Jobs[0][key]; !ok {
+			t.Errorf("a job line should carry %q, and carries %v", key, deep.Report.Jobs[0])
+		}
 	}
 
 	// The keys are the shape a machine reads, so they are pinned here: the report, and the

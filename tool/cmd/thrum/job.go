@@ -83,7 +83,7 @@ func newJobListCmd() *cobra.Command {
 				if owner != "" && job.Owner != owner {
 					continue
 				}
-				if lastSaid != "" && job.State() != lastSaid {
+				if lastSaid != "" && job.State != lastSaid {
 					continue
 				}
 				jobs = append(jobs, job)
@@ -108,7 +108,7 @@ func newJobListCmd() *cobra.Command {
 				if job.Next != "" {
 					next = "  next: " + firstLine(job.Next)
 				}
-				fmt.Printf("%-28s %-14s %-14s %s%s\n", job.ID, job.State(), who, where, next)
+				fmt.Printf("%-28s %-14s %-14s %s%s\n", job.ID, job.State, who, where, next)
 			}
 			return nil
 		},
