@@ -27,10 +27,8 @@ which hosts several actors at once, so one of those names would merge their hand
 and leases into one. Name the actor: `dana`, `agent-3`, `claude-opus`.
 
 **This file is the workspace's; the project's `AGENTS.md` inside the working directory is the
-project's.** Both are read, and they govern different things: this one says where work goes and
-how it is recorded, the project's says how the code is built and delivered. Where a project keeps
-its own handoffs (`docs/handoffs/…`), those are deliverables; `handoff/<job-id>/` is the
-coordination record, and a stretch that both a person and this workspace will read writes both.
+project's.** Both are read, and they govern different things: this one says where work goes and how
+it is recorded, the project's says how the code is built and delivered.
 
 **This format and `thrum` are under development.** A refusal is still the design being enforced,
 so trust it first; but a command that fails unexpectedly, or a refusal that contradicts the
