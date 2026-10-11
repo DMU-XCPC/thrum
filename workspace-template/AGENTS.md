@@ -23,13 +23,11 @@ recorded under `$USER`.
 **A host that gives every command a new shell loses the export**: pass `--actor <name>` on each
 command instead, with the same value.
 
-**The name is yours, not the name of what you are running in.** `deepseek-harness`, `dsh` and
-`claude-code` name a harness — the thing hosting you, which changes while the work goes on, and
-which hosts several actors at once, so one of those names would merge their handoffs, occupancies
-and leases into one. Name the session: `agent-3`, `dana`, `ws-7` — not the harness, and **not the model**. An alias of
-whatever you happen to be running (`deepseek-flash`, `gpt-5`, a `claude-…`) is swapped under a
-session, and a name swapped with it turns one actor's records into several. If the person who
-dispatched you gave a name, that is the name; if not, pick one you can keep for the whole session.
+**Not the harness, and not the model.** `deepseek-harness`, `dsh` and `claude-code` name the thing
+hosting you; `deepseek-flash`, `gpt-5` and the like name the model. Both are swapped while the
+session goes on, and one harness hosts many sessions at once, so a name taken from either goes stale
+and merges actors that are not the same one. If the person who dispatched you gave a name, that is
+the name; if not, pick one you can keep for the whole session — `agent-3`, `dana`, `ws-7`.
 
 **This file is the workspace's; the project's `AGENTS.md` inside the working directory is the
 project's** — versioned with the code, and read beside this one. They govern different things: this

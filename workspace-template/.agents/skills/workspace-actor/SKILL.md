@@ -93,9 +93,9 @@ work done in the wrong place is work the next actor will not find, and no comman
 | **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. Secrets go in none of these files; the only ones inside a workspace are the tooling's own, in `var/secrets/`. Reading is narrower than writing: the workspace holds what the task needs, and if you must look outside it — a tool's own documentation, a fact about this machine — say so in your handoff rather than going through the user's home for context (`~/.bash_history`, `~/.ssh/*`, another project's tree). |
 
 **Reading is not checking out.** A document on another branch, the brief of a job that has
-closed, a commit you are comparing against — `git -C .bare show <ref>:<path>` prints it, and
-`git -C .bare ls-tree` or `log` say what there is to read. A working directory is made by the
-tooling, under a declared label, and never by a `git worktree add` of your own.
+closed, a commit you are comparing against — read it with whatever you have at hand. A working
+directory is made by the tooling, under a declared label, and never by a `git worktree add` of
+your own.
 
 ## The loop
 
@@ -109,8 +109,7 @@ tooling, under a declared label, and never by a `git worktree add` of your own.
 2. **Read.** `doc/task/<job-id>/brief.md`, then the newest file in `handoff/<job-id>/`. Its `next`
    is the baton: what the last actor decided you do first, and usually the whole reason you are
    being asked. Anything that is **not** in your working tree — a document on another branch, a
-   closed job's brief, a commit you are comparing against — is read, not checked out: `git -C
-   .bare show <ref>:<path>` prints it. A working directory comes from the tooling, under a
+   closed job's brief, a commit you are comparing against — is read, not checked out — no working directory is made for it. A working directory comes from the tooling, under a
    declared label, and never from a `git worktree add` of your own.
 3. **Read this project's rules.** `doc/convention/`, in number order. The order is the priority. An empty directory means this project has written no policy yet: say
    that in your handoff rather than inventing a rule for it.

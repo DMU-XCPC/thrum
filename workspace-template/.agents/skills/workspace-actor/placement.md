@@ -45,10 +45,9 @@ worktree has this branch" is how the tooling answers *where is this job*. A hand
 therefore does not sit harmlessly beside the workspace; it becomes the answer.
 
 **To read something without working in it, read the blob.** A document on another branch, the
-brief of a job that has closed, a commit you are comparing against: `git -C .bare show
-<ref>:<path>` prints it, and `git -C .bare ls-tree` or `log` say what is there to read. Nothing
-has to be checked out, and nothing should be — *Reading is not checking out* in `SKILL.md` has
-the reason.
+brief of a job that has closed, a commit you are comparing against: read it with whatever you have
+at hand. Nothing has to be checked out, and nothing should be — *Reading is not checking out* in
+`SKILL.md` has the reason.
 
 
 Everything under `worktree/<label>/` is source, or a document that changes with the source. That
