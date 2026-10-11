@@ -625,6 +625,70 @@ func TestAnEventRefusesBeforeItWritesAnything(t *testing.T) {
 	}
 }
 
+// Opening writes a brief and materialises a working directory; closing moves a brief into
+// the archive and lets the runtime go. Both refuse before any of that: a job that exists on
+// one machine and nowhere in the line is a job nobody else can see, and for a close there is
+// no second attempt, because a job closes once.
+func TestOpeningAndClosingRefuseBeforeTheyWrite(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	run(t, "create", root, "--site", "build-01")
+	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "area", "--purpose", "an area")
+	run(t, "--root", root, "resource", "declare", "--kind", "worktree", "--name", "area2", "--purpose", "another area")
+	seedCode(t, root)
+
+	hand := filepath.Join(root, "doc", "convention", "01-hand.md")
+	if err := os.WriteFile(hand, []byte("# Hand\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "doc/convention/01-hand.md")
+
+	refuses(t, "doc/convention/01-hand.md", "--root", root, "open", "--job", "j2", "--label", "area2")
+	for _, path := range []string{"doc/task/j2", "job/j2", "worktree/area2"} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); err == nil {
+			t.Errorf("a refused open should not have created %s", path)
+		}
+	}
+
+	// The remedy works, and so does the operation after it.
+	run(t, "--root", root, "commit", "--summary", "hand", "--", "doc/convention/01-hand.md")
+	run(t, "--root", root, "open", "--job", "j2", "--label", "area2", "--owner", "fixture-actor")
+
+	// Closing: nothing is written before the refusal is known, and no retry is possible
+	// afterwards, so this is the refusal that matters most.
+	if err := os.WriteFile(hand, []byte("# Hand\n\nMore.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "doc/convention/01-hand.md")
+	refuses(t, "doc/convention/01-hand.md", "--root", root, "close", "--job", "j2")
+	if _, err := os.Stat(filepath.Join(root, "doc", "task", "j2", "brief.md")); err != nil {
+		t.Errorf("a refused close should leave the brief where it was: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "doc", "archive", "task", "j2")); err == nil {
+		t.Error("a refused close should not have archived the brief")
+	}
+	brief, err := os.ReadFile(filepath.Join(root, "doc", "task", "j2", "brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(brief), "status: active") {
+		t.Errorf("a refused close should leave the status alone:\n%s", brief)
+	}
+	out := run(t, "--root", root, "status")
+	if !strings.Contains(out, "j2") {
+		t.Errorf("the job should still be on the board:\n%s", out)
+	}
+
+	// Clear the way, and the close happens — and only then does the working directory let go.
+	run(t, "--root", root, "commit", "--summary", "hand again", "--", "doc/convention/01-hand.md")
+	run(t, "--root", root, "close", "--job", "j2")
+	if _, err := os.Stat(filepath.Join(root, "doc", "archive", "task", "j2", "brief.md")); err != nil {
+		t.Errorf("the close should have archived the brief: %v", err)
+	}
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the workspace should validate, and said:\n%s", out)
+	}
+}
+
 // Records that cannot go into one line are refused with the file named and the way out in
 // the message, and the way out keeps what the record wrote.
 func TestRecordsThatDoNotGoTogetherSayTheWayOut(t *testing.T) {
@@ -661,9 +725,15 @@ func TestRecordsThatDoNotGoTogetherSayTheWayOut(t *testing.T) {
 		t.Errorf("the unpublished record should still be here, and there are %s", unpublished)
 	}
 
-	// The way out: out of the line, and what it wrote still in the tree.
-	if out := run(t, "--root", second, "sync", "--withdraw"); !strings.Contains(out, "took 1 record") {
+	// The way out: out of the line, and what it wrote still in the tree. It also says what
+	// the line has and the working tree does not, which is the content that recording the
+	// file as it stands would drop.
+	out = run(t, "--root", second, "sync", "--withdraw")
+	if !strings.Contains(out, "took 1 record") {
 		t.Errorf("withdrawing should say what it took back:\n%s", out)
+	}
+	if !strings.Contains(out, "the line has this in doc/resource/gpu.yaml") || !strings.Contains(out, "name: other") {
+		t.Errorf("withdrawing should show what the line has and the tree does not:\n%s", out)
 	}
 	if unpublished := strings.TrimSpace(gitOut(t, second, "rev-list", "--count", "origin/main..HEAD")); unpublished != "0" {
 		t.Errorf("nothing should be left unpublished, and there are %s", unpublished)
@@ -737,6 +807,19 @@ func TestASiteThatRecordedAlonePublishesItsBacklog(t *testing.T) {
 	if out := run(t, "--root", second, "sync"); !strings.Contains(out, "nothing to publish") {
 		t.Errorf("a second sync has nothing to do, and said:\n%s", out)
 	}
+	// Withdrawing always does what it says, and says when it was not needed: a record that
+	// would have gone in cleanly comes out anyway, and has to be recorded again.
+	git(t, second, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "not-there"))
+	run(t, "--root", second, "resource", "declare", "--kind", "host", "--name", "h9", "--purpose", "alone once more")
+	git(t, second, "remote", "set-url", "origin", records)
+	out = run(t, "--root", second, "sync", "--withdraw")
+	if !strings.Contains(out, "would have published them as they are") {
+		t.Errorf("withdrawing records that would have gone in cleanly should say so:\n%s", out)
+	}
+	if unpublished := strings.TrimSpace(gitOut(t, second, "rev-list", "--count", "origin/main..HEAD")); unpublished != "0" {
+		t.Errorf("and it should still have taken them out, and %s are left unpublished", unpublished)
+	}
+
 	if out := run(t, "--root", second, "verify"); strings.TrimSpace(out) != "ok" {
 		t.Errorf("the site should still validate, and said:\n%s", out)
 	}

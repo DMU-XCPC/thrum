@@ -140,6 +140,8 @@ and finds the same records, and the refusals it meets are the same refusals.
 
 A job begins when an actor writes down what it is: an id, a goal, what is out of scope, the acceptance criteria, the paths it may touch, and who owns it. Opening produces the brief at `doc/task/<job-id>/brief.md`, the branch `job/<job-id>`, and a labelled working directory, and it is one commit — unless the label it needs has not been declared yet, because declaring a resource is a different event with a commit of its own.
 
+**Opening writes everything or nothing.** The brief, the branch and the working directory are one job: a brief without a directory is a job nobody can work in, and a directory without a brief is one nobody asked for. So an open that cannot record itself does not leave any of them behind, and the id it would have used is not spent — asking again has to be able to succeed.
+
 **A label is free when the code repository's `git worktree list` shows no job branch in it**, after the cleaning the drift rules already call for: an idle working directory is clean and detached. It is occupied when it shows one, and an occupied label is never taken from under the job holding it — the job that wants it ends the stretch as `blocked`, naming that job. Wanting a different area is not a conflict at all: that is a new declaration, and its own commit.
 
 The owner need not be the actor that does the work, and it can be reassigned or given up. While a job has an owner, that is who the next actor asks when the brief is unclear. An owner that gives the job up makes it unowned, and an unowned job may be claimed by whoever takes it up, without asking anyone. What the owner is for is accountability: a job with nobody behind it is a job nobody has promised anything about, and that is a state worth being able to reach deliberately.
@@ -178,7 +180,7 @@ Close when the acceptance criteria hold, or as `abandoned` when they will not. O
 
 Only the brief moves. `handoff/<job-id>/` stays where it has always been, because an append-only log that never changes its address is worth more than a tidy archive.
 
-Closing also releases the working directory and any lease the job still holds.
+Closing also releases the working directory and any lease the job still holds — and it does so only once the record is in the line. Releasing first would leave a job nobody is on and everybody still believes is open, and a close that could not be recorded would have to be undone at the one moment it cannot be asked for again. A close that is refused leaves the brief where it was, saying what it said.
 
 Closing merges nothing. The branch `job/<job-id>` stays in the code repository, and merging it is the project's business: a closed job is a hand-off to whoever integrates, not an integration itself.
 

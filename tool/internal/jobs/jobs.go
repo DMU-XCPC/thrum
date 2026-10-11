@@ -90,15 +90,15 @@ func Open(l workspace.Layout, o OpenOptions) (string, error) {
 		DependsOn:  o.DependsOn,
 		Keep:       o.Keep,
 	}
-	if err := workspace.WriteBrief(l, brief, o.Body); err != nil {
-		return "", err
-	}
 	// Before anything is written: an event that only discovers the index is in its way
-	// when it goes to record itself leaves half of itself behind.
+	// when it goes to record itself leaves half of itself behind — a brief on disk that
+	// never reaches the line, which validation does not see and sync does not carry.
 	if err := commit.Guard(l, rel(l, l.Brief(o.Job))); err != nil {
 		return "", err
 	}
-
+	if err := workspace.WriteBrief(l, brief, o.Body); err != nil {
+		return "", err
+	}
 	// The payload's shape is the design's, and it exists from the moment the job does:
 	// an actor told that out/ is where results go should find out/ there. These are
 	// empty directories under an ignored path, so they need no commit.
@@ -253,12 +253,13 @@ func WriteHandoff(l workspace.Layout, o HandoffOptions) (string, error) {
 		return "", err
 	}
 
-	if err := os.MkdirAll(l.HandoffDir(o.Job), 0o755); err != nil {
-		return "", err
-	}
 	name := format.HandoffFileName(started)
 	path := l.HandoffFile(o.Job, name)
+	// Before the directory is made, let alone the file: a refusal leaves nothing behind.
 	if err := commit.Guard(l, rel(l, path)); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(l.HandoffDir(o.Job), 0o755); err != nil {
 		return "", err
 	}
 	// Claim the name before writing it, so that two stretches beginning in the same
@@ -305,6 +306,12 @@ func Close(l workspace.Layout, job, status, summary string) (string, error) {
 	if brief.Status != format.StatusActive {
 		return "", fmt.Errorf("%s is %s already: a job is closed once", job, brief.Status)
 	}
+	// Before the brief is touched: a refusal that has already moved a record has moved a
+	// record, and a job closes once, so there would be no way to ask again.
+	if err := commit.Guard(l, rel(l, l.TaskDir(job)), rel(l, filepath.Join(l.Archive(), "task", job))); err != nil {
+		return "", err
+	}
+
 	if _, err := workspace.EditBrief(l, job, func(b *format.Brief) error {
 		b.Status = status
 		return nil
@@ -319,28 +326,48 @@ func Close(l workspace.Layout, job, status, summary string) (string, error) {
 		return "", fmt.Errorf("archiving the brief: %w", err)
 	}
 
-	if err := releaseWorktrees(l, job); err != nil {
-		return "", err
-	}
-	// A closed job's lease is as free as an expired one everywhere, because a lease
-	// dies with the job that holds it. Deleting the records here is tidiness rather
-	// than the rule, and it is what keeps the local picture honest.
-	if err := releaseLeases(l, job); err != nil {
-		return "", err
-	}
-	// And nobody is on it any more: a note left behind would claim somebody was still
-	// working, which is the one lie that file must not tell.
-	if _, err := occupancy.Vacate(l, job); err != nil {
-		return "", err
-	}
-
 	if summary == "" {
 		summary = fmt.Sprintf("closed as %s", status)
 	}
 	// The event owns one job's directory and its place in the archive, not the whole of
 	// doc/task: another site's event elsewhere must not be swept into this commit.
-	return commit.Event(l, commit.KindClose, job, summary,
+	id, err := commit.Event(l, commit.KindClose, job, summary,
 		rel(l, l.TaskDir(job)), rel(l, filepath.Join(l.Archive(), "task", job)))
+	if err != nil {
+		// The record did not reach the line, so the brief goes back where it was and
+		// says what it said. A job closed here and open everywhere else is a
+		// disagreement nobody can settle, because it can only be closed once.
+		if renameErr := os.Rename(l.ArchiveTask(job), l.TaskDir(job)); renameErr != nil {
+			return "", fmt.Errorf("%w (and the brief could not be put back: %v)", err, renameErr)
+		}
+		if _, restoreErr := workspace.EditBrief(l, job, func(b *format.Brief) error {
+			b.Status = brief.Status
+			return nil
+		}); restoreErr != nil {
+			return "", fmt.Errorf("%w (and the brief could not be put back: %v)", err, restoreErr)
+		}
+		return "", err
+	}
+
+	// Only now, with the record in the line, does the runtime let go: releasing a working
+	// directory before the close is recorded leaves a job nobody is on and everybody
+	// still believes is open. What cannot be released is said rather than dressed up as a
+	// failed close, because the close itself is done.
+	if err := releaseWorktrees(l, job); err != nil {
+		fmt.Fprintf(os.Stderr, "thrum: %s is closed, but a working directory could not be released: %v\n", job, err)
+	}
+	// A closed job's lease is as free as an expired one everywhere, because a lease
+	// dies with the job that holds it. Deleting the records here is tidiness rather
+	// than the rule, and it is what keeps the local picture honest.
+	if err := releaseLeases(l, job); err != nil {
+		fmt.Fprintf(os.Stderr, "thrum: %s is closed, but a lease record could not be removed: %v\n", job, err)
+	}
+	// And nobody is on it any more: a note left behind would claim somebody was still
+	// working, which is the one lie that file must not tell.
+	if _, err := occupancy.Vacate(l, job); err != nil {
+		fmt.Fprintf(os.Stderr, "thrum: %s is closed, but the occupancy note could not be cleared: %v\n", job, err)
+	}
+	return id, nil
 }
 
 // releaseWorktrees leaves every directory carrying this job's branch clean and

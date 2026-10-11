@@ -116,15 +116,16 @@ func Hold(l workspace.Layout) error {
 // the one command that would make this moment painless is the one that would destroy it.
 func clash(l workspace.Layout, ahead int, up string) error {
 	where := ""
-	if shared := clashPaths(l, up); len(shared) > 0 {
+	if shared := Clashes(l, up); len(shared) > 0 {
 		where = fmt.Sprintf(": %s changed on both sides", strings.Join(shared, ", "))
 	}
 	return fmt.Errorf("this site's %d unpublished record(s) do not go together with what was published elsewhere%s, and nothing was changed here or merged, because dropping a record is worse than stopping. To get out of it: read what the other site published with `git show %s:<path>`, then `thrum sync --withdraw` takes this site's records back out of the line and leaves what they wrote in the working tree, and from there the file can be put right and the event recorded again. Do not reach for `git reset --hard`: the thing it destroys is exactly the file in question",
 		ahead, where, up)
 }
 
-// clashPaths names the paths this site and the line both changed.
-func clashPaths(l workspace.Layout, up string) []string {
+// Clashes names the paths this site and the line both changed, which is what makes records
+// that cannot go into one line. An empty answer means they would go in cleanly.
+func Clashes(l workspace.Layout, up string) []string {
 	out, err := gitx.Run(l.Root, "merge-base", "HEAD", up)
 	if err != nil {
 		return nil

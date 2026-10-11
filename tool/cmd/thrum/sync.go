@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -141,6 +143,16 @@ func withdrawRecords(l workspace.Layout, branch, jobID string) error {
 		fmt.Println("nothing to take back: everything this site recorded is in the line")
 		return nil
 	}
+	// What the withdrawal is about, before it happens: the paths these records changed.
+	changed, _ := gitx.Run(l.Root, "diff", "--name-only", up, "HEAD")
+
+	// A withdrawal always does what it says, which is why it is a flag rather than an
+	// automatic step: worth knowing is that records that would have gone in cleanly did
+	// not have to be taken out at all.
+	if len(commit.Clashes(l, up)) == 0 {
+		fmt.Println("note: nothing these records touch was changed elsewhere, so `thrum sync` would have published them as they are; withdrawing takes them out anyway, and they will have to be recorded again")
+	}
+
 	if _, err := gitx.Run(l.Root, "reset", "--mixed", "--quiet", up); err != nil {
 		return err
 	}
@@ -152,6 +164,31 @@ func withdrawRecords(l workspace.Layout, branch, jobID string) error {
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			fmt.Println("  " + line)
+		}
+	}
+	// What the line has and the working tree no longer does, for the paths in question:
+	// this is the content that would be dropped by recording the file as it stands, and it
+	// is the reason the step below is "put the file right" rather than "try again".
+	for _, path := range strings.Fields(changed) {
+		if _, err := os.Stat(filepath.Join(l.Root, filepath.FromSlash(path))); err != nil {
+			continue // gone from the tree altogether, which the status above already shows
+		}
+		out, err := gitx.Run(l.Root, "diff", "--no-color", "--unified=0", up, "--", path)
+		if err != nil {
+			continue
+		}
+		var gone []string
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+				gone = append(gone, strings.TrimPrefix(line, "-"))
+			}
+		}
+		if len(gone) == 0 {
+			continue
+		}
+		fmt.Printf("the line has this in %s, and the working tree does not:\n", path)
+		for _, line := range gone {
+			fmt.Println("  - " + line)
 		}
 	}
 	fmt.Println("read what the other site published, put the file right, and record the event again")

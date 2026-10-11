@@ -456,6 +456,7 @@ func Withdraw(l workspace.Layout, o WithdrawOptions) (string, error) {
 		return "", fmt.Errorf("%s: %w", path, err)
 	}
 
+	published := body // as it was, in case the record cannot be made
 	body = insertNotice(body, o.Date, o.Reason, o.SupersededBy)
 	if err := os.MkdirAll(filepath.Dir(l.ArchivedManifest(o.Asset, o.Version)), 0o755); err != nil {
 		return "", err
@@ -469,7 +470,13 @@ func Withdraw(l workspace.Layout, o WithdrawOptions) (string, error) {
 	if err := removeIfEmpty(filepath.Dir(path)); err != nil {
 		return "", err
 	}
+	// What the tag pointed at, read before it goes: putting it back needs the object, and
+	// the reflog is not something to rely on.
+	tagObject := ""
 	if m.Ref != "" {
+		if out, err := gitx.Run(l.Store(), "rev-parse", "refs/tags/"+m.Ref); err == nil {
+			tagObject = strings.TrimSpace(out)
+		}
 		if _, err := gitx.Run(l.Store(), "tag", "-d", m.Ref); err != nil {
 			return "", fmt.Errorf("deleting the tag: %w", err)
 		}
@@ -481,8 +488,23 @@ func Withdraw(l workspace.Layout, o WithdrawOptions) (string, error) {
 	}
 	// One version's two files, rather than the whole asset directory: an event owns exactly
 	// what it changed, and a neighbouring version's manifest is another event's business.
-	return commitEvent(l, commit.KindRetire, "asset/"+o.Asset+"/"+o.Version, summary,
+	archived := l.ArchivedManifest(o.Asset, o.Version)
+	id, err := commitEvent(l, commit.KindRetire, "asset/"+o.Asset+"/"+o.Version, summary,
 		l.Manifest(o.Asset, o.Version), filepath.Join(l.Archive(), "asset", o.Asset, o.Version+".md"))
+	if err != nil {
+		// The record did not reach the line, so the version goes back to being published:
+		// a manifest deleted here and still in the line elsewhere is a version nobody can
+		// account for, and withdrawing it twice is not something the tooling permits.
+		_ = os.Remove(archived)
+		if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr == nil {
+			_ = format.SaveDocument(path, front, published)
+		}
+		if m.Ref != "" && tagObject != "" {
+			_, _ = gitx.Run(l.Store(), "tag", m.Ref, tagObject)
+		}
+		return "", err
+	}
+	return id, nil
 }
 
 // relManifest is a manifest's path relative to the workspace root, which is the form git
