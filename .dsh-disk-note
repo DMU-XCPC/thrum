@@ -1,0 +1,11 @@
+This file is a leftover from an agent session whose shell stopped working because the disk
+quota was exhausted. It can be deleted.
+
+What filled it: verification archives under /tmp, one per round, each carrying a full copy of
+the Go build and module caches. To free the space:
+
+    rm -rf /tmp/check* /tmp/thrum-e2e-*
+
+If more is needed, `.gocache/` in this repository is a build cache and rebuilds itself:
+
+    rm -rf .gocache

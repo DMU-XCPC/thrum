@@ -20,8 +20,7 @@ a job up is the opening, the claim and the working directory in one act. The fil
 hand.
 
 **A claim is stale when this site has no working directory for the job**, and `SKILL.md` has
-what happens then — `thrum work` takes a stale one over and says whose it was, `thrum occupancy
-sweep` clears the stale ones a site is carrying, and a claim on a directory this site does have
+what happens then — `thrum work` takes a stale one over and says whose it was, `thrum job vacate --stale` clears the stale ones a site is carrying, and a claim on a directory this site does have
 is somebody's live claim, which is the one you ask about rather than work around. What is left
 for this file is the reason the distinction is drawn the way it is.
 
@@ -41,8 +40,7 @@ What follows:
 - A job no site holds cannot be claimed, because there is nothing to claim.
 - Two sites holding one job is refused rather than picked between.
 - A peer that does not answer means **cannot be established**, never *nobody is on it*.
-- **Taking a job over is a decision, not a field edit.** Its plain form is `thrum occupancy
-  occupy --job <job-id> --take-over`, which is the explicit act for a live claim — after its
+- **Taking a job over is a decision, not a field edit.** Its plain form is `thrum job occupy --job <job-id> --take-over`, which is the explicit act for a live claim — after its
   owner was asked. `thrum work` never takes a live claim; the stale case it does take over is
   the one `SKILL.md` describes, and that one is taken over for you and said out loud.
 

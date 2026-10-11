@@ -103,7 +103,7 @@ your own.
 ## The loop
 
 1. **Locate.** `thrum where --job <job-id>` prints the directory holding `job/<job-id>`, which is
-   where you work, and `thrum job --job <job-id>` says everything else about the job in one place.
+   where you work, and `thrum job show <job-id>` says everything else about the job in one place.
    No directory here means the job is unstarted, already closed, or its work has moved to another
    site: `thrum job` and `ls handoff/<job-id>/` say which. The coordination repository is a
    different repository, whose own `git worktree list` shows only the workspace root — never work
@@ -132,7 +132,7 @@ your own.
    takes a stale claim over and says whose it was; `thrum job vacate --stale` clears the stale ones a
    site is carrying; and `thrum job vacate <job-id>` ends your own stretch. A **live** claim — this site has the job's directory — is asked about and
    never taken: the explicit takeover is `thrum job occupy <job-id> --take-over`, and it
-   is a decision, not a repair. A working directory comes from `thrum work`, from `thrum open
+   is a decision, not a repair. A working directory comes from `thrum work`, from `thrum job open
    --create-label`, or from `thrum worktree add` — nothing else.
 6. **Point your tools inside the workspace.** `eval "$(thrum env --job <job-id>)"` before running
    anything. A tool run without it writes outside, where nothing collects what it leaves.
@@ -161,7 +161,7 @@ your own.
    Then `thrum job handoff <job-id> --status <done|partial|blocked|aborted> --next '<first thing
    next>'`. One handoff is one coordination event, and therefore one commit.
 10. **Close, or leave the baton.** `thrum job close <job-id>` only when the acceptance criteria
-    hold, and `thrum close --abandoned` when they will not. Closing merges nothing: the branch stays
+    hold, and `thrum job close --abandoned` when they will not. Closing merges nothing: the branch stays
     in the code repository for whoever integrates. Before closing, look for something to promote — a fact that outlives the job and does not depend on how it was solved, such
     as a platform's hard constraints or a toolchain's rules — to
     `doc/topic/`.
@@ -171,7 +171,7 @@ your own.
 Opening writes the brief, creates the branch and materialises a labelled working directory, and
 it is one commit — unless the label has not been declared yet, because declaring a resource is a
 different event with a commit of its own. **`thrum work` does this and takes the job up in one
-act** when you are the one who will work it; `thrum open` is the same act without taking it up,
+act** when you are the one who will work it; `thrum job open` is the same act without taking it up,
 which is what opening a job for somebody else looks like.
 
 ```sh

@@ -74,7 +74,7 @@ a declared label, and never from a checkout of your own — and never inside `va
 | what the job is for, and how it will be judged | `doc/task/<job-id>/brief.md` |
 | where the last stretch stopped, and what to do first | the newest file in `handoff/<job-id>/`; its `next` is the baton |
 | where to work | `thrum where --job <job-id>` prints it; `thrum work --job <job-id>` gets you there, and materialises a working directory if this site has none |
-| everything about this job | `thrum job --job <job-id>`, or `--json` for whatever asked |
+| everything about this job | `thrum job show <job-id>`, or `--json` for whatever asked |
 | this project's rules, in number order | `doc/convention/` — read them before working |
 | the rule behind a question the loop raises | `.agents/skills/workspace-actor/` — `SKILL.md` is the loop; the files beside it answer one question each: `placement.md` (where a thing goes), `records.md` (how a record looks), `names.md`, `knowledge.md`, `assets.md`, `claims.md`, `sites.md` |
 | what is true right now | `thrum status`, `thrum job show <job-id>`, `thrum message list` |

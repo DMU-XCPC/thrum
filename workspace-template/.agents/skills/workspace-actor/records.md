@@ -5,7 +5,7 @@ intent, and the **handoff**, which records a stretch of work. Both are YAML fron
 a Markdown body, and both are committed to the coordination repository — so neither may
 contain a secret, and neither may name an absolute or machine-local path.
 
-`doc/template/` carries a copy-me file for each. `thrum open` and `thrum handoff` write them
+`doc/template/` carries a copy-me file for each. `thrum job open` and `thrum job handoff` write them
 correctly; this file is what you need when you edit one by hand, and when you have to judge
 whether a record you are reading is well formed.
 
