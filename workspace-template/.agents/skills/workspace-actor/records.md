@@ -197,6 +197,14 @@ the last handoff says whether the last stretch got anywhere. **Performance histo
 `metrics` fields aggregated across handoffs. **Provenance** runs from `artifacts` into `job/` and
 from `assets` into `store/`. `thrum status` prints all of it.
 
+**What the board's word for a job means.** For a job that has closed it is the brief's `status`.
+For one still open it is what the **last handoff** said — `done`, `partial`, `blocked`,
+`aborted` — or `no handoff yet` when `handoff/<job-id>/` is empty. That last word is worth
+reading exactly: it means *nothing has been recorded yet*, not *nobody is doing anything*. An
+actor can be on the job with its working directory materialised and the claim beside the board is
+where that is written. Writing the first handoff is also what makes the job start being described
+by its work rather than by its absence.
+
 ## Writing a record is a coordination event
 
 Every operation that records something brings this site up to date from the shared line first,
