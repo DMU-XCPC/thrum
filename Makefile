@@ -15,8 +15,13 @@ export GOSUMDB    := sum.golang.google.cn
 # installed to try it.
 BIN := $(ROOT)/.gocache/thrum
 
+# CGO_ENABLED=0 is the design's rule rather than a preference: one statically linked binary
+# per platform, droppable onto a machine that has nothing but git. Without it, a host that
+# has a C toolchain links the binary against its own libc, and the result does not run on a
+# musl machine at all — the loader says "no such file or directory", which reads like a
+# missing file rather than a wrong one.
 build:
-	cd tool && go build -o $(BIN) ./cmd/thrum
+	cd tool && CGO_ENABLED=0 go build -o $(BIN) ./cmd/thrum
 	@echo built $(BIN)
 
 # -count=1 rather than the test cache, and not for freshness in general: the e2e package
