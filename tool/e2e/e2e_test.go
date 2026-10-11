@@ -137,7 +137,7 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 		}
 	}
 	// The opener is on it, because it said who it was.
-	if out := run(t, "--root", root, "actor", "ask", "--job", "add-retry"); !strings.Contains(out, "fixture-actor") {
+	if out := run(t, "--root", root, "job", "show", "add-retry"); !strings.Contains(out, "fixture-actor") {
 		t.Errorf("opening with an owner should claim the job: %s", out)
 	}
 
@@ -145,8 +145,8 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	refuses(t, "holds", "--root", root, "worktree", "add", "--label", "uploader", "--job", "another-job")
 
 	// The claim, and the lease: who is working, and what the work holds.
-	run(t, "--root", root, "occupancy", "occupy", "--job", "add-retry")
-	refuses(t, "occupied", "--root", root, "occupancy", "occupy", "--job", "add-retry", "--actor", "somebody-else")
+	run(t, "--root", root, "job", "occupy", "add-retry")
+	refuses(t, "occupied", "--root", root, "job", "occupy", "add-retry", "--actor", "somebody-else")
 	run(t, "--root", root, "lease", "take", "--resource", "gpu", "--job", "add-retry", "--ttl", "1h")
 	// A lease is held by the job, so a unit already held is refused to everyone — and
 	// which actor is asking does not enter into it.
@@ -273,7 +273,7 @@ func TestAWholeJobFromCreationToCollection(t *testing.T) {
 	}
 
 	// The claim is still the answer, and the tooling does not pretend it is more.
-	if out := run(t, "--root", root, "actor", "ask", "--job", "add-retry"); !strings.Contains(out, "nobody") && !strings.Contains(out, "claim") {
+	if out := run(t, "--root", root, "job", "show", "add-retry"); !strings.Contains(out, "nobody") && !strings.Contains(out, "claim") {
 		t.Errorf("with nothing running there is no live answer: %s", out)
 	}
 
@@ -450,11 +450,11 @@ func TestActorsReachEachOther(t *testing.T) {
 	run(t, "--root", root, "open", "--job", "first-job", "--label", "area", "--owner", "claude-sonnet")
 	// A name exists by acting: the owner is written into the brief, but it is this that
 	// makes it a name the tooling has heard from.
-	run(t, "--root", root, "occupancy", "occupy", "--job", "first-job", "--actor", "claude-sonnet")
+	run(t, "--root", root, "job", "occupy", "first-job", "--actor", "claude-sonnet")
 
 	// The recipient exists because it has acted, which is the whole of what an actor
 	// does to exist.
-	out := run(t, "--root", root, "send", "--to", "claude-sonnet", "--subject", "the timeout is explained",
+	out := run(t, "--root", root, "message", "send", "--to", "claude-sonnet", "--subject", "the timeout is explained",
 		"--body", "It was the retry budget.", "--job", "first-job")
 	if !strings.Contains(out, "delivered to claude-sonnet at build-01") {
 		t.Errorf("sending said: %s", out)
@@ -462,10 +462,10 @@ func TestActorsReachEachOther(t *testing.T) {
 
 	// A name nobody has seen is refused rather than written into a mailbox nobody
 	// reads: the roster is exactly the knowledge that makes the check possible.
-	refuses(t, "no site has seen an actor named", "--root", root, "send", "--to", "claud-sonnet", "--subject", "typo")
+	refuses(t, "no site has seen an actor named", "--root", root, "message", "send", "--to", "claud-sonnet", "--subject", "typo")
 
 	// The recipient reads it, and the list shows an id and a subject as separate things.
-	inbox := run(t, "--root", root, "inbox", "--actor", "claude-sonnet")
+	inbox := run(t, "--root", root, "message", "list", "--actor", "claude-sonnet")
 	if !strings.Contains(inbox, "the timeout is explained") || !strings.Contains(inbox, "m-") {
 		t.Errorf("the inbox should show an id and a subject:\n%s", inbox)
 	}
@@ -485,12 +485,12 @@ func TestActorsReachEachOther(t *testing.T) {
 	if err := os.WriteFile(sample, []byte("a,b\n1,2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, "--root", root, "send", "--to", "claude-sonnet", "--subject", "the sample", "--file", sample)
+	run(t, "--root", root, "message", "send", "--to", "claude-sonnet", "--subject", "the sample", "--file", sample)
 	second := ""
-	for _, line := range strings.Split(run(t, "--root", root, "inbox", "--actor", "claude-sonnet", "--json"), "\n") {
+	for _, line := range strings.Split(run(t, "--root", root, "message", "list", "--actor", "claude-sonnet", "--json"), "\n") {
 		_ = line
 	}
-	list := run(t, "--root", root, "inbox", "--actor", "claude-sonnet")
+	list := run(t, "--root", root, "message", "list", "--actor", "claude-sonnet")
 	for _, line := range strings.Split(list, "\n") {
 		if fields := strings.Fields(line); len(fields) > 1 && fields[len(fields)-1] == "sample" {
 			second = fields[0]
@@ -500,7 +500,7 @@ func TestActorsReachEachOther(t *testing.T) {
 		t.Fatalf("the second message is not in the inbox:\n%s", list)
 	}
 	outDir := t.TempDir()
-	read := run(t, "--root", root, "read", second, "--actor", "claude-sonnet", "--out", outDir)
+	read := run(t, "--root", root, "message", "read", second, "--actor", "claude-sonnet", "--out", outDir)
 	if !strings.Contains(read, "attachment sample.csv") {
 		t.Errorf("reading should mention its attachment:\n%s", read)
 	}
@@ -513,18 +513,18 @@ func TestActorsReachEachOther(t *testing.T) {
 	}
 
 	// A reply is written by whoever received the message, and read by whoever sent it.
-	run(t, "--root", root, "reply", id, "--actor", "claude-sonnet", "--body", "Thanks.")
-	replies := run(t, "--root", root, "inbox")
+	run(t, "--root", root, "message", "reply", id, "--actor", "claude-sonnet", "--body", "Thanks.")
+	replies := run(t, "--root", root, "message", "list")
 	if !strings.Contains(replies, "re: the timeout is explained") {
 		t.Errorf("the reply should arrive with the subject marked:\n%s", replies)
 	}
-	if !strings.Contains(run(t, "--root", root, "inbox", "--json"), "\"reply_to\"") {
+	if !strings.Contains(run(t, "--root", root, "message", "list", "--json"), "\"reply_to\"") {
 		t.Errorf("a reply carries the id it answers")
 	}
 
 	// A message cannot be retracted, so removing one is a deliberate local act.
-	run(t, "--root", root, "purge", id, "--actor", "claude-sonnet")
-	if out := run(t, "--root", root, "inbox", "--actor", "claude-sonnet"); strings.Contains(out, id) {
+	run(t, "--root", root, "message", "purge", id, "--actor", "claude-sonnet")
+	if out := run(t, "--root", root, "message", "list", "--actor", "claude-sonnet"); strings.Contains(out, id) {
 		t.Errorf("the purged message is still listed:\n%s", out)
 	}
 }
@@ -1047,10 +1047,10 @@ func TestTakingUpAJobInOneStep(t *testing.T) {
 	}
 
 	// The job's picture, for a person and for whatever asked.
-	if out := run(t, "--root", root, "job", "--job", "j1"); !strings.Contains(out, "do the thing") || !strings.Contains(out, "work in") {
+	if out := run(t, "--root", root, "job", "show", "j1"); !strings.Contains(out, "do the thing") || !strings.Contains(out, "work in") {
 		t.Errorf("the job view should say what it is for and where it is:\n%s", out)
 	}
-	if out := run(t, "--root", root, "job", "--job", "j1", "--json"); !strings.Contains(out, `"goal": "do the thing"`) {
+	if out := run(t, "--root", root, "job", "show", "j1", "--json"); !strings.Contains(out, `"goal": "do the thing"`) {
 		t.Errorf("the JSON view should carry the same answer:\n%s", out)
 	}
 
@@ -1190,7 +1190,7 @@ func TestASilentSiteIsNotNoSuchName(t *testing.T) {
 	silent := "unix:" + filepath.Join(t.TempDir(), "nothing.sock")
 	run(t, "--root", root, "site", "reach", "lab-02", silent, "--ssh-user", "root")
 
-	out, err := tryAs(t, "sender", "--root", root, "send", "--to", "nobody", "--subject", "hello", "--body", "hi")
+	out, err := tryAs(t, "sender", "--root", root, "message", "send", "--to", "nobody", "--subject", "hello", "--body", "hi")
 	if err == nil {
 		t.Fatalf("a send that cannot establish where the recipient is should fail, and it said:\n%s", out)
 	}
@@ -1211,13 +1211,13 @@ func TestASilentSiteIsNotNoSuchName(t *testing.T) {
 	// Forgetting the address does not make the site stop existing: a site the roster declares
 	// and this machine cannot ask is still a site that did not answer.
 	run(t, "--root", root, "site", "reach", "lab-02", "--forget")
-	if out, err := tryAs(t, "sender", "--root", root, "send", "--to", "nobody", "--subject", "hello", "--body", "hi"); err == nil || !strings.Contains(out, "lab-02 did not answer") {
+	if out, err := tryAs(t, "sender", "--root", root, "message", "send", "--to", "nobody", "--subject", "hello", "--body", "hi"); err == nil || !strings.Contains(out, "lab-02 did not answer") {
 		t.Errorf("a declared site this machine has no address for cannot be asked, so the answer is not established:\n%s", out)
 	}
 
 	// With no other site in the world at all, the same name is simply unknown.
 	run(t, "--root", root, "resource", "remove", "--kind", "site", "--name", "lab-02")
-	refuses(t, "no site has seen", "--root", root, "send", "--to", "nobody", "--subject", "hello", "--body", "hi")
+	refuses(t, "no site has seen", "--root", root, "message", "send", "--to", "nobody", "--subject", "hello", "--body", "hi")
 
 	t.Cleanup(func() { _, _ = try(t, "--root", root, "daemon", "stop") })
 
@@ -1225,11 +1225,11 @@ func TestASilentSiteIsNotNoSuchName(t *testing.T) {
 	// site that has the name is the gate, not the sites that do not.
 	run(t, "--root", root, "site", "reach", "lab-02", silent, "--ssh-user", "root")
 	tryAs(t, "sender", "--root", root, "status")
-	out = run(t, "--root", root, "send", "--to", "sender", "--subject", "hello", "--body", "hi")
+	out = run(t, "--root", root, "message", "send", "--to", "sender", "--subject", "hello", "--body", "hi")
 	if !strings.Contains(out, "sender") {
 		t.Errorf("a name at this site should be delivered to here:\n%s", out)
 	}
-	if out := run(t, "--root", root, "inbox", "--actor", "sender"); !strings.Contains(out, "hello") {
+	if out := run(t, "--root", root, "message", "list", "--actor", "sender"); !strings.Contains(out, "hello") {
 		t.Errorf("the message should be in the mailbox it was sent to:\n%s", out)
 	}
 }
@@ -1318,14 +1318,14 @@ func TestAWatchingInboxReportsTheMailboxAndThenWhatArrives(t *testing.T) {
 	run(t, "create", root, "--site", "build-01")
 
 	// A name has to have been seen before anybody can be sent anything.
-	run(t, "--root", root, "--actor", "alice", "inbox")
-	run(t, "--root", root, "--actor", "bob", "inbox")
-	run(t, "--root", root, "--actor", "bob", "send", "--to", "alice",
+	run(t, "--root", root, "--actor", "alice", "message", "list")
+	run(t, "--root", root, "--actor", "bob", "message", "list")
+	run(t, "--root", root, "--actor", "bob", "message", "send", "--to", "alice",
 		"--subject", "already in the mailbox", "--body", "…")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	watch := exec.CommandContext(ctx, thrum, "--root", root, "inbox", "--watch", "--json")
+	watch := exec.CommandContext(ctx, thrum, "--root", root, "message", "list", "--watch", "--json")
 	watch.Env = append(os.Environ(), "THRUM_ACTOR=alice")
 	stdout, err := watch.StdoutPipe()
 	if err != nil {
@@ -1353,7 +1353,7 @@ func TestAWatchingInboxReportsTheMailboxAndThenWhatArrives(t *testing.T) {
 		t.Errorf("a watch should print the mailbox it finds, and printed: %s", first)
 	}
 
-	run(t, "--root", root, "--actor", "bob", "send", "--to", "alice",
+	run(t, "--root", root, "--actor", "bob", "message", "send", "--to", "alice",
 		"--subject", "sent while watching", "--body", "…")
 
 	second := nextLine(t, lines, 10*time.Second)
@@ -1372,15 +1372,15 @@ func TestAWatchingInboxReportsTheMailboxAndThenWhatArrives(t *testing.T) {
 func TestAWatchingInboxReportsTheFirstMessageEverDelivered(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "workspace")
 	run(t, "create", root, "--site", "build-01")
-	run(t, "--root", root, "--actor", "alice", "inbox")
-	run(t, "--root", root, "--actor", "bob", "inbox")
+	run(t, "--root", root, "--actor", "alice", "message", "list")
+	run(t, "--root", root, "--actor", "bob", "message", "list")
 	if _, err := os.Stat(filepath.Join(root, "var", "msg")); err == nil {
 		t.Fatal("nothing should have created a mailbox yet")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	watch := exec.CommandContext(ctx, thrum, "--root", root, "inbox", "--watch", "--json")
+	watch := exec.CommandContext(ctx, thrum, "--root", root, "message", "list", "--watch", "--json")
 	watch.Env = append(os.Environ(), "THRUM_ACTOR=alice")
 	stdout, err := watch.StdoutPipe()
 	if err != nil {
@@ -1410,7 +1410,7 @@ func TestAWatchingInboxReportsTheFirstMessageEverDelivered(t *testing.T) {
 	case <-time.After(time.Second):
 	}
 
-	run(t, "--root", root, "--actor", "bob", "send", "--to", "alice",
+	run(t, "--root", root, "--actor", "bob", "message", "send", "--to", "alice",
 		"--subject", "the first message ever", "--body", "…")
 
 	line := nextLine(t, lines, 10*time.Second)
@@ -1467,7 +1467,7 @@ func TestAStaleClaimDoesNotBlockTakingAJobUp(t *testing.T) {
 	if !strings.Contains(out, "stale") || !strings.Contains(out, "work in") {
 		t.Errorf("a stale claim should be taken over and said so, and it said:\n%s", out)
 	}
-	show := run(t, "--root", root, "occupancy", "show")
+	show := run(t, "--root", root, "status")
 	if !strings.Contains(show, "bob") {
 		t.Errorf("the claim should now be bob's, and occupancy says:\n%s", show)
 	}
@@ -1560,10 +1560,10 @@ func TestTakingUpAJobOpenedForSomebodyElse(t *testing.T) {
 	if !strings.Contains(out, "work in") {
 		t.Errorf("taking up a job opened for somebody else should work, and it said:\n%s", out)
 	}
-	if show := run(t, "--root", root, "occupancy", "show"); !strings.Contains(show, "alice") {
+	if show := run(t, "--root", root, "status"); !strings.Contains(show, "alice") {
 		t.Errorf("the actor at the machine is on the job, and occupancy says:\n%s", show)
 	}
-	if j := run(t, "--root", root, "job", "--job", "j1"); !strings.Contains(j, "carol") {
+	if j := run(t, "--root", root, "job", "show", "j1"); !strings.Contains(j, "carol") {
 		t.Errorf("the owner stays who the work is promised to, and the job says:\n%s", j)
 	}
 }

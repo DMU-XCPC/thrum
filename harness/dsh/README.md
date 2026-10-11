@@ -31,7 +31,7 @@ turn to run".
                                     tool call: thrum_watch(actor)
 ```
 
-**The feed** is `thrum inbox --watch --json`, one message per line. It prints what is
+**The feed** is `thrum message list --watch --json`, one message per line. It prints what is
 already in the mailbox before it starts reporting arrivals, which is the only chance to see
 what arrived while nobody was watching — nothing is re-delivered.
 
@@ -71,7 +71,7 @@ rather than a missing message.
   is kept next to the binding, capped, and pruned — a message id is unique forever, so the
   only cost of forgetting an old one is one repeated nudge.
 - The plugin never inserts anything into the mailbox and never purges one. Reading is
-  `thrum read`, and removing a message is the recipient's decision.
+  `thrum message read`, and removing a message is the recipient's decision.
 
 ## State, and where it lives
 

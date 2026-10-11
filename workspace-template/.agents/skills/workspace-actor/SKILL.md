@@ -116,9 +116,9 @@ your own.
    declared label, and never from a `git worktree add` of your own.
 3. **Read this project's rules.** `doc/convention/`, in number order. The order is the priority. An empty directory means this project has written no policy yet: say
    that in your handoff rather than inventing a rule for it.
-4. **Check your mail.** `thrum inbox` lists what other actors have sent you, and `thrum read <id>`
+4. **Check your mail.** `thrum message list` lists what other actors have sent you, and `thrum message read <id>`
    reads one and takes any files it carried. A message is process information and is never in a
-   handoff, so this is the only place it arrives — and it is often why the last actor stopped. `thrum send --to <actor>` is the other half, and the only
+   handoff, so this is the only place it arrives — and it is often why the last actor stopped. `thrum message send --to <actor>` is the other half, and the only
    way to reach an actor at another site: a message never travels by git and never appears in a
    handoff.
 5. **Take it up.** `thrum work --job <job-id>` is `open`, `claim` and `occupy` in the order they
@@ -129,9 +129,9 @@ your own.
    or the job's owner rather than working beside them — `claims.md` has the rest. A claim is
    **stale** when this site has no working directory for the job, which is what an actor stopping
    without vacating leaves behind: releasing the directory does not clear the note. `thrum work`
-   takes a stale claim over and says whose it was; `thrum occupancy sweep` clears the stale ones a
-   site is carrying; and `thrum occupancy vacate --job <job-id>` ends your own stretch. A **live** claim — this site has the job's directory — is asked about and
-   never taken: the explicit takeover is `thrum occupancy occupy --job <job-id> --take-over`, and it
+   takes a stale claim over and says whose it was; `thrum job vacate --stale` clears the stale ones a
+   site is carrying; and `thrum job vacate <job-id>` ends your own stretch. A **live** claim — this site has the job's directory — is asked about and
+   never taken: the explicit takeover is `thrum job occupy <job-id> --take-over`, and it
    is a decision, not a repair. A working directory comes from `thrum work`, from `thrum open
    --create-label`, or from `thrum worktree add` — nothing else.
 6. **Point your tools inside the workspace.** `eval "$(thrum env --job <job-id>)"` before running
@@ -205,7 +205,7 @@ change.
 `thrum status` prints every derived view at once — each brief's status with its latest handoff,
 which labels this site has materialised and what each holds, which leases are held, which
 payloads are collectible, and where a directory exists with no declaration. Also: `thrum actor
-ask --job <job-id>` for who is on a job, `thrum inbox` for your mailbox, and `thrum verify` for
+ask --job <job-id>` for who is on a job, `thrum message list` for your mailbox, and `thrum verify` for
 every mechanical check — it reports and never repairs, so it is always safe to run when you are
 unsure whether the workspace is still coherent.
 

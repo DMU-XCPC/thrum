@@ -24,6 +24,23 @@ import (
 // which is why every one of them can print JSON, and why an id and a subject are
 // separate things: a machine refers to the id, and a person reads the subject.
 
+// newMessageCmd is how actors reach each other: one mailbox per name, one file per message.
+//
+// The names are the objects and the verbs are the actions — `message send`, `message list`,
+// `message read`, `message reply`, `message purge` — because "inbox" is a place and "purge" says
+// nothing about what is being purged.
+func newMessageCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "message",
+		Short: "Send another actor a message, read your own, and keep the mailbox in order",
+		Long: "A message is process information: not a record, never committed, and never validated. It\n" +
+			"goes into the recipient's mailbox at whichever site that is, or the send fails and says\n" +
+			"so — delivered or refused, never queued.",
+	}
+	cmd.AddCommand(newSendCmd(), newListCmd(), newReadCmd(), newReplyCmd(), newPurgeCmd())
+	return cmd
+}
+
 func newSendCmd() *cobra.Command {
 	var (
 		to      string
@@ -96,14 +113,15 @@ func oneLine(m messages.Message) string {
 	return fmt.Sprintf("%-20s %-16s %s  %s%s", m.ID, m.From, m.Sent, m.Subject, reply)
 }
 
-func newInboxCmd() *cobra.Command {
+// newListCmd is the mailbox: what has arrived, and optionally what keeps arriving.
+func newListCmd() *cobra.Command {
 	var (
 		asJSON   bool
 		watching bool
 	)
 
 	cmd := &cobra.Command{
-		Use:   "inbox",
+		Use:   "list",
 		Short: "List this actor's mailbox, or keep reporting what arrives in it",
 		Long: "Nothing is deleted and nothing is marked read: a message is process information\n" +
 			"that stays until somebody removes it, and which of them still matter is not\n" +

@@ -96,7 +96,6 @@ func newRootCmd() *cobra.Command {
 		newSiteCmd(),
 		newCommitCmd(),
 		// Runtime.
-		newOccupancyCmd(),
 		newResourceCmd(),
 		newLeaseCmd(),
 		// Assets and payloads.
@@ -105,11 +104,7 @@ func newRootCmd() *cobra.Command {
 		// Actors, and reaching them.
 		newActorCmd(),
 		newEnvCmd(),
-		newSendCmd(),
-		newInboxCmd(),
-		newReadCmd(),
-		newReplyCmd(),
-		newPurgeCmd(),
+		newMessageCmd(),
 		// The daemon is an implementation detail, and these are hidden.
 		newDaemonCmd(),
 	)

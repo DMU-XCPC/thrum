@@ -72,11 +72,11 @@ Actors reach each other through the tooling rather than through the records: a m
 
 | Operation | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `send` | Writes a message into another actor's mailbox, at this site or at the recipient's. | Delivered or refused, never queued: a recipient whose site cannot be reached is an error, not a backlog |
-| `inbox`, `read` | Lists a mailbox and reads one message — and can keep reporting what arrives, for a harness that has to be woken rather than to ask. | Process information, not records: never committed, never collected, kept until somebody removes it |
-| `reply` | Sends a message whose `reply_to` names the one being answered. | A message cannot be retracted or edited, because it may already have started something; a correction is another message |
+| `message send` | Writes a message into another actor's mailbox, at this site or at the recipient's. | Delivered or refused, never queued: a recipient whose site cannot be reached is an error, not a backlog |
+| `message list`, `message read` | Lists a mailbox and reads one message — and can keep reporting what arrives, for a harness that has to be woken rather than to ask. | Process information, not records: never committed, never collected, kept until somebody removes it |
+| `message reply` | Sends a message whose `reply_to` names the one being answered. | A message cannot be retracted or edited, because it may already have started something; a correction is another message |
 | `attach` | Carries bytes with a message. | Not an asset: no content addressing, no tag, no manifest, and never `store/`. Anything that has to survive is published as an asset and referred to by name |
-| `purge` | Removes a message and its attachments from a mailbox. | Manual on purpose: nothing collects messages, because nothing can know which of them still matter |
+| `message purge` | Removes a message and its attachments from a mailbox. | Manual on purpose: nothing collects messages, because nothing can know which of them still matter |
 
 ## Jobs
 
@@ -147,13 +147,14 @@ Merging a job's branch, starting and stopping services, running tests, running a
 ## Commands
 
 Four commands are groups, and each one's subcommands are the operations named above:
-`actor list`, `actor show`, `actor ask`; `worktree add`, `worktree release`, `worktree list`,
-`worktree prune`; `occupancy occupy`, `occupancy vacate`, `occupancy sweep`, `occupancy show`;
+`actor list`, `actor show`, `actor online`, `actor offline`; `worktree add`, `worktree release`, `worktree list`,
+`worktree prune`; `job list`, `job show`, `job occupy`, `job vacate`;
 `lease take`, `lease renew`, `lease release`, `lease list`; `resource declare`,
 `resource remove`, `resource list`; `asset ingest`, `asset publish`, `asset materialise`,
 `asset withdraw`, `asset store`, `asset prune`; `bundle export`, `bundle import`;
 `site listen`, `site reach`, `site key`, `site show`; and the hidden `daemon run`,
-`daemon exec`, `daemon stop`.
+`daemon exec`, `daemon stop`. Messages are one group: `message send`, `message list` (with
+`--watch`), `message read`, `message reply` and `message purge`.
 
 Every command is one of the operations above, and every one of them takes the same two
 global flags: `--root` (the workspace, defaulting to `$THRUM_ROOT`, then the current
@@ -173,18 +174,13 @@ directory) and `--actor` (the name to act as, defaulting to `$THRUM_ACTOR`, then
 | `create` | Create a workspace from the template |
 | `env` | Print the environment variables that keep a job's tools inside the workspace |
 | `handoff` | Record a stretch of work |
-| `inbox` | List this actor's mailbox, or keep reporting what arrives in it |
-| `job` | Print everything about one job: what it is for, where it is, and who is on it |
+| `job` | The board, one job in full, and who is on it |
 | `join` | Make this machine another site of a workspace that already exists |
 | `lease` | Take, renew, release and list the units of a declared resource |
-| `occupancy` | Say who is on a job at this site, and since when |
+| `message` | Send another actor a message, read your own, and keep the mailbox in order |
 | `open` | Open a job: the brief, the branch, and a labelled working directory |
-| `purge` | Remove a message and its attachments from this mailbox |
-| `read` | Read one message, and take its attachments if it has any |
 | `relinquish` | Give up ownership, leaving the job claimable |
-| `reply` | Answer a message, naming what it answers |
 | `resource` | Declare or remove the resources a workspace shares |
-| `send` | Send another actor a message, here or at its own site |
 | `site` | Say how this machine is reached, and how it reaches the others |
 | `status` | Print the derived views: the task board, worktrees, leases, occupancy, payloads |
 | `sync` | Publish the records this site has made, and fetch what has arrived |

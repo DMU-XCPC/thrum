@@ -16,7 +16,7 @@ test('the nudge names the messages and their ids, and not their bodies', () => {
   const one = nudgeText([message('m-1')])
   assert.match(one, /1 message\./)
   assert.match(one, /m-1/)
-  assert.match(one, /thrum read <id>/)
+  assert.match(one, /thrum message read <id>/)
 
   const two = nudgeText([message('m-1'), message('m-2')])
   assert.match(two, /2 messages\./)

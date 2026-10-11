@@ -20,7 +20,7 @@ export function nudgeText(messages) {
     '',
     ...messages.map(line),
     '',
-    'Read them with `thrum inbox`, and one with `thrum read <id>`. A message is process',
+    'Read them with `thrum message list`, and one with `thrum message read <id>`. A message is process',
     'information and is never in a handoff, so this is the only place it arrives.',
   ].join('\n')
 }

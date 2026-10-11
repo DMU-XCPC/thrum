@@ -82,27 +82,6 @@ func newActorCmd() *cobra.Command {
 		},
 	}
 
-	var jobID string
-	ask := &cobra.Command{
-		Use:   "ask --job <id>",
-		Short: "Who is on a job right now, according to the site that holds it",
-		Long: "The file at var/occupy/ is a claim, and the site that holds the job is the one site\n" +
-			"whose claim counts: a job is materialised at a site, and that site's tooling is\n" +
-			"what refuses a second actor. Nothing on disk can say whether an actor is still\n" +
-			"working, and this does not pretend otherwise.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			line, err := whoIsOn(layout(), jobID)
-			if err != nil {
-				return err
-			}
-			fmt.Println(line)
-			return nil
-		},
-	}
-	ask.Flags().StringVar(&jobID, "job", "", "the job (required)")
-	_ = ask.MarkFlagRequired("job")
-
 	online := &cobra.Command{
 		Use:   "online",
 		Short: "Say that this name is working here now",
@@ -134,7 +113,7 @@ func newActorCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(listCmd, show, online, offline, ask)
+	cmd.AddCommand(listCmd, show, online, offline)
 	return cmd
 }
 

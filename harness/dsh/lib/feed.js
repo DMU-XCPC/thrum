@@ -1,4 +1,4 @@
-// The feed: one line per message, from `thrum inbox --watch --json`.
+// The feed: one line per message, from `thrum message list --watch --json`.
 //
 // The stream is what makes a wake possible without polling the tool, and it is also what
 // makes a late start safe: the watch prints the mailbox it finds before it reports
@@ -56,7 +56,7 @@ export function watchMailbox({
       try {
         message = JSON.parse(line)
       } catch {
-        onError(new Error(`thrum inbox --watch printed a line that is not a message: ${line}`))
+        onError(new Error(`thrum message list --watch printed a line that is not a message: ${line}`))
         return
       }
       restartMs = firstRestartMs // it is working, so a later death starts over

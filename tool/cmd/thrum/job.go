@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/jobs"
 	"github.com/multiagentworkspace/thrum/tool/internal/leases"
 	"github.com/multiagentworkspace/thrum/tool/internal/occupancy"
 	"github.com/multiagentworkspace/thrum/tool/internal/roster"
+	"github.com/multiagentworkspace/thrum/tool/internal/status"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -27,6 +29,7 @@ type jobView struct {
 	Criteria    string   `json:"criteria,omitempty"`
 	Label       string   `json:"label,omitempty"`
 	Worktree    string   `json:"worktree,omitempty"`
+	OnIt        string   `json:"on_it,omitempty"`
 	Occupant    string   `json:"occupant,omitempty"`
 	OccupantAt  string   `json:"occupant_since,omitempty"`
 	Presence    string   `json:"occupant_presence,omitempty"`
@@ -36,21 +39,98 @@ type jobView struct {
 	Leases      []string `json:"leases,omitempty"`
 }
 
-// newJobCmd prints one job's picture, for a person or for whatever handed the actor the job.
+// newJobCmd is what a person asks about work: the board, one job in full, and who is on it.
+//
+// Everything here is derived — from the briefs, the handoffs, the working directories, the
+// claims and the roster — so there is nothing to keep in step, and each subcommand is one of
+// those questions rather than a new place a fact lives.
 func newJobCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "job",
+		Short: "The board, one job in full, and who is on it",
+		Long: "`job list` is every job with what the last handoff said about it; `job show <id>` is one\n" +
+			"job in full; `job occupy <id>` and `job vacate <id>` are the claim that somebody is on it,\n" +
+			"which is written where the job is so that one site decides.",
+	}
+	cmd.AddCommand(newJobListCmd(), newJobShowCmd(), newJobOccupyCmd(), newJobVacateCmd())
+	return cmd
+}
+
+// newJobListCmd is the board: the brief says whether a job is still meant to happen, and the
+// newest handoff says whether the last stretch got anywhere.
+func newJobListCmd() *cobra.Command {
 	var (
-		jobID  string
-		asJSON bool
+		owner    string
+		lastSaid string
+		asJSON   bool
 	)
 
 	cmd := &cobra.Command{
-		Use:   "job --job <id>",
-		Short: "Print everything about one job: what it is for, where it is, and who is on it",
-		Long: "The brief's goal, scope and acceptance criteria; the newest handoff's baton; the\n" +
-			"working directory here, if this site has one; who says they are on it; and the units\n" +
-			"it holds. --json is the same answer for whatever asked.",
+		Use:   "list",
+		Short: "List every job with what the last handoff said about it",
+		Long: "The same board `thrum status` prints, on its own. --owner and --status narrow it, and\n" +
+			"--json is the same answer for whatever asked.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			l := layout()
+			report, err := status.Gather(l)
+			if err != nil {
+				return err
+			}
+			jobs := make([]status.Job, 0, len(report.Jobs))
+			for _, job := range report.Jobs {
+				if owner != "" && job.Owner != owner {
+					continue
+				}
+				if lastSaid != "" && job.Status != lastSaid {
+					continue
+				}
+				jobs = append(jobs, job)
+			}
+			if asJSON {
+				return printJSON(cmd, jobs)
+			}
+			if len(jobs) == 0 {
+				fmt.Println("no job matches")
+				return nil
+			}
+			for _, job := range jobs {
+				where := "archived"
+				if job.Live {
+					where = "doc/task/"
+				}
+				who := job.Owner
+				if who == "" {
+					who = "unowned"
+				}
+				next := ""
+				if job.Next != "" {
+					next = "  next: " + firstLine(job.Next)
+				}
+				fmt.Printf("%-28s %-14s %-14s %s%s\n", job.ID, job.Status, who, where, next)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&owner, "owner", "", "only jobs this name owns")
+	cmd.Flags().StringVar(&lastSaid, "status", "", "only jobs whose last handoff said this")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print the same answer as JSON")
+	return cmd
+}
+
+// newJobShowCmd is one job in full, for a person or for whatever handed the actor the job.
+func newJobShowCmd() *cobra.Command {
+	var asJSON bool
+
+	cmd := &cobra.Command{
+		Use:   "show <id>",
+		Short: "Everything about one job: what it is for, where it is, and who is on it",
+		Long: "The brief's goal, scope and acceptance criteria; the newest handoff's baton; the\n" +
+			"working directory here, if this site has one; who is on it according to the site that\n" +
+			"holds it; and the units it holds. --json is the same answer for whatever asked.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jobID := args[0]
 			l := layout()
 			// ReadBrief answers with the path it found the brief at, because a job that
 			// has closed lives in the archive; the body is read from there.
@@ -98,6 +178,15 @@ func newJobCmd() *cobra.Command {
 				}
 			}
 
+			// Who is on it is the claim, and a claim counts where the job is: a site that
+			// does not hold the job cannot answer for it, so the question goes there, and
+			// "cannot be established" is said rather than guessed.
+			if line, err := whoIsOn(l, jobID); err == nil {
+				v.OnIt = line
+			} else {
+				v.OnIt = "cannot be established: " + err.Error()
+			}
+
 			if asJSON {
 				return printJSON(cmd, v)
 			}
@@ -126,6 +215,9 @@ func newJobCmd() *cobra.Command {
 					fmt.Printf("          %s\n", v.Presence)
 				}
 			}
+			if v.OnIt != "" {
+				fmt.Printf("on it     %s\n", v.OnIt)
+			}
 			if v.Next != "" {
 				fmt.Printf("next      %s\n", firstLine(v.Next))
 				fmt.Printf("          (from %s, %s)\n", v.LastHandoff, v.Agent)
@@ -136,9 +228,114 @@ func newJobCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&jobID, "job", "", "the job (required)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the same answer as JSON")
-	_ = cmd.MarkFlagRequired("job")
+	return cmd
+}
+
+// newJobOccupyCmd records that an actor is on a job.
+func newJobOccupyCmd() *cobra.Command {
+	var takeover bool
+
+	cmd := &cobra.Command{
+		Use:   "occupy <id>",
+		Short: "Record that an actor is on a job",
+		Long: "The note describes a running world rather than a decision: it is a claim and not a lock,\n" +
+			"a name stays behind after its process is gone, and the roster says what that name last\n" +
+			"said about itself.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jobID := args[0]
+			l := layout()
+			home, err := resolveJob(l, jobID)
+			if err != nil {
+				return err
+			}
+			// The claim is written where the job is, so that the one site that can answer
+			// for it is the one site that decides. Anywhere else it would be an opinion,
+			// and two sites' opinions are how one job gets two actors.
+			if home.remote == "" {
+				if err := occupancy.Occupy(l, jobID, actor, takeover, now()); err != nil {
+					return err
+				}
+				fmt.Printf("%s is on %s\n", actor, jobID)
+				return nil
+			}
+			if _, err := claimAt(l, home, daemon.Request{
+				Verb: daemon.VerbOccupy,
+				Args: daemon.Args(map[string]any{"job": jobID, "actor": actor, "takeover": takeover}),
+			}); err != nil {
+				return err
+			}
+			fmt.Printf("%s is on %s at %s\n", actor, jobID, home.remote)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&takeover, "take-over", false, "take it over even though it names somebody else")
+	return cmd
+}
+
+// newJobVacateCmd clears a claim, or every claim that has gone stale.
+func newJobVacateCmd() *cobra.Command {
+	var stale bool
+
+	cmd := &cobra.Command{
+		Use:   "vacate <id>",
+		Short: "Clear the note for a job, or every note that has gone stale",
+		Long: "A claim is cleared where it is: this site if it holds the job, and the site that holds it\n" +
+			"now otherwise. `--stale` clears instead the notes for jobs that have left `doc/task/` and\n" +
+			"for jobs this site no longer holds, which is what a claim whose process is gone leaves\n" +
+			"behind.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := layout()
+			if stale {
+				swept, err := occupancy.Sweep(l)
+				if err != nil {
+					return err
+				}
+				for _, job := range swept {
+					fmt.Printf("swept %s\n", job)
+				}
+				if len(swept) == 0 {
+					fmt.Println("nothing stale")
+				}
+				return nil
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("which job: `thrum job vacate <id>`, or `thrum job vacate --stale`")
+			}
+			jobID := args[0]
+			// A claim is cleared where it is. When the job has moved away from the site
+			// that made it, --stale is what clears it; here, clearing means either this
+			// site or the site that holds the job now.
+			was, err := occupancy.Vacate(l, jobID)
+			if err != nil {
+				return err
+			}
+			if was.Occupant != "" {
+				fmt.Printf("%s is no longer occupied (it was %s)\n", jobID, was.Occupant)
+				return nil
+			}
+			home, err := resolveJob(l, jobID)
+			if err != nil {
+				fmt.Printf("%s was not occupied here\n", jobID)
+				return nil
+			}
+			if home.remote == "" || home.claim.Occupant == "" {
+				fmt.Printf("%s was not occupied\n", jobID)
+				return nil
+			}
+			if _, err := claimAt(l, home, daemon.Request{
+				Verb: daemon.VerbVacate,
+				Args: daemon.Args(map[string]string{"job": jobID}),
+			}); err != nil {
+				return err
+			}
+			fmt.Printf("%s is no longer occupied at %s (it was %s)\n", jobID, home.remote, home.claim.Occupant)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&stale, "stale", false, "clear every note that has gone stale instead")
 	return cmd
 }
 

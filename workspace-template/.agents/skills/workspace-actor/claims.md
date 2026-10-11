@@ -13,7 +13,7 @@ disclaimer — it is what makes each one usable.
 
 ## Occupancy — `var/occupy/`
 
-`thrum occupancy occupy --job <job-id>` writes the claim; `thrum occupancy vacate --job <job-id>`
+`thrum job occupy <job-id>` writes the claim; `thrum job vacate <job-id>`
 clears it. In the ordinary flow it is `thrum work --job <job-id>` that writes it, because taking
 a job up is the opening, the claim and the working directory in one act. The file holds an
 `occupant` and a `since`, and it is written and cleared by the tooling on your behalf, never by

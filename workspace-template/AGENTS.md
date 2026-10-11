@@ -77,7 +77,7 @@ a declared label, and never from a checkout of your own — and never inside `va
 | everything about this job | `thrum job --job <job-id>`, or `--json` for whatever asked |
 | this project's rules, in number order | `doc/convention/` — read them before working |
 | the rule behind a question the loop raises | `.agents/skills/workspace-actor/` — `SKILL.md` is the loop; the files beside it answer one question each: `placement.md` (where a thing goes), `records.md` (how a record looks), `names.md`, `knowledge.md`, `assets.md`, `claims.md`, `sites.md` |
-| what is true right now | `thrum status`, `thrum actor ask --job <job-id>`, `thrum inbox` |
+| what is true right now | `thrum status`, `thrum job show <job-id>`, `thrum message list` |
 
 Before you run anything, `eval "$(thrum env --job <job-id>)"`: it points `TMPDIR` and the cache
 and state directories inside the payload, so a tool that respects them cannot write outside the
