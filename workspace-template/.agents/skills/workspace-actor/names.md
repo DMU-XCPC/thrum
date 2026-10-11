@@ -77,7 +77,11 @@ name identifies the working session, not the machinery under it**: a model swapp
 context compacted, a host restarted — and the session goes on writing under the same name, because
 the records it already wrote are its own. That is also why neither a harness's name nor a model's
 name is one: both are swapped while the session continues, and one harness hosts many sessions at
-once.
+once. **A name that fits everybody names nobody**: a project's name (`agent-novaphy`), a task, an
+area of work, a machine, the harness and the model are names any session that might work here
+could take, and the roster — which is what the tooling has seen — could not tell those sessions
+apart, which is the one thing a name is for. Look at `thrum actor list` before taking an invented
+one; a name already there is somebody's.
 An actor may be a person or an agent. The first time a name is used it exists; nothing is
 registered, and nothing is refused because a name is missing — a name is not a permission.
 

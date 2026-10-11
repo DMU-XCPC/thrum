@@ -23,11 +23,13 @@ recorded under `$USER`.
 **A host that gives every command a new shell loses the export**: pass `--actor <name>` on each
 command instead, with the same value.
 
-**Not the harness, and not the model.** `deepseek-harness`, `dsh` and `claude-code` name the thing
-hosting you; `deepseek-flash`, `gpt-5` and the like name the model. Both are swapped while the
-session goes on, and one harness hosts many sessions at once, so a name taken from either goes stale
-and merges actors that are not the same one. If the person who dispatched you gave a name, that is
-the name; if not, pick one you can keep for the whole session — `agent-3`, `dana`, `ws-7`.
+**A name that fits everybody names nobody.** `agent-novaphy` names the project, so every session
+that might work here could take it and the records would read as one actor's; the task, the area of
+work, the machine, the harness (`deepseek-harness`, `dsh`, `claude-code`) and the model
+(`deepseek-flash`, `gpt-5`) fail the same way. A name has to pick **this session** out of all of
+them. If the person who dispatched you gave a name, that is the name, and that is what makes it
+unique; if not, look at `thrum actor list` first — a name already there is somebody's — and give
+yours something only this session has: `agent-3f9c`, `dana-20261011`, `ws-7`.
 
 **One name, and it is yours.** Never act as another actor, and never watch a name that is not this
 session's: taking one over, or listening on it, makes another actor's records read as yours. If a
