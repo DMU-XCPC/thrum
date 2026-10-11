@@ -166,7 +166,10 @@ type HandoffOptions struct {
 	Metrics    map[string]any
 	Artifacts  []format.Artifact
 	Assets     []string
-	Summary    string
+	// Body is the handoff's body: what changed, what was verified, what remains and what is
+	// open. Empty leaves the template's skeleton in place.
+	Body    []byte
+	Summary string
 }
 
 // WriteHandoff records one stretch of work. It refuses a file name that already
@@ -205,9 +208,13 @@ func WriteHandoff(l workspace.Layout, o HandoffOptions) (string, error) {
 		return "", err
 	}
 
-	front, body, err := workspace.Template(l, "handoff.md")
+	front, skeleton, err := workspace.Template(l, "handoff.md")
 	if err != nil {
 		return "", err
+	}
+	body := skeleton
+	if len(o.Body) > 0 {
+		body = o.Body
 	}
 	var tmpl format.Handoff
 	if err := format.Decode(front, &tmpl); err != nil {

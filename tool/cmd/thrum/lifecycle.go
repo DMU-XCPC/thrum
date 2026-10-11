@@ -102,6 +102,37 @@ func newOpenCmd() *cobra.Command {
 //
 // A file beats the flags, because a brief that already exists somewhere is the thing
 // being handed over; reading standard input covers a shell that has it in a pipe.
+// handoffBody reads a handoff's body from a file, or from standard input for "-".
+//
+// The body is the half of a handoff no template can write: what changed, what was verified, what
+// remains and what is still open. Passing it is optional — without it the template's skeleton
+// stands — but when it is passed the sections are checked here, before anything is recorded, so a
+// body validation would reject later is refused now rather than half-written.
+func handoffBody(from string) ([]byte, error) {
+	if from == "" {
+		return nil, nil
+	}
+	var (
+		raw []byte
+		err error
+	)
+	if from == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(from)
+	}
+	if err != nil {
+		return nil, err
+	}
+	text := string(raw)
+	for _, section := range format.HandoffSections {
+		if !strings.Contains(text, "## "+section) {
+			return nil, fmt.Errorf("the handoff has no %q section: a handoff is its four sections", section)
+		}
+	}
+	return raw, nil
+}
+
 func briefBody(goal, scope, criteria, from string) ([]byte, error) {
 	if from != "" {
 		var (
@@ -178,6 +209,7 @@ func newHandoffCmd() *cobra.Command {
 		ownedPaths string
 		assets     string
 		summary    string
+		bodyPath   string
 		artifacts  []string
 		metrics    []string
 	)
@@ -199,6 +231,10 @@ func newHandoffCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			body, err := handoffBody(bodyPath)
+			if err != nil {
+				return err
+			}
 			id, err := jobs.WriteHandoff(layout(), jobs.HandoffOptions{
 				Job:        jobID,
 				Agent:      actor,
@@ -210,6 +246,7 @@ func newHandoffCmd() *cobra.Command {
 				OwnedPaths: list(ownedPaths),
 				Assets:     list(assets),
 				Summary:    summary,
+				Body:       body,
 				Artifacts:  recorded,
 				Metrics:    numbers,
 			})
@@ -236,6 +273,7 @@ func newHandoffCmd() *cobra.Command {
 	cmd.Flags().StringVar(&ownedPaths, "owned-paths", "", "paths actually touched")
 	cmd.Flags().StringVar(&assets, "assets", "", "assets published by this stretch, as name@version")
 	cmd.Flags().StringVar(&summary, "summary", "", "the commit's summary")
+	cmd.Flags().StringVar(&bodyPath, "body", "", "read the body from this file, or from - for standard input")
 	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil,
 		"a file this stretch produced, by path relative to the workspace; its raw sha256 is recorded; repeatable")
 	cmd.Flags().StringArrayVar(&metrics, "metric", nil, "a number worth recording, as key=value; repeatable")

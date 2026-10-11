@@ -1412,3 +1412,65 @@ func TestAStaleClaimDoesNotBlockTakingAJobUp(t *testing.T) {
 		t.Errorf("the workspace should still validate, and said:\n%s", out)
 	}
 }
+
+// A handoff's body is the actor's own: those four sections are what the next actor reads, and a
+// template skeleton is not that. It is passed in the way a brief's body is, and checked before
+// anything is recorded.
+func TestAHandoffBodyIsTheActorsOwn(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "build-01")
+	run(t, "create", root, "--site", "build-01")
+
+	clone := filepath.Join(t.TempDir(), "seed")
+	git(t, filepath.Dir(clone), "clone", "--quiet", filepath.Join(root, ".bare"), clone)
+	if err := os.WriteFile(filepath.Join(clone, "README.md"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, clone, "add", ".")
+	git(t, clone, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "project: first")
+	git(t, clone, "push", "--quiet", "origin", "HEAD:refs/heads/main")
+
+	run(t, "--root", root, "--actor", "alice", "resource", "declare", "--kind", "worktree", "--name", "area", "--purpose", "the area")
+	run(t, "--root", root, "--actor", "alice", "work", "--job", "j1", "--label", "area",
+		"--goal", "g", "--scope", "s", "--criteria", "c")
+
+	work := filepath.Join(root, "worktree", "area")
+	if err := os.WriteFile(filepath.Join(work, "changed.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, work, "add", ".")
+	git(t, work, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "--quiet", "-m", "the change")
+
+	// A body without the sections is refused before anything is recorded.
+	if out, err := tryAs(t, "alice", "--root", root, "handoff", "--job", "j1", "--status", "partial",
+		"--next", "carry on", "--body", "-"); err == nil {
+		t.Errorf("a body with no sections should be refused, and it said:\n%s", out)
+	}
+
+	path := filepath.Join(t.TempDir(), "body.md")
+	text := "## What changed\n\nThe uploader retries once.\n\n## What was verified\n\nThe test passes.\n\n" +
+		"## What remains\n\nClose it.\n\n## Open questions\n\nNone.\n"
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(t, "--root", root, "--actor", "alice", "handoff", "--job", "j1", "--status", "partial",
+		"--next", "carry on", "--body", path)
+
+	dir := filepath.Join(root, "handoff", "j1")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("one stretch is one handoff, and there are %d", len(entries))
+	}
+	record, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(record), "The uploader retries once.") {
+		t.Errorf("the body should be in the record, and it is:\n%s", record)
+	}
+	if out := run(t, "--root", root, "verify"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("the record should validate, and verify said:\n%s", out)
+	}
+}
