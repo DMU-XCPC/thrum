@@ -36,7 +36,7 @@ does not name still has a right answer.
    another machine. That is why a name is never a permission, and why nothing is assigned to you.
 3. **The records are the truth, and the views are derived.** No board, no status file, no index is
    maintained by hand. A job's status is its brief's; whether it is blocked is its latest
-   handoff's; where the work is, is the code repository's `git worktree list`. A derived thing that has been written
+   handoff's; where the work is, is what `thrum where --job <job-id>` prints. A derived thing that has been written
    down is a second version of the truth, and it will drift.
 4. **The line is one line, and nothing is ever merged.** A record write takes what the other sites
    published first, and the event is published or withdrawn. A refusal is not a loss.
@@ -67,11 +67,11 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
 ## The loop
 
 1. **Locate.** `thrum where --job <job-id>` prints the directory holding `job/<job-id>`, which is
-   where you work. If this site has none, `thrum work --job <job-id> --label <label>` materialises
-   one (and `thrum job --job <job-id>` says everything else about the job in one place). The
-   coordination repository is a different repository, whose own `git worktree list` shows only the
-   workspace root — never work there. If the job is unstarted, already closed, or its work moved to
-   another site, `thrum job --job <job-id>` and `ls handoff/<job-id>/` tell you which.
+   where you work, and `thrum job --job <job-id>` says everything else about the job in one place.
+   No directory here means the job is unstarted, already closed, or its work has moved to another
+   site: `thrum job` and `ls handoff/<job-id>/` say which. The coordination repository is a
+   different repository, whose own `git worktree list` shows only the workspace root — never work
+   there.
 2. **Read.** `doc/task/<job-id>/brief.md`, then the newest file in `handoff/<job-id>/`. Its `next`
    is the baton: what the last actor decided you do first, and usually the whole reason you are
    being asked.
@@ -79,9 +79,12 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
 4. **Check your mail.** `thrum inbox` lists what other actors have sent you, and `thrum read <id>`
    reads one and takes any files it carried. A message is process information and is never in a
    handoff, so this is the only place it arrives — and it is often why the last actor stopped.
-5. **Say you are on it.** `thrum occupancy occupy --job <job-id>`; vacate when the stretch ends.
-   It is a claim and not a lock, so if it names somebody else, ask that actor or the job's owner
-   rather than reaching for `--take-over` — see `claims.md`.
+5. **Take it up.** `thrum work --job <job-id>` is `open`, `claim` and `occupy` in the order they
+   have to happen, and it ends by printing the working directory and the environment line to run:
+   it opens the job when it is not open yet, declares the label when you name a new one, claims
+   the job, and materialises a working directory when this site has none. It is a claim and not a
+   lock, so if it names somebody else, ask that actor or the job's owner rather than reaching for
+   `--take-over` — see `claims.md`. `thrum occupancy vacate --job <job-id>` ends the stretch.
 6. **Point your tools inside the workspace.** `eval "$(thrum env --job <job-id>)"` before running
    anything. A tool run without it writes outside, where nothing collects what it leaves.
 7. **Take what you need first.** A lease for a unit of a declared resource, before you start rather
@@ -99,7 +102,9 @@ export THRUM_ACTOR=claude-opus        # or --actor <name> on every command
 
 Opening writes the brief, creates the branch and materialises a labelled working directory, and
 it is one commit — unless the label has not been declared yet, because declaring a resource is a
-different event with a commit of its own.
+different event with a commit of its own. **`thrum work` does this and takes the job up in one
+act** when you are the one who will work it; `thrum open` is the same act without taking it up,
+which is what opening a job for somebody else looks like.
 
 ```sh
 thrum open --job add-retry-to-uploader --label uploader \
@@ -111,10 +116,10 @@ thrum open --job add-retry-to-uploader --label uploader \
 
 - **The job id is taken forever**, and checked against both `doc/task/` and `doc/archive/`.
 - **The label names the area of work, never the job.** It must already be declared;
-  `--create-label` declares it, as a second commit. A label is free when the code repository's
-  `git worktree list`
-  shows no job branch in it, and it is never taken from under the job holding it — that job ends
-  the stretch as `blocked` instead.
+  `--create-label` declares it, as a second commit — or `thrum work --purpose '<what it is for>'`
+  declares it in the same act, with `--ephemeral` when the label is one-off. A label is free when
+  `thrum worktree list` shows no job branch in it, and it is never taken from under the job
+  holding it — that job ends the stretch as `blocked` instead.
 - **`--owner` may name somebody else.** The owner is who the work is promised to, not necessarily
   who does it. Leaving it out makes the job unowned, and therefore claimable by whoever takes it
   up.

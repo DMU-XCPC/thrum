@@ -13,7 +13,9 @@ is a lock, and saying so is not a disclaimer — it is what makes each one usabl
 ## Occupancy — `var/occupy/`
 
 `thrum occupancy occupy --job <job-id>` writes the claim; `thrum occupancy vacate --job <job-id>`
-clears it. The file holds an `occupant` and a `since`, and it is written and cleared by the
+clears it. In the ordinary flow it is `thrum work --job <job-id>` that writes it, because taking a
+job up is the opening, the claim and the working directory in one act; `occupy` is the same claim
+said on its own. The file holds an `occupant` and a `since`, and it is written and cleared by the
 tooling on your behalf, never by hand.
 
 **It is a claim, not a lock, because nothing on disk can tell a working actor from a stopped
