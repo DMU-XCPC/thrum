@@ -332,3 +332,22 @@ declare, open, occupy, lease, hand off, publish, materialise, export, close, col
 and through actors reaching each other, asserting after every step that the workspace
 still passes `thrum verify`. The daemon's tests run two sites against each other over a
 real SSH channel, including a message with an attachment.
+
+## Fetching a peer's repositories
+
+A site with a daemon answers for three repositories and no others: the workspace root (the
+records), the code repository, and the store. Nothing in this tool fetches them — a peer uses
+its own `ssh` as the transport, exactly as it would for any other remote, and git asks the
+daemon for `git-upload-pack <path>` over that channel:
+
+```sh
+# the key is the workspace's own, and the path is the site's, as the roster declares it
+export GIT_SSH_COMMAND="ssh -i /path/to/this/site/var/secrets/id_ed25519 -p <port> \
+  -o StrictHostKeyChecking=accept-new"
+git ls-remote "ssh://<user>@<host><that-site's-workspace-root>"
+```
+
+Nothing needs an external git remote for this: a second site can be brought into being from a
+peer's daemon alone, by joining with that URL as `--remote`. `join` and `sync` take it like any
+other remote URL, and the only thing that has to be arranged is that the key in the peer's
+`var/secrets/authorized_keys` is the one the client offers.
