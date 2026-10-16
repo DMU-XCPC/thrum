@@ -1,5 +1,9 @@
 # MultiAgentWorkspace
 
+> **This branch is the redesign.** The design is [`doc/workspace.md`](doc/workspace.md) and
+> [`doc/thrum.md`](doc/thrum.md). The rest of this file describes `master`'s design, and is
+> kept until the implementation is rebuilt.
+
 A workspace template and the tooling that creates it, for running many agents on one
 project at the same time.
 
@@ -105,16 +109,15 @@ under `doc/template/`, and the ignore rules, which are written into `.gitignore`
 
 ## Reading order
 
-1. **`doc/design.md`** — what a workspace is made of and why, four definitions in, and the
-   authority for every rule the tooling enforces.
-2. **`doc/tooling.md`** — the interface: the operations, what each does and refuses, and every
-   command. It adds no rules of its own.
-3. **`doc/implementation.md`** — how the tooling is built: the stack, the record line and its
-   lock, the daemon's process.
-4. **`tool/README.md`** — where the code is and how to build and test it.
+1. **`doc/workspace.md`** — what a workspace is made of and why: jobs, records, the line.
+2. **`doc/thrum.md`** — the fabric that holds the sites together: actors, messages, the
+   sequenced line, and the daemon.
+3. **`doc/README.md`** — the two, in order, and what changed.
+4. **`tool/README.md`** — where the code is and how to build and test it (stale: it implements
+   the previous design).
 
-A behaviour change starts as a change to `doc/design.md`. Where an implementation and the
-design disagree, the design is right.
+A change starts as a change to the design. Where an implementation and the design disagree, the
+design is right.
 
 ## Tests
 
