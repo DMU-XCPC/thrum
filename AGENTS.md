@@ -61,8 +61,8 @@ rebuilt with it.
 
 | Path | What it is |
 | --- | --- |
-| `doc/workspace.md` | The design of a workspace: jobs, records, the line. The authority. |
-| `doc/thrum.md` | The fabric: sites, actors, messages, and the mergeable line. The authority. |
+| `doc/workspace.md` | The design of a workspace: jobs, records, and the two shared histories. The authority. |
+| `doc/thrum.md` | The fabric: sites, actors, messages, and the two shared histories. The authority. |
 | `doc/commands.md` | The interface: the operations, what each refuses, and every command. |
 | `doc/README.md` | The reading order, and what changed and why. |
 | `tool/` | The implementation — stale; it implements the previous design. |

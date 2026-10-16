@@ -2,14 +2,17 @@
 
 What changes once there is a second machine? A workspace is one project's shared thing; a **site** is
 one machine's copy of it. Each site runs a daemon, and the daemons together are the fabric: they
-place names, carry messages, and keep the line converging. Most work never notices, and this file is
-what to read when it does.
+place names, carry messages, and keep the shared histories converging. Most work never notices, and
+this file is what to read when it does.
 
-## The line converges, and a merge is never a conflict
+## The shared histories converge, and a merge is never a conflict
 
-**No two sites write one file.** A handoff is a new file every time; a brief has the one site working
-its job; a declaration has the site that made it. So an event recorded while two sites were apart
-joins the line without a merge, and a file that has been seen is never rewritten.
+**The line** (`doc/`) is the decisions, and no two sites write one file there: a brief has the one
+site working its job, and a declaration has the site that made it. **The ledger** (`handoff/`) is the
+evidence, and it is append-only: every handoff is a new file whose name carries the job and the
+moment the stretch started, so two sites recording at once write two files and both are true. So an
+event recorded while sites were apart joins without a merge, and a file that has been seen is never
+rewritten.
 
 - **A name claimed twice is settled, not merged.** Two sites can open a job with the same id, or
   declare the same actor, while they are apart, and their events claim the same path. Every event
@@ -49,7 +52,8 @@ thrum events [--json]
 A job belongs to the workspace, not to the machine it happens to be running on. Moving one is three
 acts, and all three are needed:
 
-1. **The records travel by the line.** The brief and every handoff are already shared.
+1. **The records travel by the shared histories.** The brief is in the line and the handoffs are in
+   the ledger; both are already shared.
 2. **The branch travels through the fabric.** `job/<job-id>` lives in the code repository, and the
    receiving site fetches it from the site holding the job.
 3. **The payload travels as a bundle**, because git cannot carry it.

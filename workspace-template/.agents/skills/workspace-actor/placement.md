@@ -105,7 +105,8 @@ a silent one — but a hash cannot give the bytes back.
 
 | Plane | Holds | Versioned | Travels by git |
 | --- | --- | --- | --- |
-| Coordination — `doc/`, `handoff/` | decisions and evidence | yes, in the line | yes |
+| The line — `doc/` | decisions | yes, in the line | yes |
+| The ledger — `handoff/` | evidence, append-only | yes, in the ledger | yes |
 | Assets — `store/` | durable bytes, content-addressed | yes, as tags | yes, as tags |
 | Runtime — `var/`, `job/`, `worktree/` | working state | no | no |
 

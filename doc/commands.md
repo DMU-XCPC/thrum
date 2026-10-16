@@ -16,9 +16,9 @@ Every command takes the same two global flags:
 
 An actor is a name, not a process ([`thrum.md`](thrum.md)): nothing is started and nothing is
 registered, and every command works whether or not a daemon is running. What a daemon adds is
-being reachable — answering a lookup, taking a message, exchanging the line — so a command on
-one machine needs none, and a command that has to reach another site says plainly when it
-cannot.
+being reachable — answering a lookup, taking a message, exchanging the shared histories — so a
+command on one machine needs none, and a command that has to reach another site says plainly when
+it cannot.
 
 `--json` on any reading command prints what a person sees as machine-readable data. Those keys
 are the interface: a key is renamed only with whatever reads it, and a test fails when one
@@ -28,12 +28,12 @@ changes.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum create <dir> --site <name> [--code <repo>]` | Instantiates a workspace from the template thrum carries: the repositories, the runtime directories, the entry point and skill an actor is handed, this site's declaration, and the first event. | Never a plain file copy: bare repositories have to be initialised, and a repository cannot carry an empty directory. |
+| `thrum create <dir> --site <name> [--code <repo>]` | Instantiates a workspace from the template thrum carries: the four repositories — the line, the ledger, the code and the store — the runtime directories, the entry point and skill an actor is handed, this site's declaration, and the first event. | Never a plain file copy: bare repositories have to be initialised, and a repository cannot carry an empty directory. |
 | `thrum join <token>` | Makes this machine another site: proves the token, presents a key, takes the roster and the repositories, starts the daemon, and registers the key. | A site the roster does not declare is refused rather than half-joined. |
 | `thrum update` | Brings the unversioned skeleton up to date: the ignore rules, the empty directories, the entry point and the skill. Reports differing copy-me files and writes them only when asked. | Never touches a versioned file on its own initiative, and never removes a directory. |
-| `thrum verify` | Runs every mechanical check, and reads the values the conventions declare. | Reports; it never repairs. A wrong repair costs more than a stale line. |
+| `thrum verify` | Runs every mechanical check, including the one that reads across the two histories — a handoff's `job` must name a brief in the line — and reads the values the conventions declare. | Reports; it never repairs. A wrong repair costs more than a stale record. |
 | `thrum status` | The picture: the board, the sites, the payloads, and this actor's mail. | Reads only. |
-| `thrum clean` | Removes what the line does not track and does not ignore. | Never `git clean -x` or `-d`: the first would delete the code repository and its history, the second the workspace's own empty directories. |
+| `thrum clean` | Removes what the shared histories do not track and do not ignore. | Never `git clean -x` or `-d`: the first would delete the code repository, the ledger and their histories, the second the workspace's own empty directories. |
 
 ## Sites
 
@@ -67,7 +67,7 @@ decision and nothing else should make one as a side effect.
 | `thrum message list [--watch]`, `thrum message read <id>` | Reads this actor's mailbox at the site holding it, reached through the fabric. | Reads only. `--watch` keeps reporting arrivals, and prints the backlog before it starts. |
 | `thrum message reply <id>` | Sends a message whose `reply_to` names the one answered. | A message is never retracted or edited; a correction is another message. |
 | `thrum message purge <id>` | Removes a message and its attachments. | Manual on purpose: nothing collects messages, because nothing can know which still matter. |
-| `thrum events [--json]` | The local event stream: a message arrived, a job's state changed, the line moved. | A hint for a plugin. A missed event is never a lost message. |
+| `thrum events [--json]` | The local event stream: a message arrived, a job's state changed, a shared history moved. | A hint for a plugin. A missed event is never a lost message. |
 
 ## Jobs
 
@@ -77,8 +77,8 @@ decision and nothing else should make one as a side effect.
 | `thrum job list`, `thrum job show <id>` | The board, and one job in full. | Reads only. |
 | `thrum job claim <id>` | Sets `owner` on a job that has none. | Refuses a job that already has an owner: taking ownership from somebody is not a claim. |
 | `thrum job reassign <id> --to <actor>`, `thrum job relinquish <id>` | Changes or clears the owner. | Refused to anyone but the owner, or a person acting for an owner who is unreachable. |
-| `thrum job handoff <id> --status <s> [--body <file>\|-] [--next <text>] [--artifact <path>] [--worktree <label>] [--supersedes <file>] [--blocked-by <id>]` | Writes `handoff/<id>/<started>.md`, a new file every time. | Refuses an existing file name, a brief that is not `active`, and a `next` that disagrees with the status: `none` belongs to `done`, and every other stretch leaves a baton. |
-| `thrum job close <id> --status done\|abandoned` | Sets the final status, moves the brief to the archive, and releases the working directory. | Refuses a job that has already closed, before anything is written. It merges nothing. |
+| `thrum job handoff <id> --status <s> [--body <file>\|-] [--next <text>] [--artifact <path>] [--worktree <label>] [--supersedes <file>] [--blocked-by <id>]` | Writes `handoff/<id>/<started>.md` into the ledger — a new file every time. | Refuses an existing file name, a brief that is not `active`, and a `next` that disagrees with the status: `none` belongs to `done`, and every other stretch leaves a baton. Write it before the close that ends the job; the two are separate events in separate repositories. |
+| `thrum job close <id> --status done\|abandoned` | Sets the final status, moves the brief to the archive, and releases the working directory. | Refuses a job that has already closed, before anything is written. It is the second of two events when it ends a stretch — the handoff comes first — and it merges nothing. |
 | `thrum work <id> --label <label> [--purpose <text>] [--ephemeral] [--goal <text>] [--owner <actor>]` | Open, claim and enter in one act, for the ordinary case of being handed work. `--purpose` is the label's own; `--goal` is the brief's. | As the operations it composes: a job that already has an owner is worked under that owner, not claimed. |
 
 ## Worktrees
@@ -93,8 +93,8 @@ decision and nothing else should make one as a side effect.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum commit --summary <text> [-- <paths>…]` | Turns one hand-made change into one event in the local line. | One event per commit. Refuses an index holding changes the event did not make. |
-| `thrum sync` | Exchange: fetch the peers, merge the line, publish. | A merge that needs a person names the file and stops. A name claimed twice is settled by the order every site derives, and the loser is told by name. Nothing already seen is rewritten. |
+| `thrum commit --summary <text> [-- <paths>…]` | Turns one hand-made change into one event in the line. Hand edits are to `doc/`; a handoff belongs to the ledger and is written by `job handoff`. | One event per commit. Refuses an index holding changes the event did not make. |
+| `thrum sync` | Exchange: fetch the peers, merge both shared histories, publish. | A merge that needs a person names the file and stops. A name claimed twice is settled by the order every site derives, and the loser is told by name. Nothing already seen is rewritten. |
 | `thrum retire <path> --why <text>` | Moves a document to the archive with its notice. | One event. A number once used is never used again. |
 
 ## Assets
@@ -120,7 +120,7 @@ decision and nothing else should make one as a side effect.
 | --- | --- | --- |
 | `thrum daemon run` | Runs this site's daemon in the foreground. | One per site: a second refuses to start. Starting needs no network. |
 | `thrum daemon status` | Whether it is up, what it is, and what it holds. | Reads only; works by asking the socket, and its absence is an answer too. |
-| `thrum daemon stop` | Stops it. | Restarting loses nothing durable: the roster, the mail and the line are files. |
+| `thrum daemon stop` | Stops it. | Restarting loses nothing durable: the roster, the mail and the shared histories are files. |
 
 ## Other
 
@@ -141,8 +141,8 @@ An operation belongs here when doing it by hand is unsafe or impossible:
 - **it computes something a hand gets wrong** — content hashes, tags, git bundles, a file name
   from a timestamp;
 - **it deletes something a hand would delete too much of** — the guarded clean;
-- **it has to reach another machine** — placing a name, sending a message, merging the line,
-  carrying a payload.
+- **it has to reach another machine** — placing a name, sending a message, merging a shared
+  history, carrying a payload.
 
 Everything else is a file plus a commit, and an actor does it in an editor. That is not an
 oversight: a workspace has to stay readable and editable without a helper.
@@ -151,8 +151,9 @@ oversight: a workspace has to stay readable and editable without a helper.
 
 - **A name is used once.** Job ids, actor names, site names, asset versions and convention
   numbers are never reused, and `retire` does not free one.
-- **One writer per file.** A file in the line has exactly one site allowed to write it; a write
-  from anywhere else is refused rather than merged.
+- **One writer per file in the line; the ledger is append-only.** A file in the line has exactly
+  one site allowed to write it, and the ledger takes new files and nothing else; a write outside
+  those rules is refused rather than merged.
 - **Nothing is assumed.** A claim that cannot be established is refused, never granted: an
   unreachable site is not a site that said no, and an actor that cannot be placed is not an
   actor that is absent.

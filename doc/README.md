@@ -5,7 +5,7 @@ Two documents, read in this order:
 1. [`workspace.md`](workspace.md) — what a workspace is: the jobs that isolate work, the
    records that say what happened, and where everything goes.
 2. [`thrum.md`](thrum.md) — the fabric that holds the sites together: finding actors, carrying
-   messages, and keeping the shared line converging.
+   messages, and keeping the shared histories converging.
 3. [`commands.md`](commands.md) — the operations and every command, and what each refuses.
 
 They are two halves of one design, not two designs. The workspace says what has to be true;
@@ -34,11 +34,12 @@ stale and are rebuilt from these documents.
   is placed by name through the fabric and pushed to the actor's last-known place, where it
   waits to be read; the sender never queues, so a send that cannot be placed says so instead of
   inventing a backlog.
-- **The line is mergeable.** Several sites write it at once, and a merge is never a conflict
-  because no two sites write one file: handoffs are new files with distinct names, a brief has
-  the one site working its job, and a name claimed twice is settled by a deterministic order
-  rather than merged. A project that would rather have one order can still name a single site
-  to sequence it.
+- **Two shared histories, and both merge.** The line (`doc/`) holds the decisions, and no two
+  sites write one file there: a brief has the one site working its job, and a name claimed twice
+  is settled by a deterministic order rather than merged. The ledger (`handoff/`) holds the
+  evidence and is append-only, so it merges by pure union — a new file every time, and a
+  correction a further new file. A project that would rather have one order can still name a
+  single site to sequence the line.
 - **A job is the only isolation unit.** `touches` is a description, not a claim; the previous
   reading of `owned_paths` as exclusion is withdrawn. Leases and resources are out of this
   version entirely.

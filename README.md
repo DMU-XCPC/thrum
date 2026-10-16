@@ -109,7 +109,8 @@ under `doc/template/`, and the ignore rules, which are written into `.gitignore`
 
 ## Reading order
 
-1. **`doc/workspace.md`** — what a workspace is made of and why: jobs, records, the line.
+1. **`doc/workspace.md`** — what a workspace is made of and why: jobs, records, and the two
+   shared histories.
 2. **`doc/thrum.md`** — the fabric that holds the sites together: actors, messages, the
    mergeable line, and the daemon.
 3. **`doc/commands.md`** — the operations and every command, and what each refuses.

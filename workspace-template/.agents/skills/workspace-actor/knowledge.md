@@ -57,8 +57,8 @@ collect.window: 14d
 ## Topics — `doc/topic/<topic>/`
 
 A topic is durable knowledge about the subject matter: how something works, why it is the way it
-is, and what has to keep being true. It is branch-independent — it lives in the coordination
-plane, so it is always current — and it outlives the components it describes.
+is, and what has to keep being true. It is branch-independent — it lives in the line, so it is
+always current — and it outlives the components it describes.
 
 ```text
 doc/topic/<topic>/

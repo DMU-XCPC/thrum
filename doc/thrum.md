@@ -150,30 +150,31 @@ where it stays until it is read or purged. The sender keeps nothing.
   promises a live event stream and a message that arrives whole; the plugin decides what a wake
   is.
 
-## The line
+## The shared histories
 
-Every workspace has one **line**: the shared history that every durable coordination fact goes
-into — actor and site declarations, conventions, topics, briefs, handoffs, manifests. It is a
-git history, and several sites write it at once.
+Every workspace has **two** shared histories, and several sites write each of them at once.
 
-**A merge is never a conflict, because no two sites write one file.** Each file in the line has
-exactly one writer:
+**The line** (`doc/`) holds the decisions: actor, site and worktree declarations, conventions,
+topics, briefs, asset manifests. A merge in it is never a conflict, because no two sites write one
+file:
 
 | Path | Its one writer |
 | --- | --- |
 | `doc/site/<name>.yaml` | that site |
 | `doc/actor/<name>.yaml` | the site that declared the actor |
 | `doc/task/<job>/brief.md` | the site the job is being worked at |
-| `handoff/<job>/<stamp>.md` | the site that wrote the stretch — a new file every time |
 | `doc/asset/<name>/<version>.md` | the site that published the version |
 | `doc/archive/**` | the site performing the retirement |
 | `doc/topic/**`, `doc/convention/**` | whoever is editing — the one place two hands can meet |
 
-Handoffs are the bulk of the traffic and are new files with distinct names, so they merge by
-union. A brief has one writer because a job is worked at one site. The last row is the honest
-exception: shared prose is edited by people, and two people editing one document at once is a
-merge that a person resolves. That is rare, it is visible, and no mechanism would be better
-than saying so.
+A brief has one writer because a job is worked at one site. The last row is the honest exception:
+shared prose is edited by people, and two people editing one document at once is a merge that a
+person resolves. That is rare, it is visible, and no mechanism would be better than saying so.
+
+**The ledger** (`handoff/`) holds the evidence: one file per stretch of work. It needs no rule at
+all, because it is append-only. A handoff's name carries the job and the moment the stretch
+started, so two sites recording at once write two files, and both are true about their own
+stretch. Nothing in it is ever edited or deleted; a correction is a further new file.
 
 **A name claimed twice is settled, not merged.** Two sites can open a job with the same id, or
 declare the same actor, while they are apart. Their commits then add the same path. Every event
@@ -182,26 +183,29 @@ then site name, then event id — and the first claim in that order keeps the na
 void: the file is discarded, and its author is told, by name, on the next exchange. Nothing
 anybody has seen is rewritten; a loser records again under a name that is free.
 
-**Convergence is automatic.** A site commits locally; the daemon then fetches its peers' heads,
-merges them — cleanly, by the rule above — and publishes the result. Two sites publishing at
-once is one rejected push and one retry, which is git's own answer and needs no protocol of
-ours. What comes out is a history that only ever grows, with a total order that every site
-derives the same way rather than one that a writer had to be appointed to impose.
+**Convergence is automatic, in both.** A site commits locally; the daemon then fetches its peers'
+heads, merges them — cleanly, by the rules above — and publishes the result. Two sites publishing
+at once is one rejected push and one retry, which is git's own answer and needs no protocol of
+ours. What comes out are histories that only ever grow, with a total order that every site derives
+the same way rather than one that a writer had to be appointed to impose.
 
 **If a project wants one order, it can name one.** A project that would rather not derive an
 order can declare a site as the line's sequencer; peers then submit events to it and it appends
-them one at a time, which yields a strictly linear history at the cost of a single writer.
-Everything else in this document is unchanged either way. The default is the mergeable one,
-because a workspace whose sites are apart for a day should not have to stop recording.
+them one at a time, which yields a strictly linear history at the cost of a single writer. The
+ledger needs none: its files are independent, and a union is the whole of its merge. Everything
+else in this document is unchanged either way. The default is the mergeable one, because a
+workspace whose sites are apart for a day should not have to stop recording.
 
 ## Git
 
 The daemons serve the workspace's repositories, so peers fetch and push through the fabric
-rather than needing an external remote. The rules are the ones the line already implies:
+rather than needing an external remote. The rules are the ones the shared histories already
+imply:
 
 | Repository | Ref | Rule |
 | --- | --- | --- |
-| the line (`doc/`, `handoff/`) | the line ref | one writer per path; merged, never rewritten |
+| the line (`doc/`) | the line ref | one writer per path; merged, never rewritten |
+| the ledger (`handoff/`) | the ledger ref | append-only; merged by union, never rewritten |
 | code | `job/<id>` | one writer: the site holding that job |
 | code | the integration refs | one writer: the site the project declares |
 | assets | tags | created once, never moved, deleted only by withdrawal |
@@ -231,7 +235,7 @@ caller answers; a mismatch is refused clearly, which is a small cost now and the
 makes a mixed-version fleet debuggable later.
 
 The verbs are named `noun.verb` throughout — `site.hello`, `actor.where`, `actor.hello`,
-`msg.push`, `line.exchange`, `git.serve` — because the previous design's half-and-half naming
+`msg.push`, `history.exchange`, `git.serve` — because the previous design's half-and-half naming
 was a regret, and a wire is the wrong place to discover that.
 
 ## When something is down
@@ -250,4 +254,4 @@ not placed, and it says so.
 
 Hold durable truth; decide anything about a job; start, stop, or watch an actor; guess whether
 an actor is working; or answer a question it has not just been told or just been asked. Its
-whole job is to move things between sites and to keep the shared history converging.
+whole job is to move things between sites and to keep the shared histories converging.

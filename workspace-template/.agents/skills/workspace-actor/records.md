@@ -2,8 +2,8 @@
 
 How must a record look? Two record types are yours: the **brief**, which states a job's intent, and
 the **handoff**, which records a stretch of work. Both are YAML front-matter plus a Markdown body,
-and both live in the line — so neither may contain a secret, and neither may name an absolute or
-machine-local path.
+and both are shared histories — the brief in the line, the handoff in the ledger — so neither may
+contain a secret, and neither may name an absolute or machine-local path.
 
 `doc/template/` carries a copy-me file for each. `thrum job open` and `thrum job handoff` write them
 correctly; this file is what you need when you edit one by hand, and when you have to judge whether
@@ -16,7 +16,7 @@ a record you are reading is well formed.
 - **Field names are lower snake case**, and every `status` is a closed enumeration of lower-case
   values. There is no free-form status.
 - **A field that names a path says which root it is relative to**, and a path is never absolute.
-- **One record per file.** Nothing in the line is a file that every actor writes.
+- **One record per file.** Nothing in either shared history is a file that every actor writes.
 - **Git already records who committed and when, so neither is duplicated** — with two exceptions:
   where the meaning depends on the time, as in a handoff's start and end or a retirement notice; and
   where it depends on which actor rather than which committer, as with a handoff's `agent`.
@@ -166,9 +166,10 @@ can hand over and the easiest to drop.
 4. **Never edit a handoff once it has been read downstream.** A correction is a new file carrying
    `supersedes`; chains are allowed, cycles are not. A correcting record may cover no work at all.
 5. **Never delete a handoff.**
-6. **One handoff is one coordination event and one commit.** The last handoff may also close the job
-   in the same commit — finishing is a single event — and that commit takes the `close` kind,
-   because the ending is the more consequential of the two.
+6. **One handoff is one coordination event and one commit, in the ledger.** When a stretch ends the
+   job, the close is a **second** event, in the line: they are separate repositories and cannot be
+   one commit. Write the handoff first — a crash between them then leaves the job open with its
+   final evidence written, which is the version somebody can act on.
 
 If the file name already exists, the write fails. Never overwriting is the minimum an append-only
 record owes.
@@ -198,14 +199,17 @@ job is not recorded anywhere, and `actors.md` says why.
 
 ## Writing a record is a coordination event
 
-Every durable fact is a file in the **line**, and every operation that records one turns it into a
-single event — one commit. `sites.md` has the mechanics of how the line converges between sites; two
+Every durable fact is a file in one of the **two shared histories**, and every operation that records
+one turns it into a single event — one commit. The brief lives in the **line** (`doc/`), with the
+declarations, conventions, topics and manifests; the handoff lives in the **ledger** (`handoff/`),
+which is append-only. `sites.md` has the mechanics of how they converge between sites; two
 consequences a writer has to carry are here.
 
-**A merge is never a conflict, because no two sites write one file.** Each file in the line has
-exactly one writer: a handoff is a new file every time, a brief has the one site working its job, a
-declaration has the site that made it. So an event made while apart joins the line without a merge,
-and nothing that has been seen is rewritten.
+**A merge is never a conflict.** In the line it is because no two sites write one file: a brief has
+the one site working its job, and a declaration has the site that made it. In the ledger it is
+because there is nothing to merge — every handoff is a new file whose name carries the job and the
+moment the stretch started, so two sites recording at once write two files and both are true. A
+correction is another new file with `supersedes` set.
 
 **A name claimed twice is settled, not merged.** Two sites can open a job with the same id while they
 are apart. The events carry a clock, every site derives the same order from them, and the first

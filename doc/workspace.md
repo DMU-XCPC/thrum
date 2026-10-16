@@ -4,7 +4,7 @@ A **workspace** is one project's shared state: the records that say what is bein
 the code, the data the project publishes, and the runtime around it. It is a directory, and
 every machine that works on the project has a copy — a **site**. The copies are held together
 by **thrum** ([`thrum.md`](thrum.md)): a daemon per site, which finds actors, carries messages,
-and keeps the shared line converging.
+and keeps the shared histories converging.
 
 An **actor** is a person or an agent working through thrum. A **job** is one unit of work, and
 it is the only thing this design isolates.
@@ -33,7 +33,7 @@ The directory name is chosen when the workspace is created; `workspace/` below i
 
 ```text
 workspace/
-    .git/                            # the line: doc/ and handoff/, nothing else
+    .git/                            # the line repository: doc/, and nothing else
     .gitignore
     AGENTS.md                        # the entry point an actor reads; from thrum; never tracked
     .agents/skills/                  # the workspace's rules, read on demand; never tracked
@@ -47,7 +47,9 @@ workspace/
         worktree/<label>.yaml        # a named area of work, and whether it is one-off
         archive/                     # retired documents, and closed jobs
         template/                    # copy-me files for the records an actor writes
-    handoff/<job-id>/<started>.md    # evidence: append-only, one file per stretch
+    handoff/                         # the ledger repository: append-only evidence
+        .git/
+        <job-id>/<started>.md        # one file per stretch; never edited, never deleted
 
     .bare/                           # the code repository, bare, checked out into worktree/
     store/                           # published data, bare, never checked out
@@ -60,14 +62,16 @@ Three planes, each with its own rule for staying alive:
 
 | Plane | Holds | Keyed by | Backed up |
 | --- | --- | --- | --- |
-| the line | `doc/` and `handoff/` | job id, name, topic | pushed to the other sites |
+| the line | `doc/` — the decisions | job id, name, topic | pushed to the other sites |
+| the ledger | `handoff/` — the evidence | job id and stamp | pushed to the other sites |
 | the work | `.bare/` and `store/` | branch, asset tag | an external mirror; the code most of all |
 | the runtime | `var/`, `job/`, `worktree/` | this machine | nothing; it is rebuilt |
 
 ## Records
 
-Everything durable is a record: a file in the line, written by an actor or by thrum, and
-committed as one event. Nothing the fabric holds is a record.
+Everything durable is a record: a file in one of the **two shared histories**, written by an
+actor or by thrum, and committed as one event. A **decision** is a file in the line; **evidence**
+is a file in the ledger. Nothing the fabric holds is a record.
 
 | Record | Where | Written by |
 | --- | --- | --- |
@@ -79,6 +83,11 @@ committed as one event. Nothing the fabric holds is a record.
 | convention | `doc/convention/<nn>-<slug>.md` | the project, at its own pace |
 | manifest | `doc/asset/<name>/<version>.md` | thrum, when data is published |
 | worktree | `doc/worktree/<label>.yaml` | thrum, at the first `worktree add` of a label |
+
+The brief and the handoff are two histories on purpose. A brief is edited as understanding
+changes; a handoff is appended once and never touched. Keeping them apart lets the ledger, which
+grows without bound, merge by the union of new files, and keeps the line — the part a person
+edits — small.
 
 ### Brief — `doc/task/<job-id>/brief.md`
 
@@ -147,9 +156,12 @@ The body has four sections, in this order, and again `None.` is legal:
 `next` is the baton: it is `none` exactly when the status is `done`, and every other stretch
 says what whoever continues does first. Both directions are refused when they are wrong.
 
-A handoff records a stretch of work, so it is refused for a brief that is not `active`. A
-stretch that ends the job may close it in the same event, which then takes the `close` kind,
-because the ending is the more consequential of the two.
+A handoff records a stretch of work, so it is refused for a brief that is not `active`. When a
+stretch ends the job, that is **two events in two repositories, and the order is fixed**: the
+handoff first, in the ledger, and then the close, in the line. They cannot be one commit across
+two repositories, and the design does not pretend otherwise. Handoff first is the recoverable
+direction: a crash between them leaves the job open with its final evidence already written,
+which is the version somebody can act on.
 
 ## Ownership, and who is on a job
 
@@ -165,14 +177,31 @@ because the ending is the more consequential of the two.
 - **Who worked a finished stretch is in the record**: the handoffs, each naming its `agent` and
   its start and end. That is the history, and it does not need a claim to exist.
 
-## The line, and the repositories
+## The shared histories, and the repositories
 
-Everything in the table under *Records* is one **line**: the shared history that every durable
-coordination fact goes into. Several sites write it at once, and it is the one shared thing. It
-merges rather than conflicting because no two sites write one file — a handoff is a new file
-every time, a brief has the one site working its job, and a name claimed twice is settled by a
-deterministic order rather than merged. Nothing that has been seen is ever rewritten.
-[`thrum.md`](thrum.md) has the mechanism.
+Two repositories hold everything durable, and they hold different things.
+
+**The line** (`doc/`) is the decisions: actor, site and worktree declarations, conventions,
+topics, briefs, asset manifests. Several sites write it at once, and it merges rather than
+conflicting because no two sites write one file — a brief has the one site working its job, a
+declaration has the site that made it, and a name claimed twice is settled by a deterministic
+order rather than merged. Nothing that has been seen is ever rewritten.
+
+**The ledger** (`handoff/`) is the evidence: one file per stretch of work, appended once and
+never edited or deleted. It is the history that grows without bound, and it needs no convergence
+rule at all beyond the union of new files. A handoff's name carries the job and the moment the
+stretch started, so two sites recording at once produce two files, and both are the truth about
+their own stretch. A correction is a further new file with `supersedes` set, because the old one
+is evidence of what was believed then.
+
+Keeping them apart is not tidiness. The ledger is append-only and merges by union; the line is
+edited in place and needs the name rule. One repository would have to carry both regimes, and the
+half that grows forever would drag the half a person edits. [`thrum.md`](thrum.md) has the
+mechanism.
+
+**A handoff is checked against the line as well as itself**: its `job` must name a brief that
+exists, live or archived. That is the one check that reads across the two, and `verify` is where
+it lives.
 
 The code repository is a different history with a different rule: **one branch per job, and one
 writer per branch** — the site holding that job. Integration is the project's business;
@@ -187,7 +216,8 @@ bytes become collectible and the version number stays taken.
 
 A job belongs to the workspace, not to a machine. Moving one is three acts:
 
-1. **The records travel by the line.** The brief and every handoff are already shared.
+1. **The records travel by the shared histories.** The brief is in the line and the handoffs are
+   in the ledger; both are already shared.
 2. **The branch travels through the fabric.** The receiving site fetches `job/<id>`.
 3. **The payload travels as a bundle**, because git cannot carry it. Export runs after a
    handoff and never during work; it releases nothing, because stopping already released

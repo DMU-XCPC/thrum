@@ -42,10 +42,12 @@ not name still has a right answer.
    kept by hand. A job's status is its brief's; whether it is blocked is its newest handoff's; where
    the work is, is what `thrum where --job <job-id>` prints. A derived thing written down is a
    second version of the truth, and it drifts.
-4. **The line converges, and a merge is never a conflict.** Every durable fact is a file in the
-   line, and no two sites write one file: a handoff is a new file every time, and a brief has the
-   one site working its job. A name claimed by two sites at once is settled by an order every site
-   derives the same way. Nothing that has been seen is ever rewritten — `sites.md` has the rest.
+4. **Two shared histories, and both merge.** The **line** (`doc/`) holds the decisions, and no two
+   sites write one file there: a brief has the one site working its job, and a name claimed by two
+   sites at once is settled by an order every site derives the same way. The **ledger**
+   (`handoff/`) holds the evidence and is append-only, so it merges by the union of new files — a
+   handoff is a new file every time. Nothing that has been seen is ever rewritten — `sites.md` has
+   the rest.
 5. **A name is a permanent identifier.** It never encodes state that can change, and job ids, actor
    names, site names, asset versions and convention numbers are never reused. So *used once* is
    enforceable rather than promised.
@@ -122,10 +124,11 @@ the failure it prevents is silent. In one line each: the directory thrum names; 
    next>'` — one handoff is one coordination event, and therefore one commit. `records.md` has the
    shape, the sections, and what is refused.
 9. **Close, or leave the baton.** `thrum job close <job-id> --status done` only when the acceptance
-   criteria hold, and `--status abandoned` when they will not. Closing merges nothing: the branch
-   stays in the code repository for whoever integrates. Before closing, look for something to
-   promote — a fact that outlives the job and does not depend on how it was solved — to
-   `doc/topic/`.
+   criteria hold, and `--status abandoned` when they will not. It is a second event, in the line:
+   the handoff that ends the stretch comes first, in the ledger, and a crash between them leaves
+   the job open with its final evidence written. Closing merges nothing: the branch stays in the
+   code repository for whoever integrates. Before closing, look for something to promote — a fact
+   that outlives the job and does not depend on how it was solved — to `doc/topic/`.
 
 ## If you are opening the job rather than taking it up
 
