@@ -4,7 +4,7 @@ A **workspace** is one project's shared state: the records that say what is bein
 the code, the data the project publishes, and the runtime around it. It is a directory, and
 every machine that works on the project has a copy — a **site**. The copies are held together
 by **thrum** ([`thrum.md`](thrum.md)): a daemon per site, which finds actors, carries messages,
-and keeps the shared line in one order.
+and keeps the shared line converging.
 
 An **actor** is a person or an agent working through thrum. A **job** is one unit of work, and
 it is the only thing this design isolates.
@@ -44,6 +44,7 @@ workspace/
         convention/<nn>-<slug>.md    # rules every actor reads, in number order
         topic/<topic>/               # knowledge shared across jobs
         task/<job-id>/brief.md       # one job, in flight
+        worktree/<label>.yaml        # a named area of work, and whether it is one-off
         archive/                     # retired documents, and closed jobs
         template/                    # copy-me files for the records an actor writes
     handoff/<job-id>/<started>.md    # evidence: append-only, one file per stretch
@@ -77,6 +78,7 @@ committed as one event. Nothing the fabric holds is a record.
 | topic | `doc/topic/<topic>/` | an actor, when knowledge stops being job-specific |
 | convention | `doc/convention/<nn>-<slug>.md` | the project, at its own pace |
 | manifest | `doc/asset/<name>/<version>.md` | thrum, when data is published |
+| worktree | `doc/worktree/<label>.yaml` | thrum, at the first `worktree add` of a label |
 
 ### Brief — `doc/task/<job-id>/brief.md`
 

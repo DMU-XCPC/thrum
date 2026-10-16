@@ -111,9 +111,10 @@ under `doc/template/`, and the ignore rules, which are written into `.gitignore`
 
 1. **`doc/workspace.md`** — what a workspace is made of and why: jobs, records, the line.
 2. **`doc/thrum.md`** — the fabric that holds the sites together: actors, messages, the
-   sequenced line, and the daemon.
-3. **`doc/README.md`** — the two, in order, and what changed.
-4. **`tool/README.md`** — where the code is and how to build and test it (stale: it implements
+   mergeable line, and the daemon.
+3. **`doc/commands.md`** — the operations and every command, and what each refuses.
+4. **`doc/README.md`** — the reading order, and what changed.
+5. **`tool/README.md`** — where the code is and how to build and test it (stale: it implements
    the previous design).
 
 A change starts as a change to the design. Where an implementation and the design disagree, the

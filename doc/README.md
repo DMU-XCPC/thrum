@@ -5,7 +5,8 @@ Two documents, read in this order:
 1. [`workspace.md`](workspace.md) — what a workspace is: the jobs that isolate work, the
    records that say what happened, and where everything goes.
 2. [`thrum.md`](thrum.md) — the fabric that holds the sites together: finding actors, carrying
-   messages, and putting the shared line in one order.
+   messages, and keeping the shared line converging.
+3. [`commands.md`](commands.md) — the operations and every command, and what each refuses.
 
 They are two halves of one design, not two designs. The workspace says what has to be true;
 thrum says which parts of that a distributed program makes true. Where they meet — a name, a
