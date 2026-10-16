@@ -155,20 +155,22 @@ because the ending is the more consequential of the two.
   ask when it is unclear. It changes only when somebody decides it should — the opener sets it,
   an owner may reassign it or give it up, and a person may do either on behalf of an owner who
   has become unreachable. An unowned job may be claimed by whoever takes it up.
-- **"Who is on this job right now" is the fabric's answer**, not a file. An actor that is
-  working a job registers that with its daemon, so the question is answered while the actor is
-  live and is honestly empty when it is not. The previous design kept a `var/occupy/` file that
-  could only go stale; a fact about now belongs with the fabric that knows about now.
+- **Nobody claims a job, and nothing records who is on it now.** There is no occupancy file and
+  no registration of *I am working this*. Whether an actor is working cannot be observed, so
+  the design does not pretend to observe it. What can be read is what was written: the owner,
+  and the newest handoff with its `agent` and its `ended`. The fabric adds only where that
+  actor was last known to be — an address, not a claim.
 - **Who worked a finished stretch is in the record**: the handoffs, each naming its `agent` and
   its start and end. That is the history, and it does not need a claim to exist.
 
 ## The line, and the repositories
 
-Everything in the table under *Records* is one **line**: an append-only history that one site
-sequences and every site may read. It is the one shared thing, and it is linear by
-construction — there is nothing to merge, and nothing that has been seen is ever rewritten. A
-site submits an event; the origin appends it; a refusal names the file that moved or the name
-that is taken, and the actor records again. [`thrum.md`](thrum.md) has the mechanism.
+Everything in the table under *Records* is one **line**: the shared history that every durable
+coordination fact goes into. Several sites write it at once, and it is the one shared thing. It
+merges rather than conflicting because no two sites write one file — a handoff is a new file
+every time, a brief has the one site working its job, and a name claimed twice is settled by a
+deterministic order rather than merged. Nothing that has been seen is ever rewritten.
+[`thrum.md`](thrum.md) has the mechanism.
 
 The code repository is a different history with a different rule: **one branch per job, and one
 writer per branch** — the site holding that job. Integration is the project's business;
@@ -260,3 +262,5 @@ Deliberately absent, rather than forgotten:
   integration.
 - **more than one workspace per site.** One site, one workspace, for now.
 - **discovery.** A site is declared and introduced; nothing finds one by itself.
+- **deferred delivery.** A sender never queues, so nothing waits for an actor to appear. Making
+  an operation wait, on purpose and with a bound, is a later version's business.

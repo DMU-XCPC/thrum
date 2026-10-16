@@ -19,20 +19,25 @@ stale and are rebuilt from these documents.
 
 ## What changed, and why
 
-- **An actor has standing and location, and nothing else.** Standing — that this name is a real
-  actor, and what kind — is a declaration in the line. Location — which site is serving it now
-  — is the fabric's, it is soft, and nothing durable depends on it. There is no session, no
-  presence to state, no begin and end, and no roster of the inactive, because a list of the
-  absent answers nothing.
+- **An actor has standing and a last-known place, and nothing else.** Standing — that this name
+  is a real actor, and what kind — is a declaration in the line. Where it is, is the fabric's:
+  the last site that took mail for it, corrected by `actor hello` or by a delivery that finds it
+  is not there. There is no session, no presence to state, no begin and end, and **nothing ages
+  out**, because whether an actor is working cannot be observed. An actor is not necessarily an
+  agent: a human is one.
 - **The daemon is central and is never an authority.** It is a cache and a channel. Its memory
   may be lost, and it may be wrong, without changing a decision, because no decision is stored
   there. This is what makes a distributed daemon safe to have rather than something whose
   concurrency has to be perfect.
 - **Messages are transient and pushed.** They are not records and never go into git. A message
-  is placed by name through the fabric and pushed to the site that is serving the actor; if no
-  site is, the send says so rather than inventing a queue.
-- **The line is sequenced.** One declared site orders shared writes, so the history is linear
-  by construction rather than by every writer repeating a fetch, rebase, and retry protocol.
+  is placed by name through the fabric and pushed to the actor's last-known place, where it
+  waits to be read; the sender never queues, so a send that cannot be placed says so instead of
+  inventing a backlog.
+- **The line is mergeable.** Several sites write it at once, and a merge is never a conflict
+  because no two sites write one file: handoffs are new files with distinct names, a brief has
+  the one site working its job, and a name claimed twice is settled by a deterministic order
+  rather than merged. A project that would rather have one order can still name a single site
+  to sequence it.
 - **A job is the only isolation unit.** `touches` is a description, not a claim; the previous
   reading of `owned_paths` as exclusion is withdrawn. Leases and resources are out of this
   version entirely.

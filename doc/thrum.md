@@ -2,7 +2,7 @@
 
 thrum is the coordination fabric for a workspace. It has two halves: a command-line program
 that an actor runs, and one **daemon** per site. The daemons find actors, carry messages
-between them, and put the workspace's shared writes in one order. The command line is how an
+between them, and keep the workspace's shared history converging. The command line is how an
 actor reaches both the fabric and the workspace's files.
 
 One rule holds the whole design up:
@@ -10,8 +10,8 @@ One rule holds the whole design up:
 > **The fabric is never an authority.**
 
 Everything durable is a file or a git object. Everything a daemon holds — where a name is, what
-is in flight, which event came first — is a cache or a channel. Losing a daemon's memory costs
-a lookup, a reconnection, or a retry; it never changes a decision, because no decision is
+is in flight, which way a merge went — is a cache or a channel. Losing a daemon's memory costs
+a lookup, a reconnection, or a merge; it never changes a decision, because no decision is
 stored there. That is what makes a distributed daemon safe to have: it is allowed to be wrong,
 so its concurrency does not have to be perfect.
 
@@ -27,7 +27,6 @@ The roster lives in the line, one file per site:
 site: build-01
 key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
 reach: build-01.internal:7700
-line: true
 ```
 
 | Field | Meaning |
@@ -35,73 +34,80 @@ line: true
 | `site` | the name; unique in the workspace |
 | `key` | this site's public key. The daemon authenticates peers with it, and with nothing else |
 | `reach` | where the daemon listens. Omitted means this site accepts no peers |
-| `line` | at most one site carries this: it is where shared writes are ordered |
 
 The declaration travels by git, like every other durable fact, and needs no quorum to read. A
 site that is declared but unreachable is a site that is down, not a site that does not exist.
 
-**The daemon speaks its own protocol**, on its own socket, authenticating a peer by the key the
-roster pins. It does not shell out to `sshd` to answer a lookup or take a message: the fabric
-does both constantly, and putting a process launch in that path would make the fabric's
-availability depend on a machine's SSH configuration. `ssh` is kept for the one thing it is
-good at here — carrying the initial join — and for git, which a project may serve either way.
+**The daemon has its own port and its own protocol.** It listens on its own socket,
+authenticates a peer by the key the roster pins, and answers typed requests. It does not shell
+out to `sshd` to answer a lookup or take a message: the fabric does both constantly, and
+putting a process launch in that path would make the fabric's availability depend on a
+machine's SSH configuration. `ssh` is kept for the one thing it is good at here — carrying the
+initial join — and for git, which a project may serve either way.
 
 ## Actors
 
-An actor is a person or an agent. thrum knows two different things about one, and keeps them
-apart.
+An actor is a person or an agent, and thrum treats the two the same. It is worth saying plainly
+what that means, because everything below depends on it: **an actor is not a process.** A human
+at a keyboard is an actor. An agent that runs one command and exits is an actor. An agent whose
+harness keeps a plugin connected is an actor. Nothing here assumes a plugin, a connection, a
+window of activity, or a lifetime. What an actor has is a name with standing and a last-known
+place.
 
-| | **Standing** | **Location** |
+| | **Standing** | **Where** |
 | --- | --- | --- |
-| what | this name is a real actor, and what kind | which site is serving it right now |
-| where | the line, `doc/actor/<name>.yaml` | the daemons, and nowhere else |
-| lifetime | until retired | while it is registered, then gone |
-| lost by | nothing; it is a git object | a daemon restart, at the cost of one re-registration |
+| what | this name is a real actor, and what kind | the site that last took mail for it |
+| where | the line, `doc/actor/<name>.yaml` | the daemons |
+| lifetime | until retired | until the actor says it is somewhere else |
 
 ```yaml
-# doc/actor/agent-3f9c.yaml
-actor: agent-3f9c
-kind: agent              # agent | human
-about: Uploader reliability
+# doc/actor/dana.yaml
+actor: dana
+kind: human              # human | agent
+about: Works on the uploader
+home: build-01           # where mail waits until this actor says hello somewhere else
 registered: 2026-10-16T09:12:00Z
 ```
 
-Standing is what makes a name addressable before its owner has ever run, and what stops two
-different agents from sharing a name without one of them being refused. It is a decision, so it
-is a record.
+Standing is a decision, so it is a record. A name exists before its owner has ever run, it is
+unique, and it can be the target of a message. **`thrum actor list` is this register** — every
+name that exists, its kind, and where it was last known to be — and an actor that is finished
+with is retired rather than left in it.
 
-Location is what makes *send this to `agent-3f9c`* land on the right machine. It is a fact
-about now, so it belongs to the fabric, it is soft, and nothing durable depends on it.
+Where an actor is is a fact about now, so it belongs to the fabric, and it is soft. **There is
+no liveness and no session.** Nothing in thrum says whether an actor is working, and nothing
+tries to find out: that cannot be observed, and a design that guesses it will guess wrong.
+`thrum actor hello` is a CLI command meaning *my mail is here now*, and it is the only thing
+that moves an actor. It is the same command for a human at a keyboard and for an agent's
+wrapper; a plugin may run it on the actor's behalf, but nothing depends on a plugin existing.
 
-**There is no session.** An actor does not begin or end. It is here while it is registered and
-then it is not. `thrum actor hello` is what a running process says — usually the harness plugin
-says it on the actor's behalf — and it is the only registration step. Nothing pairs with it: a
-process that stops, crashes, or is killed simply stops refreshing, and its location ages out.
-There is no `offline`, no ttl to choose, and no state file to go stale.
+**Nothing ages out.** A last-known place is corrected by the actor saying hello somewhere else,
+and by a delivery that arrives where the actor no longer is, and by nothing else. There is no
+ttl, no `present`/`idle`/`gone`, and no list that thins itself. A daemon may drop a cached
+address to save memory, which costs one question — that is an implementation detail, not a rule
+about actors.
 
-**Location is a hint with an age.** A daemon keeps `name → (site, last heard)` for the
-registrations it hosts and, briefly, for the ones it has been told about. An entry older than
-the fabric's memory window is not an answer. Nothing durable is refused because a location is
-missing; a message that cannot be placed says so, and the sender decides what to do about it.
-
-**`thrum actor list` lists the living**, not a register of the dead: the names currently
-registered anywhere in the fabric, each with its site and how long ago it was heard from. A
-name that exists but is not running is not in that list, because a list of the absent answers
-nothing. `thrum actor list --standing` reads the line for every name that has ever existed,
-which is a different question and is asked a different way.
+**A human is not a degenerate agent.** A message to a human lands in the mailbox at their site
+and waits there until they run `thrum message list`; no wake is required, and none is expected.
+A message to an agent is delivered the same way, and a plugin may additionally turn the arrival
+into a turn. The plugin is an optimization on top of delivery, never the delivery path, and a
+harness without one loses only the nudge. `kind` records which of the two an actor is, so a
+reader knows what to expect; it changes nothing about what is permitted.
 
 ## Finding an actor
 
-To place a name, a daemon looks in its own registrations, then in what it has been told, then
-asks its peers. An answer is cached with the time it arrived; a stale entry is a reason to ask
-again, not a fact to act on.
+To place a name, a daemon looks at what it knows, then asks its peers. The answer is the last
+site that took mail for the name, or, if it has never said hello, the `home` in its standing.
+The answer is cached; it is corrected by `actor hello` and by a delivery that finds the actor
+has moved.
 
 **Ask; do not merge.** The previous design had daemons exchange whole rosters and merge by
 last-seen, which is exactly the concurrent memory that cannot be trusted: two daemons merging
 in different orders settle on different answers. Here there is no merged roster — only a
-per-name hint with an age, and a question asked of the sites that might know. A stale answer
-costs one failed delivery and one retry. It never produces a wrong decision, because the only
-thing built on a location is where to send the next message.
+per-name address, a question asked of the sites that might know, and a correction when a
+delivery comes back *not here*. A stale address costs one failed delivery and one retry. It
+never produces a wrong decision, because the only thing built on an address is where to send
+the next message.
 
 ## Messages
 
@@ -122,55 +128,71 @@ attachments: [coverage.html]     # optional
 The flaky case is fixed; `make test-upload` is green.
 ```
 
-**Push, to a live actor.** The sender's daemon places `to`, opens a connection to that site's
-daemon, and hands the message over. The receiving daemon accepts it into a bounded local store
-and pushes an event to the subscriber bound to that actor. Nothing polls the sender, and
-nothing waits in a chain of queues on the way.
+**Push, to the actor's place.** The sender's daemon resolves `to`, opens a connection to that
+site's daemon, and hands the message over. The receiving daemon writes it into the mailbox,
+where it stays until it is read or purged. The sender keeps nothing.
 
-- **Not placed, not queued.** If no site is serving the name, or the site serving it cannot be
-  reached, the send fails and says which of the two happened. It is not spooled "for later",
-  because the actor is as transient as the message, and a spool is a promise that the actor
-  will come back to something that was only ever meant for now. A caller that wants to wait may
-  ask for a bounded window (`--wait 30s`) — a bound it chose, rather than a lifetime the fabric
-  invented.
-- **The site holds, the sender does not.** The receiving daemon writes an accepted message
-  under `var/msg/<actor>/` until it is read or its window passes, so a restart, or an actor
-  that is between two commands, does not lose what the site already took responsibility for.
+- **The sender never queues.** A message is placed or it is not sent. If no site is known for
+  the name, or the site that would take it cannot be reached, the send fails and says which of
+  the two happened. A caller that wants to wait may ask for a bounded window (`--wait 30s`) —
+  a bound it chose, not a lifetime the fabric invented. Deferring an operation until an actor
+  appears is a real thing a later version will want; it is deliberately not this one.
+- **The receiving site holds it.** Once accepted, a message is the receiving site's
+  responsibility: it survives a daemon restart, and it waits for a human who reads it a day
+  later exactly as it waits for an agent that polls in a second.
 - **Whole or not at all.** Attachments are written before the message that names them, so a
-  subscriber never sees a message whose bytes have not arrived.
+  reader never sees a message whose bytes have not arrived.
 - **An id is unique and never reused**, so a caller that retries a send cannot deliver twice.
 - **Not retractable.** A message may already have started something; a correction is another
   message with `reply_to` set.
-- **The plugin wakes the actor; thrum does not.** Waking an agent is a fact about a harness — a
-  session's turn, a terminal, a bell — and this design deliberately knows none of them. The
-  fabric promises a live event stream and a message that arrives whole; the plugin decides what
-  a wake is. A harness with no plugin loses only the nudge: `thrum message list` still shows
-  what arrived, for as long as the receiving daemon keeps it.
+- **The plugin wakes an agent; thrum does not.** Waking is a fact about a harness — a session's
+  turn, a terminal, a bell — and this design deliberately knows none of them. The fabric
+  promises a live event stream and a message that arrives whole; the plugin decides what a wake
+  is.
 
 ## The line
 
-Every workspace has one **line**: the shared, append-only history that every durable
-coordination fact goes into — actor and site declarations, conventions, topics, briefs,
-handoffs, manifests.
+Every workspace has one **line**: the shared history that every durable coordination fact goes
+into — actor and site declarations, conventions, topics, briefs, handoffs, manifests. It is a
+git history, and several sites write it at once.
 
-**One site sequences it.** The site whose roster entry says `line: true` is the line's origin,
-and its daemon orders events. A peer submits an event to it; the origin appends it to the tip
-and moves the ref, one event at a time. Nobody else writes the line ref. Any number of sites
-may read it.
+**A merge is never a conflict, because no two sites write one file.** Each file in the line has
+exactly one writer:
 
-This is the main reason the fabric is worth having, and it is a real simplification of the
-previous design. Ordering shared writes does not need a protocol every writer repeats, plus a
-fetch, a rebase, and a retry loop; it needs one queue at one place. The line is linear by
-construction, and recording an event is a submit rather than a race.
+| Path | Its one writer |
+| --- | --- |
+| `doc/site/<name>.yaml` | that site |
+| `doc/actor/<name>.yaml` | the site that declared the actor |
+| `doc/task/<job>/brief.md` | the site the job is being worked at |
+| `handoff/<job>/<stamp>.md` | the site that wrote the stretch — a new file every time |
+| `doc/asset/<name>/<version>.md` | the site that published the version |
+| `doc/archive/**` | the site performing the retirement |
+| `doc/topic/**`, `doc/convention/**` | whoever is editing — the one place two hands can meet |
 
-- **The origin is a role, not a privilege.** It is declared, it can be moved by one event, and
-  a workspace with one site is its own origin. Losing it stops writes and nothing else: reads,
-  work, messages, and lookups all continue.
-- **An event is refused, never merged.** If an event cannot sit on the tip — it changes a file
-  the tip has changed, or it claims a name that is now taken — the origin refuses it and says
-  so. What the actor wrote stays in the working tree, to be recorded again.
-- **A site that is alone keeps its events** and submits them when the origin returns. They were
-  never in the line, so putting them on top rewrites nothing anybody has seen.
+Handoffs are the bulk of the traffic and are new files with distinct names, so they merge by
+union. A brief has one writer because a job is worked at one site. The last row is the honest
+exception: shared prose is edited by people, and two people editing one document at once is a
+merge that a person resolves. That is rare, it is visible, and no mechanism would be better
+than saying so.
+
+**A name claimed twice is settled, not merged.** Two sites can open a job with the same id, or
+declare the same actor, while they are apart. Their commits then add the same path. Every event
+carries a monotonic clock, so every site computes the same order from the same events — clock,
+then site name, then event id — and the first claim in that order keeps the name. The other is
+void: the file is discarded, and its author is told, by name, on the next exchange. Nothing
+anybody has seen is rewritten; a loser records again under a name that is free.
+
+**Convergence is automatic.** A site commits locally; the daemon then fetches its peers' heads,
+merges them — cleanly, by the rule above — and publishes the result. Two sites publishing at
+once is one rejected push and one retry, which is git's own answer and needs no protocol of
+ours. What comes out is a history that only ever grows, with a total order that every site
+derives the same way rather than one that a writer had to be appointed to impose.
+
+**If a project wants one order, it can name one.** A project that would rather not derive an
+order can declare a site as the line's sequencer; peers then submit events to it and it appends
+them one at a time, which yields a strictly linear history at the cost of a single writer.
+Everything else in this document is unchanged either way. The default is the mergeable one,
+because a workspace whose sites are apart for a day should not have to stop recording.
 
 ## Git
 
@@ -179,7 +201,7 @@ rather than needing an external remote. The rules are the ones the line already 
 
 | Repository | Ref | Rule |
 | --- | --- | --- |
-| the line (`doc/`, `handoff/`) | the line ref | written only by the origin's daemon, by appending an event |
+| the line (`doc/`, `handoff/`) | the line ref | one writer per path; merged, never rewritten |
 | code | `job/<id>` | one writer: the site holding that job |
 | code | the integration refs | one writer: the site the project declares |
 | assets | tags | created once, never moved, deleted only by withdrawal |
@@ -208,16 +230,16 @@ requests. The handshake carries the workspace, the site, the protocol range, and
 caller answers; a mismatch is refused clearly, which is a small cost now and the thing that
 makes a mixed-version fleet debuggable later.
 
-The verbs are named `noun.verb` throughout — `site.hello`, `actor.where`, `actor.here`,
-`msg.push`, `line.append`, `git.serve` — because the previous design's half-and-half naming was
-a regret, and a wire is the wrong place to discover that.
+The verbs are named `noun.verb` throughout — `site.hello`, `actor.where`, `actor.hello`,
+`msg.push`, `line.exchange`, `git.serve` — because the previous design's half-and-half naming
+was a regret, and a wire is the wrong place to discover that.
 
 ## When something is down
 
 | What is down | What stops | What continues |
 | --- | --- | --- |
-| a peer | messages to actors there, and placements that needed it | everything local, and every other peer |
-| the line's origin | recording durable events | reading, working, messages, and this site's own backlog |
+| a peer | messages to actors there, and merging with it | everything local, and every other peer |
+| the line's sequencer, if one is declared | recording durable events | reading, working, messages, and this site's own commits |
 | a daemon | one site's place in the fabric | its files, and the command line's local operations |
 
 Nothing is refused because the fabric is unhappy, except the thing that genuinely needed the
@@ -226,6 +248,6 @@ not placed, and it says so.
 
 ## What the fabric must not do
 
-Hold durable truth; decide anything about a job; start, stop, or watch an actor; keep a message
-past its window; or answer a question it has not just been told or just been asked. Its whole
-job is to move things between sites and to put the line in one order.
+Hold durable truth; decide anything about a job; start, stop, or watch an actor; guess whether
+an actor is working; or answer a question it has not just been told or just been asked. Its
+whole job is to move things between sites and to keep the shared history converging.
