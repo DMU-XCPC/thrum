@@ -1,79 +1,75 @@
 # A thrum workspace
 
-You are an **actor**. You were given two facts: this workspace root, and a job id. Everything
-else is derived from here. Nothing in this file is the authority for anything.
+You are an **actor** — a person or an agent — and this workspace knows you by a name. You were
+given two facts: this workspace root, and a job id. Everything else is derived from here. Nothing
+in this file is the authority for anything.
 
-**If nobody gave you a job id**, there are two lawful ways in: ask for one, or open the job
-yourself — `thrum work --job <new-id> --purpose '<what it is for>'`, with the person's own words as
-the brief's goal. Work that begins as "read this and find out" is still a job: the records are
-where the work has to be visible, and a stretch nobody can find is a stretch nobody can continue.
-
-**Work you were given is a new job.** Opening it is the ordinary path, not the exception: `thrum work
---job <new-id> --purpose '<what it is for>'` opens it and takes it up in one act. A job that already
-exists belongs to whoever it was opened for, so continue one only when you were pointed at it — or
-when it has no owner and you take it up — never because the board happens to hold something that
-looks close to your task.
-
-**Set your actor name before your first command.** The name identifies **this working session** —
-the entity doing the work — and it stays the same for as long as the session runs: a model swapped,
-a context compacted, a host restarted, and the name on the records it already wrote is still the same
-one. A handoff, an occupancy, a lease and a job's owner all record it:
+**Set your name before your first command.** The records call you by it — a handoff's `agent`, a
+job's `owner` — and one name holds for the whole of this stretch:
 
 ```sh
-export THRUM_ACTOR=agent-3     # one slug, for every command in this session
+export THRUM_ACTOR=agent-3f9c     # or --actor <name> on every command
 ```
 
-If you were given a name, that is your name. Without `--actor` or `$THRUM_ACTOR`, your work is
-recorded under `$USER`.
+A name is lowercase letters, digits and hyphens. If you were given one, that is your name. **A name
+that fits everybody names nobody**: `agent-novaphy` names the project, and a harness's or a model's
+name is shared by every session running it. Your name has to pick **this actor** out of all of
+them; if none was given, look at `thrum actor list` first and give yours something only this actor
+has.
 
-**A host that gives every command a new shell loses the export**: pass `--actor <name>` on each
-command instead, with the same value.
+**A name is declared once, and then it exists.** If the name has never been declared, the first
+command that writes anything refuses and says to declare it. Do that once:
 
-**A name that fits everybody names nobody.** `agent-novaphy` names the project, so every session
-that might work here could take it and the records would read as one actor's; the task, the area of
-work, the machine, the harness (`deepseek-harness`, `dsh`, `claude-code`) and the model
-(`deepseek-flash`, `gpt-5`) fail the same way. A name has to pick **this session** out of all of
-them. If the person who dispatched you gave a name, that is the name, and that is what makes it
-unique; if not, look at `thrum actor list` first — a name already there is somebody's — and give
-yours something only this session has: `agent-3f9c`, `dana-20261011`, `ws-7`.
+```sh
+thrum actor declare agent-3f9c --kind agent    # or --kind human
+thrum actor hello                              # tell the fabric where your mail is
+```
 
-**One name, and it is yours.** Never act as another actor, and never watch a name that is not this
-session's: taking one over, or listening on it, makes another actor's records read as yours. If a
-name you reach for is already in use, somebody is working under it — ask them.
+`kind` changes what a reader expects and nothing about what you may do. `actor hello` is how mail
+finds you: it is an address, not a claim about working, and it does not expire.
+
+**If nobody gave you a job id**, there are two lawful ways in: ask for one, or open the job
+yourself — `thrum work <new-id> --label <label> --goal '<what it is for>'`. Work that begins as
+"read this and find out" is still a job: a stretch nobody can find is a stretch nobody can
+continue.
+
+**Work you were given is a new job.** Opening it is the ordinary path, not the exception: `thrum
+work <new-id> --label <label> --goal '<what it is for>'` opens it, claims it and puts you in a
+working directory. Continue an existing job only when you were pointed at it — or when it has no
+owner and you take it up — never because the board happens to hold something close to your task.
+
+**A human is an actor too.** Nothing here assumes a session, a plugin or a particular harness. A
+person at a keyboard sets the same name, declares it once, and follows the same loop.
 
 **This file is the workspace's; the project's `AGENTS.md` inside the working directory is the
 project's** — versioned with the code, and read beside this one. They govern different things: this
 one says where work goes and how it is recorded, the project's says how the code is built and
 delivered.
 
-**This format and `thrum` are under development.** A refusal is still the design being enforced,
-so trust it first; but a command that fails unexpectedly, or a refusal that contradicts the
-records, is a defect. Keep what the tool produced under `job/<job-id>/log/`, name it in your
-handoff, and say what you expected — *When the tooling is wrong* in `SKILL.md` has the rest.
+**thrum and this format are under development.** A refusal is still the design being enforced, so
+trust it first; but a command that fails unexpectedly, or a refusal that contradicts the records,
+is a defect. Keep what it produced under `job/<job-id>/log/`, name it in your handoff, and say what
+you expected — *When thrum is wrong* in `SKILL.md` has the rest.
 
 **First command of a stretch: `thrum verify`** — with `thrum status` beside it. It reports and
-never repairs, so it is always safe to run, and it is where a workspace that is incoherent, or a
-skeleton older than the tooling, is found before any work is built on it. If it reports skeleton
-drift, `thrum update --dry-run` says what the tooling has now.
+never repairs, so it is always safe to run.
 
 ## What you may touch
 
-Five things, and nothing else. This is worth reading twice, because the failure it prevents is
-silent: work done in the wrong place is work the next actor will not find, and no command will
-tell you.
+Five things, and nothing else. Read this twice, because the failure it prevents is silent: work
+done in the wrong place is work the next actor will not find, and no command will tell you.
 
 | | |
 | --- | --- |
-| **the directory the tooling names** | `thrum where --job <job-id>` prints it and `thrum work --job <job-id>` takes the job up and puts you there. This, and only this, is where the code is edited. |
+| **the directory thrum names** | `thrum where --job <job-id>` prints it, and `thrum work <job-id>` takes the job up and puts you there. This, and only this, is where the code is edited. |
 | **your job's payload** | `job/<job-id>/`: scratch, logs, a tool's output. `thrum env --job <job-id>` points `TMPDIR` and the cache and state directories at it, so a tool that respects them cannot write anywhere else. |
 | **the records you write** | the brief's body, `handoff/<job-id>/…`, and the project's `doc/topic/` and `doc/convention/`. |
-| **nothing under `var/`** | It is the tooling's — *including making a directory there*. An entry a hand invents is invisible to `thrum status` and `verify`, is never collected, and never travels; work left inside one is work the next actor will not find. |
-| **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. A tool run without `thrum env` writes there, where nothing collects what it leaves. Secrets go in none of these files: the only ones inside a workspace are the tooling's own, in `var/secrets/`. Reading is narrower than writing: the workspace holds what the task needs, and if you must look outside it — a tool's own documentation, a fact about this machine — say so in your handoff rather than going through the user's home for context (`~/.bash_history`, `~/.ssh/*`, another project's tree). |
+| **nothing under `var/`** | It is thrum's — *including making a directory there*. An entry a hand invents is invisible to `thrum status` and `verify`, is never collected, and never travels. |
+| **nothing outside this root** | Not `~/.ssh/config`, not `~/.config`, not `/tmp`. A tool run without `thrum env` writes there, where nothing collects what it leaves. Secrets go in none of these files; the only ones inside a workspace are thrum's own, in `var/secrets/`. Reading is narrower than writing: the workspace holds what the task needs, and if you must look outside it — a tool's own documentation, a fact about this machine — say so in your handoff rather than going through the user's home for context (`~/.bash_history`, `~/.ssh/*`, another project's tree). |
 
 **Reading is not checking out.** A document on another branch, the brief of a job that has closed,
-a commit you are comparing against: read it with whatever you have at hand — that part is yours to
-choose. What must not happen is a working directory made by hand: one comes from the tooling, under
-a declared label, and never from a checkout of your own — and never inside `var/`.
+a commit you are comparing against: read it with whatever you have at hand. A working directory is
+made by thrum, under a declared label, and never by a `git worktree add` of your own.
 
 ## Where the answers are
 
@@ -81,16 +77,16 @@ a declared label, and never from a checkout of your own — and never inside `va
 | --- | --- |
 | what the job is for, and how it will be judged | `doc/task/<job-id>/brief.md` |
 | where the last stretch stopped, and what to do first | the newest file in `handoff/<job-id>/`; its `next` is the baton |
-| where to work | `thrum where --job <job-id>` prints it; `thrum work --job <job-id>` gets you there, and materialises a working directory if this site has none |
+| where to work | `thrum where --job <job-id>` prints it; `thrum work <job-id>` gets you there |
 | everything about this job | `thrum job show <job-id>`, or `--json` for whatever asked |
 | this project's rules, in number order | `doc/convention/` — read them before working |
-| the rule behind a question the loop raises | `.agents/skills/workspace-actor/` — `SKILL.md` is the loop; the files beside it answer one question each: `placement.md` (where a thing goes), `records.md` (how a record looks), `names.md`, `knowledge.md`, `assets.md`, `claims.md`, `sites.md` |
+| the rule behind a question the loop raises | the files beside `SKILL.md`: `actors.md`, `messages.md`, `names.md`, `placement.md`, `records.md`, `knowledge.md`, `assets.md`, `sites.md` |
 | what is true right now | `thrum status`, `thrum job show <job-id>`, `thrum message list` |
 
-Before you run anything, `eval "$(thrum env --job <job-id>)"`: it points `TMPDIR` and the cache
-and state directories inside the payload, so a tool that respects them cannot write outside the
-workspace. Where a host gives every command a clean `/tmp`, this is not advice but the only way
-the next command can see what this one made.
+Before you run anything, `eval "$(thrum env --job <job-id>)"`: it points `TMPDIR` and the cache and
+state directories inside the payload, so a tool that respects them cannot write outside the
+workspace. Where a host gives every command a clean `/tmp`, this is not advice but the only way the
+next command can see what this one made.
 
-Then read `.agents/skills/workspace-actor/SKILL.md`. It is the loop, and this file is only the
-way in.
+Then read `.agents/skills/workspace-actor/SKILL.md`. It is the loop, and this file is only the way
+in.

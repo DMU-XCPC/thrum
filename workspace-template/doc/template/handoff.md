@@ -11,7 +11,7 @@ next: <what whoever continues does first, or none when status is done>
 # worktrees: [<label>]
 # supersedes: <file name>        # when this record corrects an earlier one
 # blocked_by: [<job-id>]         # exactly when status is blocked
-# owned_paths: []                # paths actually touched, relative to the code repository root
+# touches: []                   # paths actually touched, relative to the code repository root
 # metrics: {}                    # counts, coverage, durations
 # artifacts: []                  # { path, sha256, bytes }, paths under job/<job-id>/
 # assets: []                     # name@version

@@ -24,7 +24,7 @@ priority.
 - **The body is the rule in the imperative, with the reason it exists.** A rule whose reason is
   missing is a rule that will be deleted by accident. This file is written that way on purpose.
 - **A workspace starts with none.** `doc/convention/` exists and is empty, and everything in it
-  is the project's. The tooling never writes or rewrites one. A new convention takes the highest
+  is the project's. thrum never writes or rewrites one. A new convention takes the highest
   number in use plus one (see `names.md`).
 
 ### The values block
@@ -32,7 +32,7 @@ priority.
 Some rules need a value a tool has to act on — how long a job's payload is kept, for instance.
 The value belongs beside the rule that uses it rather than in a configuration file of its own,
 because everyone in the workspace should see the same one and a change to it should be
-auditable. So a convention may carry **one fenced block**, whose keys name the tool and the
+auditable. So a convention may carry **one fenced block**, whose keys name thrum and the
 value:
 
 ````markdown
@@ -43,13 +43,13 @@ collect.window: 14d
 
 - **The fence opens at the left margin.** An indented fence is how an example of one gets
   written inside a list item, and an example must not declare anything.
-- **Keys are the tooling's, so they are dotted**: `collect.window`, not `window`. A key no tool
+- **Keys are thrum's, so they are dotted**: `collect.window`, not `window`. A key no tool
   reads is a key for the reader, and is allowed.
 - **Values are scalars.** A mapping or a list in a values block is a document in the wrong place.
 - **One block per convention, and one convention per key.** Two conventions declaring one key
   would have the workspace saying two things at once, and which one a tool acted on would depend
   on the order the files were read in.
-- **A value the tooling reads but cannot parse is an error, not a default.** A policy nobody can
+- **A value thrum reads but cannot parse is an error, not a default.** A policy nobody can
   read is a policy nobody has, and falling back quietly would hide the mistake.
 
 `thrum verify` checks all of it: the file name, the one title, the block, and the values.

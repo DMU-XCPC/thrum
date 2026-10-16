@@ -73,13 +73,13 @@ decision and nothing else should make one as a side effect.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum job open <id> --purpose <text> [--goal <text>] [--scope <text>] [--criteria <text>] [--owner <actor>]` | Writes the brief, creates `job/<id>`, and materialises a working directory. | Refuses an id that has been used before — against `doc/task/` and `doc/archive/` both — before anything is written. One event, or none. |
+| `thrum job open <id> --purpose <text> --label <label> [--goal <text>] [--scope <text>] [--criteria <text>] [--owner <actor>] [--touches <paths>] [--depends-on <ids>] [--keep] [--ephemeral]` | Writes the brief, creates `job/<id>`, and materialises a working directory under the label. `--purpose` is the label's own; `--goal`, `--scope` and `--criteria` are the brief's. | Refuses an id that has been used before — against `doc/task/` and `doc/archive/` both — before anything is written. One event, or none; declaring a label that does not exist yet is a second event of its own. |
 | `thrum job list`, `thrum job show <id>` | The board, and one job in full. | Reads only. |
 | `thrum job claim <id>` | Sets `owner` on a job that has none. | Refuses a job that already has an owner: taking ownership from somebody is not a claim. |
 | `thrum job reassign <id> --to <actor>`, `thrum job relinquish <id>` | Changes or clears the owner. | Refused to anyone but the owner, or a person acting for an owner who is unreachable. |
-| `thrum job handoff <id> --status <s> [--body <file>\|-] [--next <text>]` | Writes `handoff/<id>/<started>.md`, a new file every time. | Refuses an existing file name, a brief that is not `active`, and a `next` that disagrees with the status: `none` belongs to `done`, and every other stretch leaves a baton. |
+| `thrum job handoff <id> --status <s> [--body <file>\|-] [--next <text>] [--artifact <path>] [--worktree <label>] [--supersedes <file>] [--blocked-by <id>]` | Writes `handoff/<id>/<started>.md`, a new file every time. | Refuses an existing file name, a brief that is not `active`, and a `next` that disagrees with the status: `none` belongs to `done`, and every other stretch leaves a baton. |
 | `thrum job close <id> --status done\|abandoned` | Sets the final status, moves the brief to the archive, and releases the working directory. | Refuses a job that has already closed, before anything is written. It merges nothing. |
-| `thrum work <id> …` | Open, claim and enter in one act, for the ordinary case of being handed work. | As the operations it composes. |
+| `thrum work <id> --label <label> [--purpose <text>] [--ephemeral] [--goal <text>] [--owner <actor>]` | Open, claim and enter in one act, for the ordinary case of being handed work. `--purpose` is the label's own; `--goal` is the brief's. | As the operations it composes: a job that already has an owner is worked under that owner, not claimed. |
 
 ## Worktrees
 

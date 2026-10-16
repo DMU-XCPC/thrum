@@ -12,7 +12,7 @@ Assets are **never checked out permanently**. A job materialises the version it 
 own transient directory:
 
 ```sh
-thrum asset materialise --asset uploader-baseline --version 2026-10-09 --job add-retry
+thrum asset materialise uploader-baseline 2026-10-09 --job add-retry
 # git -C store archive <ref> | tar -x -C job/<job-id>/data
 ```
 
