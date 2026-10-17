@@ -205,7 +205,8 @@ workspace whose sites are apart for a day should not have to stop recording.
 ## Git
 
 In this version the transport is an external git remote the sites share: a site fetches,
-merges and pushes through it. The daemon's `git.serve` and `history.exchange` verbs are
+merges and pushes through it. The remote is an ordinary git URL — a bare repository on a
+machine the sites can reach, over ssh or http, or a path when they share a filesystem. The daemon's `git.serve` and `history.exchange` verbs are
 reserved for the version that moves that traffic onto the fabric; where the sites already
 share an external remote, none of it is needed (see "When something is down"). The rules are
 the ones the shared histories already imply:

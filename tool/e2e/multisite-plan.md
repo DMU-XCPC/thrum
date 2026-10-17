@@ -6,8 +6,8 @@ concurrency and failure*, not just when everything is up.
 
 Executed 2026-10-17. The default suite (`tool/e2e`, 69 tests including Docker) covers every P0
 and P1 and the feasible P2s: 300 ms latency, a six-second soak, four sites and 200 events, 1,000
-events, 10 MB attachments, 100 connections. The full-scale P2s run nightly: 10,000 commits, a
-24-hour soak, and packet loss. A 100 MB attachment is not promised (the transport is base64 in
+events, 10 MB attachments, 100 connections. The full-scale P2s are long runs done by hand
+(there is no CI budget): 10,000 commits, a 24-hour soak, and packet loss. A 100 MB attachment is not promised (the transport is base64 in
 the JSON protocol; 10 MB is tested), and the transport is an external git remote in this
 version; both are recorded in `doc/thrum.md`.
 
@@ -190,7 +190,7 @@ keeps the boilerplate out of every test.
 | R-04 | P1 | `docker restart` a site | Workspace survives; daemon restarts; mailbox intact | covered (Docker restart) |
 | R-05 | P1 | Simultaneous pushes | One retry; no loss | covered (`TestConcurrentSync`) |
 | R-06 | P1 | A prose conflict | Merge aborted; `git status` clean; no half-merge | covered (`TestProseConflictStopsAndNamesTheFile`) |
-| R-07 | P2 | 300 ms latency, 5% loss | Handshake and sync still work within the timeout | partial: 300 ms covered (`TestSlowLink`); loss is nightly |
+| R-07 | P2 | 300 ms latency, 5% loss | Handshake and sync still work within the timeout | partial: 300 ms covered (`TestSlowLink`); loss is a long run (manual) |
 | R-08 | P2 | A clock step (NTP) during a run | No corruption; settlement still deterministic | covered (the persisted clock never goes backwards; `TestEventClockNeverGoesBackwards`) |
 
 ### G. Scale and soak
@@ -198,8 +198,8 @@ keeps the boilerplate out of every test.
 | ID | Pri | Scenario | Expected | Status |
 | --- | --- | --- | --- | --- |
 | X-01 | P1 | 4 sites, 200 events, full mesh sync | Converges; bounded time | covered (`TestFourSitesScale`) |
-| X-02 | P2 | 10,000 line commits | `sync`, `verify` still usable | partial: 1,000 in the default suite; 10,000 nightly |
-| X-03 | P2 | 24 h soak: messages and syncs every minute | No leak, no unbounded file growth | partial: 6 s in the default suite; 24 h nightly |
+| X-02 | P2 | 10,000 line commits | `sync`, `verify` still usable | partial: 1,000 in the default suite; 10,000 is a long run (manual) |
+| X-03 | P2 | 24 h soak: messages and syncs every minute | No leak, no unbounded file growth | partial: 6 s in the default suite; 24 h is a long run (manual) |
 | X-04 | P2 | 100 connect/disconnect cycles | No fd leak; no stale lock | covered (`TestManyConnections`) |
 
 ## 5. Coverage matrix
@@ -241,8 +241,9 @@ named in §4; the rows are gone below.
 
 ### Phase 0 — before writing more tests
 
-- Decide the gaps that are design questions rather than code: C8's retry identity, C7's ask/correct,
-  C12's `git.serve`, C11's version policy. A test that encodes the wrong answer is worse than none.
+- Decide the gaps that are design questions rather than code: C8's retry identity, C7's
+  ask/correct, C12's transport (decided: an external remote in this version; `git.serve` is
+  reserved), C11's version policy. A test that encodes the wrong answer is worse than none.
 
 ### Phase 1 — P0 (must pass before a multi-site claim)
 
@@ -258,18 +259,21 @@ R-03..R-06, X-01.
 
 ### Phase 3 — P2
 
-Latency, soak, scale, 100 MB, slowloris, clock steps.
+Latency, long soak, scale, larger payloads, slowloris, clock steps.
 
-### CI
+### Where the tests run
 
-- PR: `go test ./e2e` (Docker path if available) and the P0 multi-site set.
-- Nightly: P1 + X-01; weekly: soak.
-- Each test is run three times before it is trusted; a flake is a bug in the test or in the code,
-  and is not retried away.
+On a workstation, with `make test`; there is no CI budget for this repository and none of the
+suite is scheduled. Docker is optional: the multi-site test skips when Docker or
+`alpine/git:latest` is absent. The long runs (10,000 commits, the 24-hour soak, packet loss) are
+done by hand when a change touches what they exercise; they are not part of the default run.
+
+Each test is run three times before it is trusted; a flake is a bug in the test or in the code,
+and is not retried away.
 
 ### Exit criteria
 
-- All P0 green on three consecutive runs.
-- No P1 flake over a week.
+- All P0 green on three consecutive local runs.
+- The default suite green on a workstation; a P1 flake is treated as a bug.
 - Every gap in §6 is either closed or recorded as an accepted deviation in `doc/thrum.md`, with
   the test marked "expected" and the reason.

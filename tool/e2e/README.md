@@ -10,7 +10,8 @@ cd tool && go test -short ./e2e   # skip the Docker test
 ```
 
 The suite creates each workspace under `t.TempDir()`, so it touches nothing of
-yours.
+yours. Nothing here is scheduled in CI: it is a workstation suite, and the Docker
+test is skipped when Docker or the image is absent.
 
 ## The Docker test
 
