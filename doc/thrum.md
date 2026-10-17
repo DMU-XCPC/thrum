@@ -246,6 +246,11 @@ it.
 The token is the only secret that has to move by hand. It names no repository and no URL: the
 joining site needs only the inviting daemon's address, its public key, and the nonce.
 
+A site's address is a `host:port` and may be a name the LAN resolves, so a changing address needs
+no thrum command while the name follows it. Each site's local view in `var/config/` wins over the
+roster, and `daemon run --listen 0.0.0.0:<port>` keeps the listener independent of the machine's
+address.
+
 ## The wire
 
 One protocol, versioned from the start, with a mutual-authentication handshake and typed

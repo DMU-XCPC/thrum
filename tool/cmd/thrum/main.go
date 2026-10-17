@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
@@ -82,7 +84,7 @@ func newVersionCmd() *cobra.Command {
 }
 
 func newCreateCmd() *cobra.Command {
-	var site string
+	var site, at string
 	var code []string
 
 	cmd := &cobra.Command{
@@ -104,11 +106,27 @@ func newCreateCmd() *cobra.Command {
 			}); err != nil {
 				return err
 			}
+			if at != "" {
+				l := layout.New(args[0])
+				if err := os.MkdirAll(l.ConfigDir(), 0o755); err != nil {
+					return err
+				}
+				data, err := format.MarshalYAML(struct {
+					Reach string `yaml:"reach"`
+				}{Reach: at})
+				if err != nil {
+					return err
+				}
+				if err := format.WriteFileAtomic(filepath.Join(l.ConfigDir(), site+".yaml"), data); err != nil {
+					return err
+				}
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "created %s\n", args[0])
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&site, "site", "", "the name of this site")
+	cmd.Flags().StringVar(&at, "at", "", "the host:port this site will advertise")
 	cmd.Flags().StringArrayVar(&code, "code", nil, "a code repository, as <name>=<path> (repeatable)")
 	return cmd
 }

@@ -28,8 +28,8 @@ changes.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum create <dir> --site <name> [--code <name>=<path>]…` | Instantiates a workspace from the template thrum carries: the line, the ledger, one repository per `--code`, and the store — the runtime directories, the entry point and skill an actor is handed, this site's declaration, and the first event. | Never a plain file copy: bare repositories have to be initialised, and a repository cannot carry an empty directory. |
-| `thrum join <token>` | Makes this machine another site: proves the token to the inviting site's daemon, takes the line, the ledger and the store through it, presents a key, and registers it. | The inviting daemon must be running; a site the roster does not declare is refused rather than half-joined, and the join writes its own address but starts no process. |
+| `thrum create <dir> --site <name> [--at <host:port>] [--code <name>=<path>]…` | Instantiates a workspace from the template thrum carries: the line, the ledger, one repository per `--code`, and the store — the runtime directories, the entry point and skill an actor is handed, this site's declaration, and the first event. | Never a plain file copy: bare repositories have to be initialised, and a repository cannot carry an empty directory. `--at` writes this site's address to var/config, never committed. |
+| `thrum join <token>` | Makes this machine another site: proves the token to the inviting site's daemon, takes the line, the ledger and the store through it, presents a key, and registers it. | The inviting daemon must be running; a site the roster does not declare is refused rather than half-joined; the join records the inviter's address locally and starts no process. |
 | `thrum update` | Brings the unversioned skeleton up to date: the ignore rules, the empty directories, the entry point and the skill. Reports differing copy-me files and writes them only when asked. | Never touches a versioned file on its own initiative, and never removes a directory. |
 | `thrum verify` | Runs every mechanical check, including the two that read across boundaries — a handoff's `job` must name a brief in the line, and its `repo` must equal the brief's — and reads the values the conventions declare. | Reports; it never repairs. A wrong repair costs more than a stale record. |
 | `thrum status` | The picture: the board, the sites, the payloads, and this actor's mail. | Reads only. |
@@ -41,7 +41,7 @@ changes.
 | --- | --- | --- |
 | `thrum site invite <name> --at <host:port>` | Writes the new roster entry and prints a token that names the workspace, this site and its daemon, and the new site's address. | One event. The token is one-time, and it is the only secret that has to move by hand; this site's own reach has to be set first. |
 | `thrum site list`, `thrum site show <name>` | The roster, and what each site is and where it is. | Reads only. |
-| `thrum site reach <name> --at <host:port>` | Overrides where a peer listens. | Site-local, never committed; normally written for you at join. |
+| `thrum site reach <name> --at <host:port>` | Overrides where a peer listens. | Site-local, never committed; the inviter's is written by the join and this site's by `create --at`. The host may be a name; it is resolved at each dial. |
 | `thrum site doctor` | For each peer: declared, addressed, key known, last answered, protocol understood. | Reads only, and useful precisely when something is unreachable. |
 | `thrum site key rotate`, `thrum site key revoke` | Replaces a site's key, or withdraws it. | One event. A rotated key is proved by the previous one until the line carrying the new one reaches a peer; a revoked key is refused by every peer. |
 | `thrum site forget <name>` | Removes a site from the roster. | Refused while it is the last site, or while a job is materialised there; reports what it cannot clean up. |
@@ -131,7 +131,7 @@ decision and nothing else should make one as a side effect.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum daemon run` | Runs this site's daemon in the foreground. | One per site: a second refuses to start. Starting needs no network. |
+| `thrum daemon run` | Runs this site's daemon in the foreground, listening on the site's reach unless `--listen` says otherwise. | One per site: a second refuses to start. Starting needs no network; `--listen 0.0.0.0:<port>` keeps the listener independent of the machine's address. |
 | `thrum daemon status` | Whether it is up, what it is, and what it holds. | Reads only; works by asking the socket, and its absence is an answer too. |
 | `thrum daemon stop` | Stops it. | Restarting loses nothing durable: the roster, the mail and the shared histories are files. |
 

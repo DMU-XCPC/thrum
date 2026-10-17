@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 	"github.com/multiagentworkspace/thrum/tool/internal/line"
@@ -184,6 +185,19 @@ func Join(root string, t Token) error {
 
 	// The code repositories are the project's own: the declaration is in the line,
 	// the content is not carried by thrum.
+
+	if err := os.MkdirAll(l.ConfigDir(), 0o755); err != nil {
+		return err
+	}
+	data, err := format.MarshalYAML(struct {
+		Reach string `yaml:"reach"`
+	}{Reach: t.Reach})
+	if err != nil {
+		return err
+	}
+	if err := format.WriteFileAtomic(filepath.Join(l.ConfigDir(), t.Peer+".yaml"), data); err != nil {
+		return err
+	}
 
 	if err := os.WriteFile(l.SiteFile(), []byte(t.Site+"\n"), 0o644); err != nil {
 		return err
