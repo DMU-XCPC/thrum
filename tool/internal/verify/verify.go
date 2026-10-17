@@ -99,8 +99,10 @@ func (c *checker) sites() {
 		if s.Site != strings.TrimSuffix(e.Name(), ".yaml") {
 			c.add(path, "site does not equal its file name")
 		}
-		if _, err := workspace.ParseSiteKey(s.Key); err != nil {
-			c.add(path, "%v", err)
+		if s.Key != "" {
+			if _, err := workspace.ParseSiteKey(s.Key); err != nil {
+				c.add(path, "%v", err)
+			}
 		}
 		names[s.Site] = true
 	}

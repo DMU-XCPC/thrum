@@ -12,10 +12,11 @@ type Actor struct {
 	Retired    string `yaml:"retired,omitempty" json:"retired,omitempty"`
 }
 
-// Site is one machine's entry in the roster.
+// Site is one machine's entry in the roster. A site that has been invited but has
+// not joined yet has no key.
 type Site struct {
 	Site  string `yaml:"site" json:"site"`
-	Key   string `yaml:"key" json:"key"`
+	Key   string `yaml:"key,omitempty" json:"key,omitempty"`
 	Reach string `yaml:"reach,omitempty" json:"reach,omitempty"`
 }
 

@@ -11,8 +11,11 @@ import (
 
 	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
+	"github.com/multiagentworkspace/thrum/tool/internal/join"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
+	"github.com/multiagentworkspace/thrum/tool/internal/line"
 	"github.com/multiagentworkspace/thrum/tool/internal/records"
+	"github.com/multiagentworkspace/thrum/tool/internal/repos"
 )
 
 type siteView struct {
@@ -24,6 +27,76 @@ type siteView struct {
 
 func newSiteCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "site", Short: "The roster, and how this machine reaches the others"}
+
+	var inviteAt, lineURL, ledgerURL, storeURL string
+	var codeURLs []string
+	invite := &cobra.Command{
+		Use:   "invite <name>",
+		Short: "Declare a new site and print the token that joins it",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := workspaceRoot()
+			name := args[0]
+			if name == readSiteName(l) {
+				return fmt.Errorf("%q is this site", name)
+			}
+			if _, err := os.Stat(l.Site(name)); err == nil {
+				return fmt.Errorf("site %q is already declared", name)
+			}
+			if lineURL == "" {
+				lineURL = "file://" + l.LineGit()
+			}
+			if ledgerURL == "" {
+				ledgerURL = "file://" + l.LedgerGit()
+			}
+			if storeURL == "" {
+				storeURL = "file://" + l.Store()
+			}
+			repoURLs := map[string]string{}
+			decls, err := repos.List(l)
+			if err != nil {
+				return err
+			}
+			for _, r := range decls {
+				repoURLs[r.Repo] = "file://" + l.CodeRepo(r.Repo)
+			}
+			for _, v := range codeURLs {
+				k, u, ok := strings.Cut(v, "=")
+				if !ok || k == "" || u == "" {
+					return fmt.Errorf("--code %q is not <name>=<url>", v)
+				}
+				repoURLs[k] = u
+			}
+			ws, err := join.WorkspaceID(l.Root)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(l.Sites(), 0o755); err != nil {
+				return err
+			}
+			if err := records.Write(l.Site(name), records.Site{Site: name, Reach: inviteAt}); err != nil {
+				return err
+			}
+			if err := line.Commit(l.Root, []string{l.Site(name)},
+				fmt.Sprintf("site %s: invited", name)); err != nil {
+				return err
+			}
+			token, err := join.Encode(join.Token{
+				Workspace: ws, Site: name, Line: lineURL, Ledger: ledgerURL,
+				Store: storeURL, Repos: repoURLs,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), token)
+			return nil
+		},
+	}
+	invite.Flags().StringVar(&inviteAt, "at", "", "the host:port the new site will listen on")
+	invite.Flags().StringVar(&lineURL, "line", "", "the line's git URL for the new site")
+	invite.Flags().StringVar(&ledgerURL, "ledger", "", "the ledger's git URL for the new site")
+	invite.Flags().StringVar(&storeURL, "store", "", "the store's git URL for the new site")
+	invite.Flags().StringArrayVar(&codeURLs, "code", nil, "a code repository's URL, as <name>=<url>")
 
 	var at string
 	reach := &cobra.Command{
@@ -141,7 +214,7 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(reach, list, show, doctor)
+	cmd.AddCommand(reach, list, show, doctor, invite)
 	return cmd
 }
 
