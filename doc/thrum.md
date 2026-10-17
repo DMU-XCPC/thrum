@@ -206,9 +206,11 @@ workspace whose sites are apart for a day should not have to stop recording.
 
 The daemon is the only transport. No repository has a thrum remote; the CLI never configures
 one. `sync` is a daemon operation: the local daemon fetches, merges, settles and pushes the
-line, the ledger and the store with the peers over the site-authenticated channel; git's pack
-protocol is only the payload it carries, and the transport is built in memory, never written
-into a repository. A repository's own git remotes belong to the project and play no part in
+line, the ledger and the store with the **reachable** peers over the site-authenticated
+channel; a peer that does not answer is reported and left for the next sync, so no full mesh
+is required. Git's pack protocol is only the payload it carries, and the transport is built in
+memory, never written into a repository. The store offers the tags the line calls live, so a
+peer's fetched copy can serve a third site. A repository's own git remotes belong to the project and play no part in
 `sync`. The code repositories' declarations are in the line, but their content is the project's
 own git: thrum neither serves nor exchanges it. The rules are the ones the shared histories
 already imply:
@@ -269,7 +271,7 @@ that. `history.exchange` is local only: it is this machine asking its own daemon
 
 | What is down | What stops | What continues |
 | --- | --- | --- |
-| a peer | messages to actors there, and merging with it | everything local, and every other peer |
+| a peer | messages to actors there; its direct history exchange | everything local, and every other peer; its records reach the others through them |
 | the line's sequencer, if one is declared | recording durable events | reading, working, messages, and this site's own commits |
 | a daemon | messages, placement and `sync` at that site | its files, and the command line's local operations |
 

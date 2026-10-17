@@ -188,13 +188,11 @@ func TestDockerMultiSite(t *testing.T) {
 	// placed, and both histories converge when the link returns.
 	dockerOK(t, "network", "disconnect", network, siteB)
 	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "part-a", "--about", "while apart")
-	if out, err := dockerTry("exec", siteA, "thrum", "--root", "/w", "sync"); err == nil {
-		t.Fatalf("site one synced while site two was cut off: %s", out)
-	}
+	// Each side syncs with what it can reach; the other side is reported unreachable
+	// and caught up after the link returns.
+	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 	thrumIn(t, siteB, "thrum", "--root", "/w", "repo", "add", "part-b", "--about", "while apart")
-	if out, err := dockerTry("exec", siteB, "thrum", "--root", "/w", "sync"); err == nil {
-		t.Fatalf("site two synced while disconnected: %s", out)
-	}
+	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
 	if out, err := dockerTry("exec", siteA, "thrum", "--root", "/w", "--actor", "a1",
 		"message", "send", "a2", "--subject", "during the partition"); err == nil {
 		t.Fatalf("a message crossed a partition: %s", out)

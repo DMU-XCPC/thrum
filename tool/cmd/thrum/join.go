@@ -53,7 +53,8 @@ func newSyncCmd() *cobra.Command {
 				return fmt.Errorf("the daemon is not running here (%v); start it with `thrum daemon run`", err)
 			}
 			var out struct {
-				Settled []exchange.Resolution `json:"settled"`
+				Settled     []exchange.Resolution `json:"settled"`
+				Unreachable []string              `json:"unreachable"`
 			}
 			if err := json.Unmarshal(resp.Data, &out); err != nil {
 				return err
@@ -62,6 +63,9 @@ func newSyncCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(),
 					"settled %s: the earlier claim (%s) keeps it; the other (%s, %s) is void\n",
 					r.Path, r.Winner, r.Loser, r.LoserSide)
+			}
+			for _, name := range out.Unreachable {
+				fmt.Fprintf(cmd.OutOrStdout(), "unreachable: %s (left for the next sync)\n", name)
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "exchanged")
 			return nil

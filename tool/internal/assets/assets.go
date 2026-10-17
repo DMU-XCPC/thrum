@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -322,6 +323,36 @@ func none(s string) string {
 		return "None."
 	}
 	return s
+}
+
+// Live returns the tags named by the line's live asset records. A withdrawn version's
+// record is archived, so its tag is not live even if a store still has a copy.
+func Live(l layout.Layout) ([]string, error) {
+	entries, err := os.ReadDir(l.Assets())
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		files, err := os.ReadDir(filepath.Join(l.Assets(), e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
+				continue
+			}
+			out = append(out, format.AssetTag(e.Name(), strings.TrimSuffix(f.Name(), ".md")))
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // Published is the tags this site published. Sync pushes these and only these, so

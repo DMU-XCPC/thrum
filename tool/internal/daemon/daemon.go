@@ -350,7 +350,7 @@ type pushArgs struct {
 func (s *server) dispatch(req Request, remote bool, caller string) Response {
 	switch req.Verb {
 	case "store.published":
-		tags, err := assets.Published(s.l)
+		tags, err := assets.Live(s.l)
 		if err != nil {
 			return fail(err)
 		}
@@ -365,11 +365,11 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 		if exe, err := os.Executable(); err != nil || strings.ContainsAny(exe, " \t\n") {
 			return fail(errors.New("the thrum binary path contains a space; the daemon transport cannot carry it"))
 		}
-		settled, err := exchange.RunVia(s.l, s.historyLinks())
+		settled, unreachable, err := exchange.RunVia(s.l, s.historyLinks())
 		if err != nil {
 			return fail(err)
 		}
-		return payload(map[string]any{"settled": settled})
+		return payload(map[string]any{"settled": settled, "unreachable": unreachable})
 	case "site.hello":
 		return payload(map[string]any{
 			"workspace": s.workspace, "site": s.site, "version": protocolVersion,
@@ -583,18 +583,20 @@ func (s *server) historyLinks() exchange.Links {
 		links.Line = append(links.Line, exchange.Link{Name: name, Fetch: lf, Push: lp})
 		df, dp := mk("ledger")
 		links.Ledger = append(links.Ledger, exchange.Link{Name: name, Fetch: df, Push: dp})
-		var tags []string
-		if c, err := dial(s.l, name, true); err == nil {
-			if resp, err := c.Do(Request{Verb: "store.published"}); err == nil {
-				var d struct {
-					Tags []string `json:"tags"`
-				}
-				if json.Unmarshal(resp.Data, &d) == nil {
-					tags = d.Tags
-				}
-			}
-			_ = c.Close()
+		c, err := dial(s.l, name, true)
+		if err != nil {
+			continue
 		}
+		var tags []string
+		if resp, err := c.Do(Request{Verb: "store.published"}); err == nil {
+			var d struct {
+				Tags []string `json:"tags"`
+			}
+			if json.Unmarshal(resp.Data, &d) == nil {
+				tags = d.Tags
+			}
+		}
+		_ = c.Close()
 		sf, sp := mk("store")
 		links.Store = append(links.Store, exchange.Link{Name: name, Fetch: sf, Push: sp, Tags: tags})
 	}

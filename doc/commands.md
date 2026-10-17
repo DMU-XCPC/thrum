@@ -107,7 +107,7 @@ decision and nothing else should make one as a side effect.
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
 | `thrum commit --summary <text> [-- <paths>…]` | Turns one hand-made change into one event in the line. Hand edits are to `doc/`; a handoff belongs to the ledger and is written by `job handoff`. | One event per commit. Refuses an index holding changes the event did not make. |
-| `thrum sync` | Ask this machine's daemon to exchange the line, the ledger and the store with the peers. | Refused when the daemon is not running; no repository has a remote to edit. A merge that needs a person names the file and stops. A name claimed twice is settled by the order every site derives, and the loser is told by name. Nothing already seen is rewritten. |
+| `thrum sync` | Ask this machine's daemon to exchange the line, the ledger and the store with the reachable peers. | Refused when the daemon is not running; a peer that does not answer is reported and left for the next sync, so no full mesh is required. No repository has a remote to edit. A merge that needs a person names the file and stops. A name claimed twice is settled by the order every site derives, and the loser is told by name. Nothing already seen is rewritten. |
 | `thrum retire <path> --why <text>` | Moves a document to the archive with its notice. | One event. A number once used is never used again. |
 
 ## Assets

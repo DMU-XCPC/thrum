@@ -39,11 +39,11 @@ type Links struct {
 	Store  []Link `json:"store"`
 }
 
-// RunVia exchanges the line, the ledger and the store over the daemon's links. The
-// code repositories' content is not part of this: their declarations travel in the
-// line, and the code itself is the project's own git.
-func RunVia(l layout.Layout, links Links) ([]Resolution, error) {
+// RunVia exchanges the line, the ledger and the store over the daemon's links. A peer
+// that cannot be reached is skipped and reported; the others still exchange.
+func RunVia(l layout.Layout, links Links) ([]Resolution, []string, error) {
 	var settled []Resolution
+	var unreachable []string
 	for _, h := range []struct {
 		name  string
 		dir   string
@@ -52,41 +52,50 @@ func RunVia(l layout.Layout, links Links) ([]Resolution, error) {
 		{"the line", l.Root, links.Line},
 		{"the ledger", l.Ledger(), links.Ledger},
 	} {
-		got, err := OneVia(h.dir, h.links)
+		got, lost, err := OneVia(h.dir, h.links)
 		if err != nil {
-			return settled, fmt.Errorf("%s: %w", h.name, err)
+			return settled, unique(unreachable), fmt.Errorf("%s: %w", h.name, err)
 		}
 		settled = append(settled, got...)
+		unreachable = append(unreachable, lost...)
 	}
-	if err := StoreVia(l, links.Store); err != nil {
-		return settled, err
+	lost, err := StoreVia(l, links.Store)
+	if err != nil {
+		return settled, unique(unreachable), err
 	}
-	return settled, nil
+	unreachable = append(unreachable, lost...)
+	return settled, unique(unreachable), nil
 }
 
-// OneVia fetches each link, merges it, settles any name claimed twice, and publishes.
-func OneVia(dir string, links []Link) ([]Resolution, error) {
+// OneVia fetches each reachable link, merges it, settles any name claimed twice, and
+// publishes. A link whose fetch fails is left for the next sync.
+func OneVia(dir string, links []Link) ([]Resolution, []string, error) {
 	if len(links) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	branch, err := gitx.Run(dir, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	branch = strings.TrimSpace(branch)
 
 	var settled []Resolution
+	var unreachable []string
 	var pushErr error
 	// A push can lose a race with another site. Git's answer is one rejected push
 	// and one retry: fetch, merge again, and publish.
 	for attempt := 0; attempt < 4; attempt++ {
+		var reachable []Link
+		unreachable = nil
 		for _, link := range links {
 			refspec := "+refs/heads/*:refs/remotes/" + link.Name + "/*"
 			if err := gitx.FetchURL(dir, link.Fetch, refspec); err != nil {
-				return settled, err
+				unreachable = append(unreachable, link.Name)
+				continue
 			}
+			reachable = append(reachable, link)
 		}
-		for _, link := range links {
+		for _, link := range reachable {
 			ref := "refs/remotes/" + link.Name + "/" + branch
 			if _, err := gitx.Run(dir, "rev-parse", "--verify", "--quiet", ref); err != nil {
 				continue
@@ -99,63 +108,95 @@ func OneVia(dir string, links []Link) ([]Resolution, error) {
 					conflicts, _ := gitx.Run(dir, "diff", "--name-only", "--diff-filter=U")
 					_ = gitx.OK(dir, "merge", "--abort")
 					if names := strings.TrimSpace(conflicts); names != "" {
-						return settled, fmt.Errorf("the records do not go together: %s needs a person", names)
+						return settled, unreachable, fmt.Errorf("the records do not go together: %s needs a person", names)
 					}
-					return settled, fmt.Errorf("the records do not go together: %v", err)
+					return settled, unreachable, fmt.Errorf("the records do not go together: %v", err)
 				}
 				settled = append(settled, got...)
 			}
 		}
 		pushErr = nil
-		for _, link := range links {
+		for _, link := range reachable {
 			if err := gitx.PushURL(dir, link.Push, branch); err != nil {
 				pushErr = err
 				break
 			}
 		}
 		if pushErr == nil {
-			return settled, nil
+			return settled, unreachable, nil
 		}
 		jitter := time.Duration(time.Now().UnixNano()%50) * time.Millisecond
 		time.Sleep(time.Duration(attempt+1)*50*time.Millisecond + jitter)
 	}
-	return settled, fmt.Errorf("the records could not be published after a retry: %w", pushErr)
+	return settled, unreachable, fmt.Errorf("the records could not be published after a retry: %w", pushErr)
 }
 
-// StoreVia fetches the peers' tags and publishes this site's. A tag is never moved, so
-// a rejected push is a real conflict.
-func StoreVia(l layout.Layout, links []Link) error {
+// StoreVia fetches the peers' live tags and publishes this site's. A tag is never
+// moved, so a rejected push is a real conflict.
+func StoreVia(l layout.Layout, links []Link) ([]string, error) {
 	store := l.Store()
 	if store == "" {
-		return nil
+		return nil, nil
 	}
 	if _, err := os.Stat(store); err != nil {
-		return nil
+		return nil, nil
 	}
+	// Only tags the local line still calls live: a withdrawn version must not come
+	// back from a peer that has not seen the withdrawal yet.
+	live, err := assets.Live(l)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]bool, len(live))
+	for _, tag := range live {
+		allowed[tag] = true
+	}
+	var unreachable []string
+	var reachable []Link
 	for _, link := range links {
-		// Only the peer's published tags: a tag it merely fetched (and this site
-		// withdrew) must not come back.
+		ok := true
 		for _, tag := range link.Tags {
-			if err := gitx.FetchURL(store, link.Fetch, "refs/tags/"+tag+":refs/tags/"+tag); err != nil {
-				return fmt.Errorf("the store: %w", err)
+			if !allowed[tag] {
+				continue
 			}
+			if err := gitx.FetchURL(store, link.Fetch, "refs/tags/"+tag+":refs/tags/"+tag); err != nil {
+				unreachable = append(unreachable, link.Name)
+				ok = false
+				break
+			}
+		}
+		if ok {
+			reachable = append(reachable, link)
 		}
 	}
 	published, err := assets.Published(l)
 	if err != nil {
-		return err
+		return unique(unreachable), err
 	}
 	for _, tag := range published {
 		if !gitx.Resolves(store, "refs/tags/"+tag) {
 			continue
 		}
-		for _, link := range links {
+		for _, link := range reachable {
 			if err := gitx.PushURL(store, link.Push, "refs/tags/"+tag); err != nil {
-				return fmt.Errorf("the store: %w", err)
+				return unique(unreachable), fmt.Errorf("the store: %w", err)
 			}
 		}
 	}
-	return nil
+	return unique(unreachable), nil
+}
+
+func unique(names []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range names {
+		if seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	return out
 }
 
 type claim struct {

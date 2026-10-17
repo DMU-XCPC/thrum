@@ -297,8 +297,61 @@ func TestForgetRefusesTheForgottenSite(t *testing.T) {
 
 	// The records it published before the forget are already in the histories; it
 	// cannot reach the site that forgot it any more, because its key is not in the
-	// roster.
-	ts.w2.r().run("sync").fails(t, "the forgotten site", "not declared")
+	// roster. The sync skips that peer and reports it.
+	res := ts.w2.r().run("sync").ok(t, "the forgotten site")
+	if !strings.Contains(res.stdout, "unreachable: s1") {
+		t.Fatalf("the forgotten site's sync did not report the refused peer: %s", res.stdout)
+	}
 	ts.w1.r().run("sync").ok(t, "w1 sync")
 	ts.w1.r().run("verify").ok(t, "verify the site that forgot")
+}
+
+// TestPartialConnectivity: A—B—C, and A cannot reach C. The histories reach both
+// through B; no full mesh is required.
+func TestPartialConnectivity(t *testing.T) {
+	a := newWorkspace(t)
+	pa := firstSite(t, a)
+	a.r().run("actor", "declare", "a1", "--kind", "agent").ok(t, "declare a1")
+
+	pb := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	tokenB := strings.TrimSpace(a.r().run("site", "invite", "s2", "--at", pb).ok(t, "invite b").stdout)
+	bRoot := filepath.Join(t.TempDir(), "b")
+	(&runner{t: t, root: bRoot}).run("join", tokenB, "--dir", bRoot).ok(t, "join b")
+	b := &workspace{t: t, root: bRoot}
+	b.r().run("site", "reach", "s1", "--at", pa).ok(t, "b reaches a")
+	b.r().run("actor", "declare", "b1", "--kind", "agent").ok(t, "declare b1")
+	startDaemon(t, b, pb)
+
+	pc := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	tokenC := strings.TrimSpace(b.r().run("site", "invite", "s3", "--at", pc).ok(t, "invite c").stdout)
+	cRoot := filepath.Join(t.TempDir(), "c")
+	(&runner{t: t, root: cRoot}).run("join", tokenC, "--dir", cRoot).ok(t, "join c")
+	c := &workspace{t: t, root: cRoot}
+	c.r().run("site", "reach", "s2", "--at", pb).ok(t, "c reaches b")
+	c.r().run("site", "reach", "s3", "--at", pc).ok(t, "c self")
+	c.r().run("actor", "declare", "c1", "--kind", "agent").ok(t, "declare c1")
+	startDaemon(t, c, pc)
+
+	// The A knows the C only as a dead address; the C has no A address at all (the A
+	// never declared one). B is the only path between them.
+	a.r().run("site", "reach", "s3", "--at", "127.0.0.1:1").ok(t, "a's c is dead")
+
+	a.r().run("sync").ok(t, "a sync")
+	b.r().run("sync").ok(t, "b sync")
+	c.r().run("sync").ok(t, "c sync")
+	last := a.r().run("sync").ok(t, "a catches up through b")
+	if !strings.Contains(last.stdout, "unreachable: s3") {
+		t.Fatalf("the direct A—C edge was not reported unreachable: %s", last.stdout)
+	}
+
+	for _, w := range []*workspace{a, b, c} {
+		list := w.r().run("actor", "list").ok(t, "actor list").stdout
+		for _, name := range []string{"a1", "b1", "c1"} {
+			if !strings.Contains(list, name) {
+				t.Fatalf("%s does not see %s:\n%s", w.root, name, list)
+			}
+		}
+	}
+	a.r().run("verify").ok(t, "verify a")
+	c.r().run("verify").ok(t, "verify c")
 }
