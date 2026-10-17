@@ -105,3 +105,22 @@ type Place struct {
 type Places struct {
 	Actors map[string]Place `yaml:"actors"`
 }
+
+// Attachment is one file carried beside a message.
+type Attachment struct {
+	Name string `yaml:"name" json:"name"`
+	Size int64  `yaml:"size" json:"size"`
+}
+
+// Message is temporary work state: not a record, and never committed.
+type Message struct {
+	ID          string       `yaml:"id" json:"id"`
+	From        string       `yaml:"from" json:"from"`
+	To          string       `yaml:"to" json:"to"`
+	Site        string       `yaml:"site" json:"site"`
+	Sent        string       `yaml:"sent" json:"sent"`
+	Subject     string       `yaml:"subject" json:"subject"`
+	ReplyTo     string       `yaml:"reply_to,omitempty" json:"reply_to,omitempty"`
+	Job         string       `yaml:"job,omitempty" json:"job,omitempty"`
+	Attachments []Attachment `yaml:"attachments,omitempty" json:"attachments,omitempty"`
+}
