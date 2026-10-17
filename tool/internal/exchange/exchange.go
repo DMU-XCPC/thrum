@@ -59,9 +59,9 @@ func Run(l layout.Layout) ([]Resolution, error) {
 		// refspec, and a handoff may name a commit on a branch that is not HEAD.
 		for _, remote := range names {
 			refspec := "+refs/heads/*:refs/remotes/" + remote + "/*"
-			if err := gitx.OK(dir, "fetch", "--prune", remote, refspec); err != nil {
-				return settled, fmt.Errorf("the repository %s: %w", d.Repo, err)
-			}
+			// A declared repository this peer has not materialised has nothing to
+			// give; that is not a failure of the histories' exchange.
+			_ = gitx.OK(dir, "fetch", "--prune", remote, refspec)
 		}
 	}
 	// The store is a repository of tags: fetch what peers published, and publish

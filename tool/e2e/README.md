@@ -35,6 +35,10 @@ What it exercises over the network:
 `alpine/git` image has no `git-daemon`, and the test needs a transport, not an
 authentication scheme.
 
+The daemon transport — `git.serve`, `thrum git-proxy`, `site transport` — is
+covered by `TestDaemonServesGit`, `TestSyncThroughTheDaemon` and the Docker
+test's final step, which stops the hub and syncs through the daemons.
+
 The multi-site plan — partitions, crashes, clock skew, revocation, three sites,
 scale — is in [multisite-plan.md](multisite-plan.md). It marks what is covered,
 what is partial, and which gaps it expects to expose.

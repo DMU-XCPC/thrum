@@ -129,6 +129,11 @@ func Create(opts CreateOptions) (err error) {
 	if err := commitAll(l.Root, "init: created from the template"); err != nil {
 		return err
 	}
+	for _, dir := range []string{l.Root, l.Ledger()} {
+		if err := gitx.OK(dir, "config", "receive.denyCurrentBranch", "updateInstead"); err != nil {
+			return err
+		}
+	}
 
 	// The ledger: its own history, and its own first event.
 	if err := gitx.OK(l.Ledger(), "init", "-b", "main", "."); err != nil {

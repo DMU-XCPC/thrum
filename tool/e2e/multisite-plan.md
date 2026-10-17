@@ -6,7 +6,8 @@ concurrency and failure*, not just when everything is up.
 
 Executed 2026-10-17. The default suite (`tool/e2e`, 69 tests including Docker) covers every P0
 and P1 and the feasible P2s: 300 ms latency, a six-second soak, four sites and 200 events, 1,000
-events, 10 MB attachments, 100 connections. The full-scale P2s are long runs done by hand
+events, 10 MB attachments, 100 connections, and the daemon transport (`site transport`;
+the Docker test stops the hub before the exchange). The full-scale P2s are long runs done by hand
 (there is no CI budget): 10,000 commits, a 24-hour soak, and packet loss. A 100 MB attachment is not promised (the transport is base64 in
 the JSON protocol; 10 MB is tested), and the transport is an external git remote in this
 version; both are recorded in `doc/thrum.md`.
@@ -54,7 +55,7 @@ Topologies:
 - **T3** — three sites, one hub: transitivity, introductions, three-way claims.
 - **T3P** — three sites, one partitioned (A↔C works, A↔B cut), then healed.
 - **T4** — four sites for mesh sync and soak.
-- **T2N** — no hub: not in this version; the external remote is the transport (`doc/thrum.md`).
+- **T2N** — no hub: the daemons carry the histories (`git.serve`); the join's first repositories come from the token's URLs.
 
 Each site is a container with its own workspace and its own daemon; the hub is a container
 serving the histories (today a test-only smart-HTTP server; switch the URLs to the daemon once
@@ -217,7 +218,7 @@ keeps the boilerplate out of every test.
 | C9 | H-11, R-01, R-02 |
 | C10 | R-02, R-04 |
 | C11 | D-05 |
-| C12 | not in this version (`doc/thrum.md`); J-04, J-05 |
+| C12 | T2N, J-04, J-05 |
 | C13 | J-05, J-06, J-07 |
 | C14 | D-03, R-04 |
 
@@ -234,7 +235,6 @@ named in §4; the rows are gone below.
 | Two stretches starting in the same second share a name | The handoff name is the started stamp, to the second; the test separates them with a sleep | H-05 |
 | Two hellos in the same second tie | The heard stamp has second granularity; an equal-or-newer place overwrites, so the arrival decides | S-03/S-04 (tests separate them) |
 | A withdrawal leaves a peer's already-fetched tag in place | The peer does not re-push it and the remote is cleaned, but a materialise at that peer still works | J-06 (accepted) |
-| `history.exchange` and `git.serve` are absent | Accepted and recorded in `doc/thrum.md`: the transport is an external remote; the verbs are reserved | C12, T2N |
 | `--capacity` and "start the daemon on join" are absent | Accepted and recorded in `doc/thrum.md` / `doc/commands.md`: no capacity in this version; the machine's init starts the daemon | M-08 |
 
 ## 7. Execution

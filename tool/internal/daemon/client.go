@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -39,6 +40,7 @@ func (n *NotHere) Error() string { return "not here: " + n.Site }
 // Client is a connection to one peer's daemon.
 type Client struct {
 	conn net.Conn
+	br   *bufio.Reader
 	enc  *json.Encoder
 	dec  *json.Decoder
 }
@@ -133,7 +135,7 @@ func Dial(l layout.Layout, peer string) (*Client, error) {
 		conn.Close()
 		return nil, fmt.Errorf("%s refused: %s", peer, ack.Error)
 	}
-	return &Client{conn: conn, enc: enc, dec: dec}, nil
+	return &Client{conn: conn, br: br, enc: enc, dec: dec}, nil
 }
 
 // Push hands a message to the site that takes it.
@@ -191,6 +193,41 @@ func LocalDo(l layout.Layout, req Request) (Response, error) {
 		return resp, &Refusal{Code: resp.Code, Message: resp.Error, Data: resp.Data}
 	}
 	return resp, nil
+}
+
+// Proxy carries one git service over an authenticated connection. It is what git
+// runs for an ext:: remote; it never handles the site keys itself.
+func Proxy(l layout.Layout, peer, repo, service string) error {
+	if service != "upload-pack" && service != "receive-pack" {
+		return fmt.Errorf("%q is not a git service", service)
+	}
+	c, err := Dial(l, peer)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	args, err := json.Marshal(struct {
+		Repo    string `json:"repo"`
+		Service string `json:"service"`
+	}{repo, service})
+	if err != nil {
+		return err
+	}
+	if _, err := c.Do(Request{Verb: "git.serve", Args: args}); err != nil {
+		return err
+	}
+	// The go byte releases the service; everything after it is the git protocol.
+	if _, err := c.conn.Write([]byte{'\n'}); err != nil {
+		return err
+	}
+	go func() {
+		_, _ = io.Copy(c.conn, os.Stdin)
+		if tcp, ok := c.conn.(*net.TCPConn); ok {
+			_ = tcp.CloseWrite()
+		}
+	}()
+	_, err = io.Copy(os.Stdout, c.br)
+	return err
 }
 
 func rosterOf(l layout.Layout) map[string]records.Site {

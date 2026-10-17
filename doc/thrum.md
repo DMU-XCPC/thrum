@@ -233,8 +233,10 @@ it.
 1. **Invite**, from a site already in the workspace: one event writing the new roster entry,
    and a one-time token that names the workspace and the inviting site.
 2. **Join**, on the new machine: prove the token, present a key, take the roster and the
-   repositories, and register the key in the roster as a second event. Starting the daemon is
-   the machine's own init, not a side effect of the join: a join leaves no process running.
+   repositories from the token's URLs, and register the key in the roster as a second event.
+   The daemon is started by the machine's own init, not by the join; `site transport` then
+   points each repository at a peer's daemon, and every later exchange goes through the
+   fabric.
 3. **Introduce**: the inviting site tells the peers it can reach that the new site exists and
    where it listens. A peer accepts an introduction only for a site the roster declares.
 
@@ -248,10 +250,10 @@ requests. The handshake carries the workspace, the site, the protocol range, and
 caller answers; a mismatch is refused clearly, which is a small cost now and the thing that
 makes a mixed-version fleet debuggable later.
 
-The verbs are named `noun.verb` throughout — in this version `site.hello`, `actor.where`,
-`actor.hello`, `msg.push` and `stop`; `history.exchange` and `git.serve` are reserved for the
-version that serves git from the daemon — because the previous design's half-and-half naming
-was a regret, and a wire is the wrong place to discover that.
+The verbs are named `noun.verb` throughout — `site.hello`, `actor.where`, `actor.hello`,
+`msg.push`, `git.serve` and `stop`; a separate `history.exchange` is not needed, because the
+histories move through `git.serve` — because the previous design's half-and-half naming was a
+regret, and a wire is the wrong place to discover that.
 
 ## When something is down
 
@@ -277,6 +279,11 @@ and the version number stays taken.
 
 An attachment travels base64 inside the JSON protocol. Ten megabytes is the tested bound; a
 hundred is not promised. `site invite` has no capacity in this version.
+
+The daemon transport is a git `ext::` command: it carries the workspace and binary paths as
+written, so a path with a space cannot be carried; `site transport` refuses one rather than
+write a broken remote. The first join uses the token's URLs; only exchanges after it use the
+daemons.
 
 ## What the fabric must not do
 

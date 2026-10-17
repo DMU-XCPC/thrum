@@ -250,6 +250,24 @@ func TestDockerMultiSite(t *testing.T) {
 	if v := thrumIn(t, siteB, "thrum", "--root", "/w", "verify"); !strings.Contains(v, "ok") {
 		t.Fatalf("site two does not verify after a restart: %s", v)
 	}
+
+	// The histories move over the daemons; the hub is stopped and no repository
+	// points at it any more.
+	thrumIn(t, siteA, "thrum", "--root", "/w", "site", "transport", "s2")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "site", "transport", "s1")
+	dockerOK(t, "stop", hub)
+	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "daemon-a", "--about", "through the daemon")
+	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
+	if list := thrumIn(t, siteB, "thrum", "--root", "/w", "repo", "list"); !strings.Contains(list, "daemon-a") {
+		t.Fatalf("site two did not receive the record through the daemon: %s", list)
+	}
+	if got := thrumIn(t, siteB, "sh", "-c", "cat /w/doc/repo/daemon-a.yaml"); !strings.Contains(got, "through the daemon") {
+		t.Fatalf("the push did not update site two's worktree: %s", got)
+	}
+	if v := thrumIn(t, siteB, "thrum", "--root", "/w", "verify"); !strings.Contains(v, "ok") {
+		t.Fatalf("site two does not verify after the daemon transport: %s", v)
+	}
 }
 
 func dockerTry(args ...string) (string, error) {

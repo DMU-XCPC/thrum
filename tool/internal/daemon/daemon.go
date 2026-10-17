@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -25,6 +27,7 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 	"github.com/multiagentworkspace/thrum/tool/internal/messages"
 	"github.com/multiagentworkspace/thrum/tool/internal/records"
+	"github.com/multiagentworkspace/thrum/tool/internal/repos"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
@@ -263,6 +266,10 @@ func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool, caller stri
 		if err := dec.Decode(&req); err != nil {
 			return
 		}
+		if req.Verb == "git.serve" {
+			s.gitServe(conn, br, enc, req)
+			return
+		}
 		_ = enc.Encode(s.dispatch(req, remote, caller))
 	}
 }
@@ -410,6 +417,72 @@ func (s *server) broadcastPlace(actor actorArgs) {
 		_, _ = c.Do(Request{Verb: "actor.hello", Args: args})
 		_ = c.Close()
 	}
+}
+
+// gitServe hands the connection to a git service after one acknowledgement. The
+// client waits for one byte before piping, so its JSON decoder cannot swallow the
+// advertisement the service writes as soon as it starts.
+func (s *server) gitServe(conn net.Conn, br *bufio.Reader, enc *json.Encoder, req Request) {
+	var args struct {
+		Repo    string `json:"repo"`
+		Service string `json:"service"`
+	}
+	if err := json.Unmarshal(req.Args, &args); err != nil {
+		_ = enc.Encode(fail(err))
+		return
+	}
+	if args.Service != "upload-pack" && args.Service != "receive-pack" {
+		_ = enc.Encode(fail(fmt.Errorf("%q is not a git service", args.Service)))
+		return
+	}
+	gitdir, err := s.repoDir(args.Repo)
+	if err != nil {
+		_ = enc.Encode(fail(err))
+		return
+	}
+	if err := enc.Encode(Response{OK: true}); err != nil {
+		return
+	}
+	if _, err := br.ReadByte(); err != nil {
+		return
+	}
+	cmd := exec.Command("git", args.Service, gitdir)
+	cmd.Stdout = conn
+	cmd.Stderr = os.Stderr
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		return
+	}
+	// The copy is ours, not os/exec's: Wait must not wait for a reader that is
+	// still holding the connection open after the service has exited.
+	go func() {
+		_, _ = io.Copy(stdin, br)
+		_ = stdin.Close()
+	}()
+	_ = cmd.Wait()
+}
+
+// repoDir names the repository the way the fabric does, never as a path from the
+// caller.
+func (s *server) repoDir(name string) (string, error) {
+	switch name {
+	case "line":
+		return filepath.Join(s.l.Root, ".git"), nil
+	case "ledger":
+		return filepath.Join(s.l.Ledger(), ".git"), nil
+	case "store":
+		return s.l.Store(), nil
+	}
+	if _, ok, err := repos.Find(s.l, name); err != nil {
+		return "", err
+	} else if !ok {
+		return "", fmt.Errorf("no repository named %q", name)
+	}
+	return s.l.CodeRepo(name), nil
 }
 
 func payload(v any) Response {

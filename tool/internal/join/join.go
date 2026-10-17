@@ -154,6 +154,11 @@ func Join(root string, t Token) error {
 			}
 		}
 	}
+	for _, dir := range []string{l.Root, l.Ledger()} {
+		if err := gitx.OK(dir, "config", "receive.denyCurrentBranch", "updateInstead"); err != nil {
+			return err
+		}
+	}
 	if t.Store != "" {
 		if err := gitx.OK("", "clone", "--bare", t.Store, l.Store()); err != nil {
 			return err
