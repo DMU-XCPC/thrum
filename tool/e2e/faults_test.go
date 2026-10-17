@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"os"
@@ -52,9 +51,7 @@ func checkMailboxWhole(t *testing.T, w *workspace, actor string) {
 
 func TestSlowPeerDoesNotBlock(t *testing.T) {
 	ts := setupTwoSites(t)
-	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w2.r().run("site", "reach", "s1", "--at", addr).ok(t, "reach")
-	startDaemon(t, ts.w1, addr)
+	addr := ts.p1
 
 	slow, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err != nil {
@@ -73,11 +70,11 @@ func TestSlowPeerDoesNotBlock(t *testing.T) {
 
 func TestKilledDaemonLeavesNoPartialMessage(t *testing.T) {
 	ts := setupTwoSites(t)
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "reach")
+	p1 := ts.p1
 	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
 	ts.w2.r().run("sync").ok(t, "sync a2")
 	ts.w1.r().run("sync").ok(t, "w1 sync")
+	ts.w1.r().run("daemon", "stop").ok(t, "stop site one")
 	d := startDaemon(t, ts.w1, p1)
 
 	big := make([]byte, 20<<20)
@@ -155,8 +152,7 @@ func startDelayProxy(t *testing.T, target string, delay time.Duration) string {
 
 func TestSlowLink(t *testing.T) {
 	ts := setupTwoSites(t)
-	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	startDaemon(t, ts.w2, p2)
+	p2 := ts.p2
 	proxy := startDelayProxy(t, p2, 300*time.Millisecond)
 	ts.w1.r().run("site", "reach", "s2", "--at", proxy).ok(t, "reach through the proxy")
 	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
@@ -171,12 +167,6 @@ func TestSlowLink(t *testing.T) {
 
 func TestShortSoak(t *testing.T) {
 	ts := setupTwoSites(t)
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "reach s2")
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "reach s1")
-	startDaemon(t, ts.w1, p1)
-	startDaemon(t, ts.w2, p2)
 	ts.w1.r().as("a1").run("actor", "hello").ok(t, "a1 hello")
 	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
 	ts.w2.r().run("sync").ok(t, "sync a2")

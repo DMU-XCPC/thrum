@@ -23,6 +23,15 @@ func GenerateSiteKey() (seed []byte, public string, err error) {
 	return priv.Seed(), strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub))), nil
 }
 
+// PublicKey is the form the roster carries for an ed25519 public key.
+func PublicKey(pub ed25519.PublicKey) string {
+	sshPub, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub)))
+}
+
 // ParseSiteKey reads a roster's public key back into an ed25519 key.
 func ParseSiteKey(line string) (ed25519.PublicKey, error) {
 	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(strings.TrimSpace(line)))

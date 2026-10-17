@@ -32,6 +32,11 @@ func newSiteKeyCmd() *cobra.Command {
 			if err := os.MkdirAll(l.SecretsDir(), 0o700); err != nil {
 				return err
 			}
+			if old, err := os.ReadFile(l.PrivateKey()); err == nil {
+				if err := os.WriteFile(l.PrivateKey()+".prev", old, 0o600); err != nil {
+					return err
+				}
+			}
 			body := base64.StdEncoding.EncodeToString(seed) + "\n"
 			if err := os.WriteFile(l.PrivateKey(), []byte(body), 0o600); err != nil {
 				return err

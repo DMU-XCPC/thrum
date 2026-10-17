@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,12 +10,7 @@ import (
 func newPlacedSites(t *testing.T) *placedSites {
 	t.Helper()
 	ts := setupTwoSites(t)
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "w1 reaches s2")
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "w2 reaches s1")
-	startDaemon(t, ts.w1, p1)
-	startDaemon(t, ts.w2, p2)
+	p1, p2 := ts.p1, ts.p2
 	ts.w1.r().as("a3").run("actor", "declare", "a3", "--kind", "agent").ok(t, "declare a3")
 	ts.w1.r().run("sync").ok(t, "sync a3")
 	ts.w2.r().run("sync").ok(t, "w2 sees a3")
@@ -86,18 +80,6 @@ func TestSendAsksPeers(t *testing.T) {
 // not here, and the send retries once at the site it names.
 func TestNotHereRetries(t *testing.T) {
 	ts := setupThreeSites(t)
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	p3 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "w1 reaches s2")
-	ts.w1.r().run("site", "reach", "s3", "--at", p3).ok(t, "w1 reaches s3")
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "w2 reaches s1")
-	ts.w2.r().run("site", "reach", "s3", "--at", p3).ok(t, "w2 reaches s3")
-	ts.w3.r().run("site", "reach", "s1", "--at", p1).ok(t, "w3 reaches s1")
-	ts.w3.r().run("site", "reach", "s2", "--at", p2).ok(t, "w3 reaches s2")
-	startDaemon(t, ts.w1, p1)
-	startDaemon(t, ts.w2, p2)
-	startDaemon(t, ts.w3, p3)
 
 	ts.w1.r().run("actor", "declare", "a1", "--kind", "agent").ok(t, "declare a1")
 	ts.w3.r().as("a3").run("actor", "declare", "a3", "--kind", "agent").ok(t, "declare a3")

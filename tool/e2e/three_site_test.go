@@ -13,6 +13,7 @@ type threeSites struct {
 	w1, w2, w3 *workspace
 	line       string
 	ledger     string
+	p1, p2, p3 string
 }
 
 // setupThreeSites creates one workspace, one origin per history, and two joins.
@@ -37,7 +38,7 @@ func setupThreeSites(t *testing.T) *threeSites {
 	}
 	token2 := invite("s2")
 	token3 := invite("s3")
-	w1.r().run("sync").ok(t, "publish the invitations")
+	runGit(t, w1.root, "push", "-q", "origin", "main")
 
 	join := func(name, token string) *workspace {
 		root := filepath.Join(dir, name)
@@ -46,10 +47,17 @@ func setupThreeSites(t *testing.T) *threeSites {
 	}
 	w2 := join("w2", token2)
 	w3 := join("w3", token3)
-	w1.r().run("sync").ok(t, "site one sync")
-	w2.r().run("sync").ok(t, "site two sync")
-	w3.r().run("sync").ok(t, "site three sync")
-	return &threeSites{t: t, w1: w1, w2: w2, w3: w3, line: line, ledger: ledger}
+	for _, w := range []*workspace{w1, w2, w3} {
+		runGit(t, w.root, "fetch", "-q", "origin")
+		runGit(t, w.root, "merge", "-q", "--ff-only", "origin/main")
+	}
+	ports := connectSites(t, []*workspace{w1, w2, w3})
+	for round := 0; round < 2; round++ {
+		for _, w := range []*workspace{w1, w2, w3} {
+			w.r().run("sync").ok(t, "sync")
+		}
+	}
+	return &threeSites{t: t, w1: w1, w2: w2, w3: w3, line: line, ledger: ledger, p1: ports[0], p2: ports[1], p3: ports[2]}
 }
 
 // TestThreeSiteClaim settles one name claimed on all three sites, in the order the
@@ -57,10 +65,8 @@ func setupThreeSites(t *testing.T) *threeSites {
 func TestThreeSiteClaim(t *testing.T) {
 	ts := setupThreeSites(t)
 	ts.w1.r().run("repo", "add", "shared", "--about", "from w1").ok(t, "claim on w1")
-	ts.w1.r().run("sync").ok(t, "publish w1's claim")
 	time.Sleep(1100 * time.Millisecond)
 	ts.w2.r().run("repo", "add", "shared", "--about", "from w2").ok(t, "claim on w2")
-	ts.w2.r().run("sync").ok(t, "settle on w2")
 	time.Sleep(1100 * time.Millisecond)
 	ts.w3.r().run("repo", "add", "shared", "--about", "from w3").ok(t, "claim on w3")
 	settled := ts.w3.r().run("sync").ok(t, "settle on w3")
@@ -123,6 +129,10 @@ func TestConcurrentLedgerHandoffs(t *testing.T) {
 			t.Fatalf("%s has %d handoffs, want two: %v", w.root, len(files), err)
 		}
 	}
+	// The code is the project's own; the third site fetches the evidence commit the
+	// way the project would, and thrum's verify then resolves the handoff's head.
+	runGit(t, ts.w3.path("repos", "code.git"), "fetch", "-q", "origin",
+		"+refs/heads/*:refs/remotes/origin/*")
 	ts.w3.r().run("verify").ok(t, "verify the joined evidence")
 }
 
@@ -135,7 +145,6 @@ func TestEventClockDecidesTheClaim(t *testing.T) {
 	early := []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}
 	late := []string{"GIT_AUTHOR_DATE=2026-06-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-06-01T00:00:00Z"}
 	ts.w1.r().with(early...).run("repo", "add", "shared", "--about", "from w1").ok(t, "claim on w1")
-	ts.w1.r().run("sync").ok(t, "publish w1's claim")
 	ts.w2.r().with(late...).run("repo", "add", "shared", "--about", "from w2").ok(t, "claim on w2")
 	settled := ts.w2.r().run("sync").ok(t, "settle")
 	if !strings.Contains(settled.stdout, "settled") {
@@ -164,8 +173,6 @@ func TestProseConflictStopsAndNamesTheFile(t *testing.T) {
 	ts.w2.r().run("commit", "--summary", "edited at w2", "--", "doc/topic/shared").ok(t, "w2 edits")
 	ts.w1.write("doc/topic/shared/overview.md", "# Shared\n\nfrom w1 again\n")
 	ts.w1.r().run("commit", "--summary", "edited at w1", "--", "doc/topic/shared").ok(t, "w1 edits")
-	ts.w1.r().run("sync").ok(t, "publish w1's edit")
-
 	res := ts.w2.r().run("sync")
 	res.fails(t, "a prose conflict", "do not go together")
 	if !strings.Contains(res.output(), "overview.md") {
@@ -212,7 +219,6 @@ func TestTwoSitesClaimOneSiteName(t *testing.T) {
 			"--code", "code="+ts.w1.path("repos", "code.git")).ok(t, "invite s3")
 	}
 	invite(ts.w1)
-	ts.w1.r().run("sync").ok(t, "publish w1's invitation")
 	time.Sleep(1100 * time.Millisecond)
 	invite(ts.w2)
 	settled := ts.w2.r().run("sync").ok(t, "settle the site name")
@@ -256,7 +262,6 @@ func TestTwoSitesOpenOneJob(t *testing.T) {
 	ts := setupTwoSites(t)
 	ts.w1.r().run("job", "open", "j1", "--repo", "code", "--label", "up", "--goal", "from w1").ok(t, "w1")
 	ts.w2.r().run("job", "open", "j1", "--repo", "code", "--label", "two", "--goal", "from w2").ok(t, "w2")
-	ts.w1.r().run("sync").ok(t, "publish w1's brief")
 	settled := ts.w2.r().run("sync").ok(t, "settle")
 	if !strings.Contains(settled.stdout, "settled") {
 		t.Fatalf("the two briefs were not settled: %s", settled.stdout)
@@ -274,14 +279,29 @@ func TestTwoSitesOpenOneJob(t *testing.T) {
 
 func TestInvitationFromANonCreator(t *testing.T) {
 	ts := setupTwoSites(t)
-	token := strings.TrimSpace(ts.w2.r().run("site", "invite", "s3", "--at", "127.0.0.1:0",
+	p3 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	token := strings.TrimSpace(ts.w2.r().run("site", "invite", "s3", "--at", p3,
 		"--line", ts.origin, "--ledger", ts.ledger,
 		"--store", ts.w1.path("repos", "store.git"),
 		"--code", "code="+ts.w1.path("repos", "code.git")).ok(t, "invite").stdout)
-	ts.w2.r().run("sync").ok(t, "publish the invitation")
+	// The join's bootstrap is the hub; the invitation has to be there.
+	runGit(t, ts.w2.root, "push", "-q", "origin", "main")
+	ts.w2.r().run("site", "reach", "s3", "--at", p3).ok(t, "w2 reaches s3")
+	ts.w1.r().run("site", "reach", "s3", "--at", p3).ok(t, "w1 reaches s3")
+
 	root := filepath.Join(t.TempDir(), "w3")
 	(&runner{t: t, root: root}).run("join", token, "--dir", root).ok(t, "join")
 	w3 := &workspace{t: t, root: root}
+	// The join's key went to the hub; the two established sites take it from there.
+	for _, w := range []*workspace{ts.w1, ts.w2} {
+		runGit(t, w.root, "fetch", "-q", "origin")
+		runGit(t, w.root, "merge", "-q", "--ff-only", "origin/main")
+	}
+	w3.r().run("site", "reach", "s1", "--at", ts.p1).ok(t, "w3 reaches s1")
+	w3.r().run("site", "reach", "s2", "--at", ts.p2).ok(t, "w3 reaches s2")
+	w3.r().run("site", "reach", "s3", "--at", p3).ok(t, "w3 reaches itself")
+	startDaemon(t, w3, p3)
+
 	ts.w2.r().run("sync").ok(t, "the inviter sees the key")
 	ts.w1.r().run("sync").ok(t, "the creator learns through the sync")
 	w3.r().run("sync").ok(t, "the joined site syncs")
@@ -293,12 +313,9 @@ func TestInvitationFromANonCreator(t *testing.T) {
 
 func TestForgetRefusesTheForgottenSite(t *testing.T) {
 	ts := setupTwoSites(t)
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "reach")
 	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
 	ts.w2.r().run("sync").ok(t, "sync a2")
 	ts.w1.r().run("sync").ok(t, "w1 sync")
-	startDaemon(t, ts.w1, p1)
 	ts.w2.r().as("a2").run("message", "send", "a1", "--subject", "before").ok(t, "before")
 
 	ts.w1.r().run("site", "forget", "s2").ok(t, "forget")
@@ -306,8 +323,10 @@ func TestForgetRefusesTheForgottenSite(t *testing.T) {
 	ts.w2.r().as("a2").run("message", "send", "a1", "--subject", "after").
 		fails(t, "a forgotten site", "not declared")
 
-	// The records still travel through the remote; only the fabric identity is gone.
-	ts.w2.r().run("sync").ok(t, "the records still travel")
+	// The records it published before the forget are already in the histories; it
+	// cannot reach the site that forgot it any more, because its key is not in the
+	// roster.
+	ts.w2.r().run("sync").fails(t, "the forgotten site", "not declared")
 	ts.w1.r().run("sync").ok(t, "w1 sync")
 	ts.w1.r().run("verify").ok(t, "verify the site that forgot")
 }

@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,9 +16,6 @@ func proxyURL(t *testing.T, w *workspace, peer, repo, service string) string {
 
 func TestDaemonServesGit(t *testing.T) {
 	ts := setupTwoSites(t)
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "reach")
-	startDaemon(t, ts.w1, p1)
 
 	url := proxyURL(t, ts.w2, "s1", "line", "upload-pack")
 	out, err := exec.Command("git", "-c", "protocol.ext.allow=always", "-C", ts.w2.root,
@@ -40,20 +36,14 @@ func TestDaemonServesGit(t *testing.T) {
 	}
 }
 
-// TestSyncThroughTheDaemon: after site transport, the two sites exchange both
-// histories through each other's daemons; the origin directories are gone, so an
-// accidental external remote would fail.
+// TestSyncThroughTheDaemon: the setup's daemons exchange both histories; no
+// repository keeps a remote and the bootstrap origin directories are removed.
 func TestSyncThroughTheDaemon(t *testing.T) {
 	ts := setupTwoSites(t)
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "w1 reach")
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "w2 reach")
-	startDaemon(t, ts.w1, p1)
-	startDaemon(t, ts.w2, p2)
-
-	ts.w1.r().run("site", "transport", "s2").ok(t, "w1 transport")
-	ts.w2.r().run("site", "transport", "s1").ok(t, "w2 transport")
+	for _, w := range []*workspace{ts.w1, ts.w2} {
+		_ = exec.Command("git", "-C", w.root, "remote", "remove", "origin").Run()
+		_ = exec.Command("git", "-C", w.path("handoff"), "remote", "remove", "origin").Run()
+	}
 	if err := os.RemoveAll(ts.origin); err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,6 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/assets"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
-	"github.com/multiagentworkspace/thrum/tool/internal/repos"
 )
 
 // Resolution is one name claimed twice, and how it was settled.
@@ -24,88 +23,50 @@ type Resolution struct {
 	LoserSide string `json:"loser_side"`
 }
 
-// Run exchanges both shared histories, then fetches the code repositories. The code
-// is fetched, never pushed: publishing a branch is the project's business.
-func Run(l layout.Layout) ([]Resolution, error) {
+// Link is one peer's transport for one repository: where a fetch goes and where a
+// push goes. The daemon builds both; no repository stores a remote.
+type Link struct {
+	Name  string   `json:"name"`
+	Fetch string   `json:"fetch"`
+	Push  string   `json:"push"`
+	Tags  []string `json:"tags,omitempty"`
+}
+
+// Links carries the three repositories' transports for the peers.
+type Links struct {
+	Line   []Link `json:"line"`
+	Ledger []Link `json:"ledger"`
+	Store  []Link `json:"store"`
+}
+
+// RunVia exchanges the line, the ledger and the store over the daemon's links. The
+// code repositories' content is not part of this: their declarations travel in the
+// line, and the code itself is the project's own git.
+func RunVia(l layout.Layout, links Links) ([]Resolution, error) {
 	var settled []Resolution
-	for _, h := range []struct{ name, dir string }{
-		{"the line", l.Root},
-		{"the ledger", l.Ledger()},
+	for _, h := range []struct {
+		name  string
+		dir   string
+		links []Link
+	}{
+		{"the line", l.Root, links.Line},
+		{"the ledger", l.Ledger(), links.Ledger},
 	} {
-		got, err := One(h.dir)
+		got, err := OneVia(h.dir, h.links)
 		if err != nil {
 			return settled, fmt.Errorf("%s: %w", h.name, err)
 		}
 		settled = append(settled, got...)
 	}
-	decls, err := repos.List(l)
-	if err != nil {
+	if err := StoreVia(l, links.Store); err != nil {
 		return settled, err
-	}
-	for _, d := range decls {
-		dir := l.CodeRepo(d.Repo)
-		if _, err := os.Stat(dir); err != nil {
-			continue
-		}
-		remotes, err := gitx.Run(dir, "remote")
-		if err != nil {
-			return settled, err
-		}
-		names := strings.Fields(remotes)
-		if len(names) == 0 {
-			continue
-		}
-		// Fetch every branch explicitly: a bare clone does not always carry a fetch
-		// refspec, and a handoff may name a commit on a branch that is not HEAD.
-		for _, remote := range names {
-			refspec := "+refs/heads/*:refs/remotes/" + remote + "/*"
-			// A declared repository this peer has not materialised has nothing to
-			// give; that is not a failure of the histories' exchange.
-			_ = gitx.OK(dir, "fetch", "--prune", remote, refspec)
-		}
-	}
-	// The store is a repository of tags: fetch what peers published, and publish
-	// what this site did. A tag is never moved, so a rejected push is a real conflict.
-	if store := l.Store(); store != "" {
-		if _, err := os.Stat(store); err == nil {
-			remotes, err := gitx.Run(store, "remote")
-			if err != nil {
-				return settled, err
-			}
-			names := strings.Fields(remotes)
-			for _, remote := range names {
-				if err := gitx.OK(store, "fetch", remote, "+refs/tags/*:refs/tags/*"); err != nil {
-					return settled, fmt.Errorf("the store: %w", err)
-				}
-			}
-			published, err := assets.Published(l)
-			if err != nil {
-				return settled, err
-			}
-			for _, tag := range published {
-				if _, err := gitx.Run(store, "rev-parse", "--verify", "--quiet", "refs/tags/"+tag); err != nil {
-					continue
-				}
-				for _, remote := range names {
-					if err := gitx.OK(store, "push", remote, "refs/tags/"+tag); err != nil {
-						return settled, fmt.Errorf("the store: %w", err)
-					}
-				}
-			}
-		}
 	}
 	return settled, nil
 }
 
-// One fetches a history's remotes, merges each into the local branch, settles any
-// name claimed twice, and publishes.
-func One(dir string) ([]Resolution, error) {
-	out, err := gitx.Run(dir, "remote")
-	if err != nil {
-		return nil, err
-	}
-	remotes := strings.Fields(out)
-	if len(remotes) == 0 {
+// OneVia fetches each link, merges it, settles any name claimed twice, and publishes.
+func OneVia(dir string, links []Link) ([]Resolution, error) {
+	if len(links) == 0 {
 		return nil, nil
 	}
 	branch, err := gitx.Run(dir, "symbolic-ref", "--short", "HEAD")
@@ -118,17 +79,20 @@ func One(dir string) ([]Resolution, error) {
 	var pushErr error
 	// A push can lose a race with another site. Git's answer is one rejected push
 	// and one retry: fetch, merge again, and publish.
-	for attempt := 0; attempt < 2; attempt++ {
-		if err := gitx.OK(dir, "fetch", "--all", "--prune"); err != nil {
-			return settled, err
+	for attempt := 0; attempt < 4; attempt++ {
+		for _, link := range links {
+			refspec := "+refs/heads/*:refs/remotes/" + link.Name + "/*"
+			if err := gitx.FetchURL(dir, link.Fetch, refspec); err != nil {
+				return settled, err
+			}
 		}
-		for _, remote := range remotes {
-			ref := "refs/remotes/" + remote + "/" + branch
+		for _, link := range links {
+			ref := "refs/remotes/" + link.Name + "/" + branch
 			if _, err := gitx.Run(dir, "rev-parse", "--verify", "--quiet", ref); err != nil {
 				continue
 			}
 			identity := gitx.IdentityArgs(dir, "thrum")
-			args := append(append([]string{}, identity...), "merge", "--no-edit", remote+"/"+branch)
+			args := append(append([]string{}, identity...), "merge", "--no-edit", link.Name+"/"+branch)
 			if err := gitx.OK(dir, args...); err != nil {
 				got, settleErr := settle(dir)
 				if settleErr != nil {
@@ -143,8 +107,8 @@ func One(dir string) ([]Resolution, error) {
 			}
 		}
 		pushErr = nil
-		for _, remote := range remotes {
-			if err := gitx.OK(dir, "push", remote, branch); err != nil {
+		for _, link := range links {
+			if err := gitx.PushURL(dir, link.Push, branch); err != nil {
 				pushErr = err
 				break
 			}
@@ -152,8 +116,46 @@ func One(dir string) ([]Resolution, error) {
 		if pushErr == nil {
 			return settled, nil
 		}
+		jitter := time.Duration(time.Now().UnixNano()%50) * time.Millisecond
+		time.Sleep(time.Duration(attempt+1)*50*time.Millisecond + jitter)
 	}
 	return settled, fmt.Errorf("the records could not be published after a retry: %w", pushErr)
+}
+
+// StoreVia fetches the peers' tags and publishes this site's. A tag is never moved, so
+// a rejected push is a real conflict.
+func StoreVia(l layout.Layout, links []Link) error {
+	store := l.Store()
+	if store == "" {
+		return nil
+	}
+	if _, err := os.Stat(store); err != nil {
+		return nil
+	}
+	for _, link := range links {
+		// Only the peer's published tags: a tag it merely fetched (and this site
+		// withdrew) must not come back.
+		for _, tag := range link.Tags {
+			if err := gitx.FetchURL(store, link.Fetch, "refs/tags/"+tag+":refs/tags/"+tag); err != nil {
+				return fmt.Errorf("the store: %w", err)
+			}
+		}
+	}
+	published, err := assets.Published(l)
+	if err != nil {
+		return err
+	}
+	for _, tag := range published {
+		if !gitx.Resolves(store, "refs/tags/"+tag) {
+			continue
+		}
+		for _, link := range links {
+			if err := gitx.PushURL(store, link.Push, "refs/tags/"+tag); err != nil {
+				return fmt.Errorf("the store: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 type claim struct {

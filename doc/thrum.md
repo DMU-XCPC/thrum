@@ -204,12 +204,14 @@ workspace whose sites are apart for a day should not have to stop recording.
 
 ## Git
 
-In this version the transport is an external git remote the sites share: a site fetches,
-merges and pushes through it. The remote is an ordinary git URL — a bare repository on a
-machine the sites can reach, over ssh or http, or a path when they share a filesystem. The daemon's `git.serve` and `history.exchange` verbs are
-reserved for the version that moves that traffic onto the fabric; where the sites already
-share an external remote, none of it is needed (see "When something is down"). The rules are
-the ones the shared histories already imply:
+The daemon is the only transport. No repository has a thrum remote; the CLI never configures
+one. `sync` is a daemon operation: the local daemon fetches, merges, settles and pushes the
+line, the ledger and the store with the peers over the site-authenticated channel; git's pack
+protocol is only the payload it carries, and the transport is built in memory, never written
+into a repository. A repository's own git remotes belong to the project and play no part in
+`sync`. The code repositories' declarations are in the line, but their content is the project's
+own git: thrum neither serves nor exchanges it. The rules are the ones the shared histories
+already imply:
 
 | Repository | Ref | Rule |
 | --- | --- | --- |
@@ -251,9 +253,10 @@ caller answers; a mismatch is refused clearly, which is a small cost now and the
 makes a mixed-version fleet debuggable later.
 
 The verbs are named `noun.verb` throughout — `site.hello`, `actor.where`, `actor.hello`,
-`msg.push`, `git.serve` and `stop`; a separate `history.exchange` is not needed, because the
-histories move through `git.serve` — because the previous design's half-and-half naming was a
-regret, and a wire is the wrong place to discover that.
+`msg.push`, `history.exchange`, `store.published`, `git.serve` and `stop` — because the
+previous design's half-and-half naming was a regret, and a wire is the wrong place to discover
+that. `history.exchange` is local only: it is this machine asking its own daemon to sync.
+`git.serve` is the daemon's internal payload, never a remote a repository names.
 
 ## When something is down
 
@@ -261,7 +264,7 @@ regret, and a wire is the wrong place to discover that.
 | --- | --- | --- |
 | a peer | messages to actors there, and merging with it | everything local, and every other peer |
 | the line's sequencer, if one is declared | recording durable events | reading, working, messages, and this site's own commits |
-| a daemon | one site's place in the fabric | its files, and the command line's local operations |
+| a daemon | messages, placement and `sync` at that site | its files, and the command line's local operations |
 
 Nothing is refused because the fabric is unhappy, except the thing that genuinely needed the
 fabric. There is no hidden queue and no invented liveness: a thing that could not be placed was
@@ -280,10 +283,9 @@ and the version number stays taken.
 An attachment travels base64 inside the JSON protocol. Ten megabytes is the tested bound; a
 hundred is not promised. `site invite` has no capacity in this version.
 
-The daemon transport is a git `ext::` command: it carries the workspace and binary paths as
-written, so a path with a space cannot be carried; `site transport` refuses one rather than
-write a broken remote. The first join uses the token's URLs; only exchanges after it use the
-daemons.
+The daemon transport is a git `ext::` command built in memory: the workspace and binary paths
+are carried as written, so a path with a space cannot be carried; the daemon refuses such a
+sync rather than write a broken command. A repository has no thrum remote to edit.
 
 ## What the fabric must not do
 

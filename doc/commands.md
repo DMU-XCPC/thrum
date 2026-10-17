@@ -42,9 +42,8 @@ changes.
 | `thrum site invite` | Writes the new roster entry and prints a token that names the workspace and this site. | One event. The token is one-time, and it is the only secret that has to move by hand. |
 | `thrum site list`, `thrum site show <name>` | The roster, and what each site is and where it is. | Reads only. |
 | `thrum site reach <name> --at <host:port>` | Overrides where a peer listens. | Site-local, never committed; normally written for you at join. |
-| `thrum site transport <peer>` | Points this site's repositories at a peer's daemon, so `sync` fetches and pushes through the fabric. | One command; it replaces each repository's origin and allows git's `ext` transport in it. Refused for this site or a peer with no reach. |
 | `thrum site doctor` | For each peer: declared, addressed, key known, last answered, protocol understood. | Reads only, and useful precisely when something is unreachable. |
-| `thrum site key rotate`, `thrum site key revoke` | Replaces a site's key, or withdraws it. | One event. A revoked key is refused by every peer. |
+| `thrum site key rotate`, `thrum site key revoke` | Replaces a site's key, or withdraws it. | One event. A rotated key is proved by the previous one until the line carrying the new one reaches a peer; a revoked key is refused by every peer. |
 | `thrum site forget <name>` | Removes a site from the roster. | Refused while it is the last site, or while a job is materialised there; reports what it cannot clean up. |
 
 ## Repositories
@@ -108,7 +107,7 @@ decision and nothing else should make one as a side effect.
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
 | `thrum commit --summary <text> [-- <paths>…]` | Turns one hand-made change into one event in the line. Hand edits are to `doc/`; a handoff belongs to the ledger and is written by `job handoff`. | One event per commit. Refuses an index holding changes the event did not make. |
-| `thrum sync` | Exchange: fetch the peers, merge both shared histories, publish. | A merge that needs a person names the file and stops. A name claimed twice is settled by the order every site derives, and the loser is told by name. Nothing already seen is rewritten. |
+| `thrum sync` | Ask this machine's daemon to exchange the line, the ledger and the store with the peers. | Refused when the daemon is not running; no repository has a remote to edit. A merge that needs a person names the file and stops. A name claimed twice is settled by the order every site derives, and the loser is told by name. Nothing already seen is rewritten. |
 | `thrum retire <path> --why <text>` | Moves a document to the archive with its notice. | One event. A number once used is never used again. |
 
 ## Assets

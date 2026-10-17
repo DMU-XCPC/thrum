@@ -14,6 +14,7 @@ type twoSites struct {
 	w1, w2 *workspace
 	origin string
 	ledger string
+	p1, p2 string
 }
 
 // setupTwoSites creates a workspace, an origin for each shared history, invites a
@@ -32,22 +33,32 @@ func setupTwoSites(t *testing.T) *twoSites {
 	runGit(t, w1.path("handoff"), "push", "-q", "-u", "origin", "main")
 
 	w1.r().run("actor", "declare", "a1", "--kind", "agent").ok(t, "declare a1")
-	w1.r().run("sync").ok(t, "the first sync")
 	token := strings.TrimSpace(w1.r().run("site", "invite", "s2",
 		"--at", "127.0.0.1:0",
 		"--line", origin, "--ledger", ledger,
 		"--store", w1.path("repos", "store.git"),
 		"--code", "code="+w1.path("repos", "code.git")).ok(t, "invite").stdout)
-	w1.r().run("sync").ok(t, "sync the invitation")
+	// The token's line is the join's bootstrap; the invitation has to be there.
+	runGit(t, w1.root, "push", "-q", "origin", "main")
 
 	root2 := filepath.Join(dir, "w2")
 	r2 := &runner{t: t, root: root2}
 	r2.run("join", token, "--dir", root2).ok(t, "join")
 	w2 := &workspace{t: t, root: root2}
 	w2.r().run("verify").ok(t, "verify the joined site")
-	w1.r().run("sync").ok(t, "sync after the join")
-	w2.r().run("sync").ok(t, "sync the joined site")
-	return &twoSites{t: t, w1: w1, w2: w2, origin: origin, ledger: ledger}
+
+	// The hub is the join's bootstrap: each side takes the keys the joins pushed.
+	for _, w := range []*workspace{w1, w2} {
+		runGit(t, w.root, "fetch", "-q", "origin")
+		runGit(t, w.root, "merge", "-q", "--ff-only", "origin/main")
+	}
+
+	ports := connectSites(t, []*workspace{w1, w2})
+	for round := 0; round < 2; round++ {
+		w1.r().run("sync").ok(t, "w1 sync")
+		w2.r().run("sync").ok(t, "w2 sync")
+	}
+	return &twoSites{t: t, w1: w1, w2: w2, origin: origin, ledger: ledger, p1: ports[0], p2: ports[1]}
 }
 
 func TestTwoSitesJoinSync(t *testing.T) {
@@ -77,13 +88,6 @@ func TestTwoSitesJoinSync(t *testing.T) {
 func TestCrossSiteMessage(t *testing.T) {
 	ts := setupTwoSites(t)
 	w1, w2 := ts.w1, ts.w2
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "w1 reaches s2")
-	w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "w2 reaches s1")
-
-	startDaemon(t, w1, p1)
-	startDaemon(t, w2, p2)
 	w1.r().as("a1").run("actor", "hello").ok(t, "a1 hello")
 	w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "declare a2")
 	w2.r().run("sync").ok(t, "sync a2")
@@ -128,7 +132,6 @@ func TestSettlement(t *testing.T) {
 	w1, w2 := ts.w1, ts.w2
 
 	w1.r().run("repo", "add", "shared", "--about", "from w1").ok(t, "add on w1")
-	w1.r().run("sync").ok(t, "publish w1's claim")
 	time.Sleep(1100 * time.Millisecond)
 	w2.r().run("repo", "add", "shared", "--about", "from w2").ok(t, "add on w2")
 	settled := w2.r().run("sync").ok(t, "settle")
@@ -160,11 +163,10 @@ func freePort(t *testing.T) int {
 
 func TestSendWaitsForTheSite(t *testing.T) {
 	ts := setupTwoSites(t)
-	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "reach")
 	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
 	ts.w2.r().run("sync").ok(t, "sync a2")
 	ts.w1.r().run("sync").ok(t, "w1 sync")
+	ts.w1.r().run("daemon", "stop").ok(t, "stop site one")
 
 	done := make(chan result, 1)
 	go func() {
@@ -172,7 +174,7 @@ func TestSendWaitsForTheSite(t *testing.T) {
 			"--subject", "waited", "--wait", "5s")
 	}()
 	time.Sleep(700 * time.Millisecond)
-	startDaemon(t, ts.w1, p1)
+	startDaemon(t, ts.w1, ts.p1)
 	res := <-done
 	res.ok(t, "the send waited for the site")
 	if mail := ts.w1.r().as("a1").run("message", "list").ok(t, "mail"); !strings.Contains(mail.stdout, "waited") {

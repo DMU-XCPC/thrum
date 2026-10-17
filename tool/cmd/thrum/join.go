@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/exchange"
 	"github.com/multiagentworkspace/thrum/tool/internal/join"
 )
@@ -38,14 +41,24 @@ func newJoinCmd() *cobra.Command {
 func newSyncCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sync",
-		Short: "Fetch the peers, merge both shared histories, and publish",
+		Short: "Ask this daemon to exchange the line, the ledger and the store with the peers",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			settled, err := exchange.Run(workspaceRoot())
+			resp, err := daemon.LocalDo(workspaceRoot(), daemon.Request{Verb: "history.exchange"})
 			if err != nil {
+				var refusal *daemon.Refusal
+				if errors.As(err, &refusal) {
+					return err
+				}
+				return fmt.Errorf("the daemon is not running here (%v); start it with `thrum daemon run`", err)
+			}
+			var out struct {
+				Settled []exchange.Resolution `json:"settled"`
+			}
+			if err := json.Unmarshal(resp.Data, &out); err != nil {
 				return err
 			}
-			for _, r := range settled {
+			for _, r := range out.Settled {
 				fmt.Fprintf(cmd.OutOrStdout(),
 					"settled %s: the earlier claim (%s) keeps it; the other (%s, %s) is void\n",
 					r.Path, r.Winner, r.Loser, r.LoserSide)

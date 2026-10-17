@@ -70,7 +70,7 @@ func TestDockerMultiSite(t *testing.T) {
 		return err == nil
 	})
 
-	// Site one: a code source, a workspace, and the histories published to the hub.
+	// Site one: a code source, a workspace, and the bootstrap histories.
 	thrumIn(t, siteA, "sh", "-c",
 		"git init -q -b main /tmp/code && cd /tmp/code && echo base > README && git add -A && git -c user.name=t -c user.email=t@t commit -qm init")
 	thrumIn(t, siteA, "thrum", "create", "/w", "--site", "s1", "--code", "code=/tmp/code")
@@ -81,9 +81,6 @@ func TestDockerMultiSite(t *testing.T) {
 	thrumIn(t, siteA, "sh", "-c",
 		"cd /w/repos/code.git && git push -q http://"+hub+":8080/code.git --all")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "--actor", "a1", "actor", "declare", "a1", "--kind", "agent")
-	thrumIn(t, siteA, "sh", "-c",
-		"cd /w/repos/store.git && git remote add origin http://"+hub+":8080/store.git")
-	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 	token := strings.TrimSpace(thrumIn(t, siteA, "thrum", "--root", "/w", "site", "invite", "s2",
 		"--at", siteB+":7702",
 		"--line", "http://"+hub+":8080/line.git",
@@ -93,17 +90,16 @@ func TestDockerMultiSite(t *testing.T) {
 	if token == "" {
 		t.Fatal("invite printed no token")
 	}
-	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
+	// The invitation has to be in the hub for the join.
+	thrumIn(t, siteA, "sh", "-c", "cd /w && git push -q origin main")
 
 	// Site two joins over the network and registers its key.
 	thrumIn(t, siteB, "thrum", "--root", "/w", "--dir", "/w", "join", token)
-	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
+	// The join's key went to the hub; site one takes it there.
+	thrumIn(t, siteA, "sh", "-c", "cd /w && git fetch -q origin && git merge -q --ff-only origin/main")
 	if keyed := thrumIn(t, siteA, "thrum", "--root", "/w", "site", "show", "s2"); !strings.Contains(keyed, "ssh-ed25519") {
 		t.Fatalf("site one did not learn site two's key: %s", keyed)
 	}
-	thrumIn(t, siteB, "thrum", "--root", "/w", "--actor", "a2", "actor", "declare", "a2", "--kind", "agent")
-	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
-	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 
 	// The two daemons, on their own ports, over the Docker network.
 	dockerOK(t, "exec", "-d", siteA, "sh", "-c",
@@ -121,6 +117,9 @@ func TestDockerMultiSite(t *testing.T) {
 	thrumIn(t, siteA, "thrum", "--root", "/w", "site", "reach", "s2", "--at", siteB+":7702")
 	thrumIn(t, siteB, "thrum", "--root", "/w", "site", "reach", "s1", "--at", siteA+":7701")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "--actor", "a1", "actor", "hello")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "--actor", "a2", "actor", "declare", "a2", "--kind", "agent")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
+	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 
 	// A message from site two to an actor who lives at site one.
 	thrumIn(t, siteB, "sh", "-c",
@@ -143,6 +142,8 @@ func TestDockerMultiSite(t *testing.T) {
 	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 	thrumIn(t, siteA, "sh", "-c", "cd /w/repos/code.git && git push -q http://"+hub+":8080/code.git --all")
 	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
+	thrumIn(t, siteB, "sh", "-c",
+		"cd /w/repos/code.git && git fetch -q origin '+refs/heads/*:refs/remotes/origin/*'")
 	board := thrumIn(t, siteB, "thrum", "--root", "/w", "job", "list")
 	if !strings.Contains(board, "j1") || !strings.Contains(board, "partial") {
 		t.Fatalf("site two does not see the handoff: %s", board)
@@ -173,7 +174,6 @@ func TestDockerMultiSite(t *testing.T) {
 
 	// The same name claimed on both sites, settled deterministically.
 	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "shared", "--about", "from-a")
-	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 	time.Sleep(1100 * time.Millisecond)
 	thrumIn(t, siteB, "thrum", "--root", "/w", "repo", "add", "shared", "--about", "from-b")
 	settled := thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
@@ -198,7 +198,9 @@ func TestDockerMultiSite(t *testing.T) {
 	// placed, and both histories converge when the link returns.
 	dockerOK(t, "network", "disconnect", network, siteB)
 	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "part-a", "--about", "while apart")
-	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
+	if out, err := dockerTry("exec", siteA, "thrum", "--root", "/w", "sync"); err == nil {
+		t.Fatalf("site one synced while site two was cut off: %s", out)
+	}
 	thrumIn(t, siteB, "thrum", "--root", "/w", "repo", "add", "part-b", "--about", "while apart")
 	if out, err := dockerTry("exec", siteB, "thrum", "--root", "/w", "sync"); err == nil {
 		t.Fatalf("site two synced while disconnected: %s", out)
@@ -220,22 +222,14 @@ func TestDockerMultiSite(t *testing.T) {
 		t.Fatalf("site two does not verify after the partition: %s", v)
 	}
 
-	// The hub is down: recording and reading continue, sync fails, then it heals.
+	// The hub was the join's bootstrap only: with it down, the daemons keep the
+	// histories moving.
 	dockerOK(t, "stop", hub)
-	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "part-c", "--about", "while the hub is down")
-	if out, err := dockerTry("exec", siteA, "thrum", "--root", "/w", "sync"); err == nil {
-		t.Fatalf("site one synced with the hub down: %s", out)
-	}
-	dockerOK(t, "start", hub)
-	dockerOK(t, "exec", "-d", hub, "/usr/local/bin/thrum-hub", "-root", "/srv", "-listen", "0.0.0.0:8080")
-	waitFor(t, 10*time.Second, "the hub to come back", func() bool {
-		_, err := dockerTry("exec", siteA, "sh", "-c", "git ls-remote http://"+hub+":8080/line.git")
-		return err == nil
-	})
+	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "part-c", "--about", "without the hub")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
 	if list := thrumIn(t, siteB, "thrum", "--root", "/w", "repo", "list"); !strings.Contains(list, "part-c") {
-		t.Fatalf("site two did not see the record made while the hub was down: %s", list)
+		t.Fatalf("site two did not see the record made without the hub: %s", list)
 	}
 
 	// A restart: the workspace survives; the daemon must be started again, and the
@@ -251,11 +245,8 @@ func TestDockerMultiSite(t *testing.T) {
 		t.Fatalf("site two does not verify after a restart: %s", v)
 	}
 
-	// The histories move over the daemons; the hub is stopped and no repository
-	// points at it any more.
-	thrumIn(t, siteA, "thrum", "--root", "/w", "site", "transport", "s2")
-	thrumIn(t, siteB, "thrum", "--root", "/w", "site", "transport", "s1")
-	dockerOK(t, "stop", hub)
+	// The histories move over the daemons; the hub is gone and no repository
+	// needs it.
 	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "daemon-a", "--about", "through the daemon")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")

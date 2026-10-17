@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/actors"
+	"github.com/multiagentworkspace/thrum/tool/internal/assets"
+	"github.com/multiagentworkspace/thrum/tool/internal/exchange"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
@@ -52,6 +54,9 @@ type greeting struct {
 	Site      string `json:"site"`
 	Version   string `json:"version"`
 	Nonce     string `json:"nonce"`
+	Key       string `json:"key,omitempty"`
+	Previous  string `json:"previous,omitempty"`
+	Proof     string `json:"proof,omitempty"`
 	Signature string `json:"signature,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
@@ -233,23 +238,38 @@ func (s *server) auth(conn net.Conn, br *bufio.Reader) (string, error) {
 	if err != nil {
 		return refuse("site %q has a key this site cannot read", hello.Site)
 	}
+	// A rotated key is proved by the key the roster still carries: the peers have
+	// not seen the line that publishes the new one yet.
+	callerKey := pub
+	if hello.Key != "" && hello.Proof != "" && hello.Previous == peer.Key {
+		if next, err := workspace.ParseSiteKey(hello.Key); err == nil &&
+			verify(pub, hello.Key, hello.Proof) {
+			callerKey = next
+		}
+	}
 	key, err := loadKey(s.l)
 	if err != nil {
 		return refuse("this site has no usable key")
 	}
 
 	serverNonce := nonce()
-	if err := enc.Encode(greeting{
+	reply := greeting{
 		Workspace: s.workspace, Site: s.site, Version: protocolVersion,
 		Nonce: serverNonce, Signature: sign(key, hello.Nonce),
-	}); err != nil {
+	}
+	if prev, ok := loadPrevKey(s.l); ok {
+		cur := workspace.PublicKey(key.Public().(ed25519.PublicKey))
+		old := workspace.PublicKey(prev.Public().(ed25519.PublicKey))
+		reply.Key, reply.Previous, reply.Proof = cur, old, sign(prev, cur)
+	}
+	if err := enc.Encode(reply); err != nil {
 		return "", err
 	}
 	var proof greeting
 	if err := dec.Decode(&proof); err != nil {
 		return "", err
 	}
-	if !verify(pub, serverNonce, proof.Signature) {
+	if !verify(callerKey, serverNonce, proof.Signature) {
 		return refuse("site %q did not prove its key", hello.Site)
 	}
 	if err := enc.Encode(greeting{}); err != nil {
@@ -287,6 +307,24 @@ type pushArgs struct {
 
 func (s *server) dispatch(req Request, remote bool, caller string) Response {
 	switch req.Verb {
+	case "store.published":
+		tags, err := assets.Published(s.l)
+		if err != nil {
+			return fail(err)
+		}
+		return payload(map[string]any{"tags": tags})
+	case "history.exchange":
+		if remote {
+			return fail(errors.New("history.exchange is this machine's"))
+		}
+		if strings.ContainsAny(s.l.Root, " \t\n") {
+			return fail(errors.New("the workspace path contains a space; the daemon transport cannot carry it"))
+		}
+		settled, err := exchange.RunVia(s.l, s.historyLinks())
+		if err != nil {
+			return fail(err)
+		}
+		return payload(map[string]any{"settled": settled})
 	case "site.hello":
 		return payload(map[string]any{
 			"workspace": s.workspace, "site": s.site, "version": protocolVersion,
@@ -466,6 +504,50 @@ func (s *server) gitServe(conn net.Conn, br *bufio.Reader, enc *json.Encoder, re
 	_ = cmd.Wait()
 }
 
+// historyLinks builds each peer's line, ledger and store transports. They are the
+// daemon's, made per exchange and never written into a repository.
+func (s *server) historyLinks() exchange.Links {
+	var links exchange.Links
+	exe, err := os.Executable()
+	if err != nil {
+		return links
+	}
+	if strings.ContainsAny(exe, " \t\n") {
+		return links
+	}
+	peers := rosterOf(s.l)
+	for name := range peers {
+		reach := reachFor(s.l, name, peers)
+		if name == s.site || reach == "" || strings.HasSuffix(reach, ":0") || peers[name].Key == "" {
+			continue
+		}
+		mk := func(repo string) (string, string) {
+			base := "ext::" + exe + " --root " + s.l.Root +
+				" git-proxy --peer " + name + " --repo " + repo
+			return base + " --service upload-pack", base + " --service receive-pack"
+		}
+		lf, lp := mk("line")
+		links.Line = append(links.Line, exchange.Link{Name: name, Fetch: lf, Push: lp})
+		df, dp := mk("ledger")
+		links.Ledger = append(links.Ledger, exchange.Link{Name: name, Fetch: df, Push: dp})
+		var tags []string
+		if c, err := dial(s.l, name, true); err == nil {
+			if resp, err := c.Do(Request{Verb: "store.published"}); err == nil {
+				var d struct {
+					Tags []string `json:"tags"`
+				}
+				if json.Unmarshal(resp.Data, &d) == nil {
+					tags = d.Tags
+				}
+			}
+			_ = c.Close()
+		}
+		sf, sp := mk("store")
+		links.Store = append(links.Store, exchange.Link{Name: name, Fetch: sf, Push: sp, Tags: tags})
+	}
+	return links
+}
+
 // repoDir names the repository the way the fabric does, never as a path from the
 // caller.
 func (s *server) repoDir(name string) (string, error) {
@@ -543,6 +625,20 @@ func processAlive(pid int) bool {
 	}
 	err = p.Signal(syscall.Signal(0))
 	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+// loadPrevKey is the key a rotation retired; it is what proves the new one to a
+// peer that still has the old public half.
+func loadPrevKey(l layout.Layout) (ed25519.PrivateKey, bool) {
+	b, err := os.ReadFile(l.PrivateKey() + ".prev")
+	if err != nil {
+		return nil, false
+	}
+	seed, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(b)))
+	if err != nil || len(seed) != ed25519.SeedSize {
+		return nil, false
+	}
+	return ed25519.NewKeyFromSeed(seed), true
 }
 
 func loadKey(l layout.Layout) (ed25519.PrivateKey, error) {

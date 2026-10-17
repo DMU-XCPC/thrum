@@ -3,7 +3,6 @@ package e2e
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,7 +55,6 @@ func origins(t *testing.T, w *workspace) (line, ledger string) {
 	runGit(t, w.root, "init", "--bare", ledger)
 	runGit(t, w.path("handoff"), "remote", "add", "origin", ledger)
 	runGit(t, w.path("handoff"), "push", "-q", "-u", "origin", "main")
-	w.r().run("sync").ok(t, "publishing the origins")
 	return line, ledger
 }
 
@@ -73,7 +71,7 @@ func TestJoinRefusesAnotherWorkspace(t *testing.T) {
 	w1 := newWorkspace(t)
 	line1, ledger1 := origins(t, w1)
 	token := inviteS2(t, w1, line1, ledger1, "127.0.0.1:0")
-	w1.r().run("sync").ok(t, "publish the invitation")
+	runGit(t, w1.root, "push", "-q", "origin", "main")
 
 	w2 := newWorkspace(t)
 	line2, ledger2 := origins(t, w2)
@@ -116,7 +114,7 @@ func TestInvitationIsOneTime(t *testing.T) {
 	w1 := newWorkspace(t)
 	line, ledger := origins(t, w1)
 	token := inviteS2(t, w1, line, ledger, "127.0.0.1:0")
-	w1.r().run("sync").ok(t, "publish the invitation")
+	runGit(t, w1.root, "push", "-q", "origin", "main")
 
 	first := filepath.Join(t.TempDir(), "first")
 	(&runner{t: t, root: first}).run("join", token, "--dir", first).ok(t, "the first join")
@@ -144,20 +142,14 @@ func TestDaemonRecoversFromAStaleLock(t *testing.T) {
 	w.r().run("daemon", "stop").ok(t, "stop")
 }
 
-// twoSiteDaemons points the sites at each other and starts site one's daemon.
-func twoSiteDaemons(t *testing.T, ts *twoSites) (p1 string) {
+// twoSiteDaemons places the two actors; the setup already started the daemons.
+func twoSiteDaemons(t *testing.T, ts *twoSites) string {
 	t.Helper()
-	p1 = fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "w1 reaches s2")
-	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "w2 reaches s1")
-	startDaemon(t, ts.w1, p1)
-	startDaemon(t, ts.w2, p2)
 	ts.w1.r().as("a1").run("actor", "hello").ok(t, "a1 hello")
 	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "declare a2")
 	ts.w2.r().run("sync").ok(t, "sync a2")
 	ts.w1.r().run("sync").ok(t, "sync site one")
-	return p1
+	return ts.p1
 }
 
 func TestMessagesSurviveADaemonRestart(t *testing.T) {

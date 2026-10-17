@@ -12,6 +12,7 @@ type fourSites struct {
 	t              *testing.T
 	w1, w2, w3, w4 *workspace
 	line, ledger   string
+	p1, p2, p3, p4 string
 }
 
 func setupFourSites(t *testing.T) *fourSites {
@@ -34,7 +35,7 @@ func setupFourSites(t *testing.T) *fourSites {
 			"--code", "code="+w1.path("repos", "code.git")).ok(t, "invite "+name).stdout)
 	}
 	tokens := []string{invite("s2"), invite("s3"), invite("s4")}
-	w1.r().run("sync").ok(t, "sync the invitations")
+	runGit(t, w1.root, "push", "-q", "origin", "main")
 
 	join := func(name, token string) *workspace {
 		root := filepath.Join(dir, name)
@@ -44,11 +45,18 @@ func setupFourSites(t *testing.T) *fourSites {
 	w2 := join("w2", tokens[0])
 	w3 := join("w3", tokens[1])
 	w4 := join("w4", tokens[2])
-	w1.r().run("sync").ok(t, "w1 sync")
-	for _, w := range []*workspace{w2, w3, w4} {
-		w.r().run("sync").ok(t, "sync")
+	sites := []*workspace{w1, w2, w3, w4}
+	for _, w := range sites {
+		runGit(t, w.root, "fetch", "-q", "origin")
+		runGit(t, w.root, "merge", "-q", "--ff-only", "origin/main")
 	}
-	return &fourSites{t: t, w1: w1, w2: w2, w3: w3, w4: w4, line: line, ledger: ledger}
+	ports := connectSites(t, sites)
+	for round := 0; round < 2; round++ {
+		for _, w := range sites {
+			w.r().run("sync").ok(t, "sync")
+		}
+	}
+	return &fourSites{t: t, w1: w1, w2: w2, w3: w3, w4: w4, line: line, ledger: ledger, p1: ports[0], p2: ports[1], p3: ports[2], p4: ports[3]}
 }
 
 // TestFourSitesScale: four sites write 200 repository declarations, then the mesh

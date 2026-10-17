@@ -57,6 +57,19 @@ func RunEnv(dir string, env []string, args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
+// FetchURL fetches a URL the caller built, not a configured remote. The ext
+// allowance is passed on the command line, so no repository stores it.
+func FetchURL(dir, url string, refspecs ...string) error {
+	args := append([]string{"-c", "protocol.ext.allow=always", "fetch", "--no-tags", url}, refspecs...)
+	return OK(dir, args...)
+}
+
+// PushURL pushes to a URL the caller built, not a configured remote.
+func PushURL(dir, url string, refs ...string) error {
+	args := append([]string{"-c", "protocol.ext.allow=always", "push", url}, refs...)
+	return OK(dir, args...)
+}
+
 // OK runs git for its effect and discards its output.
 func OK(dir string, args ...string) error {
 	_, err := Run(dir, args...)

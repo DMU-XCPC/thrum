@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -125,8 +124,8 @@ func TestDaemonStatusHolds(t *testing.T) {
 
 func TestDoctorReportsPeerState(t *testing.T) {
 	ts := setupTwoSites(t)
-	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "reach")
+	p2 := ts.p2
+	ts.w2.r().run("daemon", "stop").ok(t, "stop site two")
 	if out := ts.w1.r().run("site", "doctor").ok(t, "doctor down"); !strings.Contains(out.stdout, "did not answer") {
 		t.Fatalf("doctor with the peer down: %s", out.stdout)
 	}

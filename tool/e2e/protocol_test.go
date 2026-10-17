@@ -102,9 +102,6 @@ func TestDaemonRefusesBadHandshakes(t *testing.T) {
 
 func TestPeerCannotStopTheDaemon(t *testing.T) {
 	ts := setupTwoSites(t)
-	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w2.r().run("site", "reach", "s1", "--at", addr).ok(t, "reach")
-	startDaemon(t, ts.w1, addr)
 
 	client, err := daemon.Dial(layout.New(ts.w2.root), "s1")
 	if err != nil {
@@ -119,9 +116,7 @@ func TestPeerCannotStopTheDaemon(t *testing.T) {
 
 func TestUnknownVerbAndGarbage(t *testing.T) {
 	ts := setupTwoSites(t)
-	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w2.r().run("site", "reach", "s1", "--at", addr).ok(t, "reach")
-	startDaemon(t, ts.w1, addr)
+	addr := ts.p1
 
 	client, err := daemon.Dial(layout.New(ts.w2.root), "s1")
 	if err != nil {
@@ -153,11 +148,12 @@ func TestKeyRotationTakesEffect(t *testing.T) {
 	ts.w2.r().as("a2").run("message", "send", "a1", "--subject", "before").ok(t, "before the rotation")
 
 	ts.w1.r().run("site", "key", "rotate").ok(t, "rotate")
-	ts.w1.r().run("sync").ok(t, "publish the rotation")
+	// Until the new key reaches site two through the line, its stored key cannot
+	// verify site one's replies.
 	ts.w2.r().as("a2").run("message", "send", "a1", "--subject", "with the old key").
 		fails(t, "the old key", "did not prove")
 
-	ts.w2.r().run("sync").ok(t, "learn the new key")
+	ts.w1.r().run("sync").ok(t, "publish the rotation")
 	ts.w2.r().as("a2").run("message", "send", "a1", "--subject", "after the rotation").ok(t, "after")
 }
 
@@ -176,9 +172,6 @@ func TestRevokedKeyIsRefused(t *testing.T) {
 
 func TestManyConnections(t *testing.T) {
 	ts := setupTwoSites(t)
-	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	ts.w2.r().run("site", "reach", "s1", "--at", addr).ok(t, "reach")
-	startDaemon(t, ts.w1, addr)
 	for i := 0; i < 100; i++ {
 		c, err := daemon.Dial(layout.New(ts.w2.root), "s1")
 		if err != nil {

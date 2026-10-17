@@ -65,6 +65,12 @@ func (c *Client) Close() error { return c.conn.Close() }
 
 // Dial opens an authenticated connection to a peer's daemon.
 func Dial(l layout.Layout, peer string) (*Client, error) {
+	return dial(l, peer, false)
+}
+
+// dial opens an authenticated connection; the sync's transport allows a rotated
+// key to be proved by the one the roster still carries.
+func dial(l layout.Layout, peer string, allowSuccession bool) (*Client, error) {
 	site := actors.Site(l)
 	roster := rosterOf(l)
 	target, ok := roster[peer]
@@ -92,7 +98,13 @@ func Dial(l layout.Layout, peer string) (*Client, error) {
 	dec := json.NewDecoder(br)
 
 	clientNonce := nonce()
-	if err := enc.Encode(greeting{Workspace: ws, Site: site, Version: protocolVersion, Nonce: clientNonce}); err != nil {
+	hello := greeting{Workspace: ws, Site: site, Version: protocolVersion, Nonce: clientNonce}
+	if prev, ok := loadPrevKey(l); ok {
+		cur := workspace.PublicKey(key.Public().(ed25519.PublicKey))
+		old := workspace.PublicKey(prev.Public().(ed25519.PublicKey))
+		hello.Key, hello.Previous, hello.Proof = cur, old, sign(prev, cur)
+	}
+	if err := enc.Encode(hello); err != nil {
 		conn.Close()
 		return nil, err
 	}
@@ -119,8 +131,17 @@ func Dial(l layout.Layout, peer string) (*Client, error) {
 		return nil, err
 	}
 	if !verify(pub, clientNonce, reply.Signature) {
-		conn.Close()
-		return nil, fmt.Errorf("site %q did not prove its key", peer)
+		ok := false
+		if allowSuccession && reply.Key != "" && reply.Previous == target.Key {
+			if next, err := workspace.ParseSiteKey(reply.Key); err == nil &&
+				verify(pub, reply.Key, reply.Proof) && verify(next, clientNonce, reply.Signature) {
+				ok = true
+			}
+		}
+		if !ok {
+			conn.Close()
+			return nil, fmt.Errorf("site %q did not prove its key", peer)
+		}
 	}
 	if err := enc.Encode(greeting{Signature: sign(key, reply.Nonce)}); err != nil {
 		conn.Close()
@@ -201,7 +222,7 @@ func Proxy(l layout.Layout, peer, repo, service string) error {
 	if service != "upload-pack" && service != "receive-pack" {
 		return fmt.Errorf("%q is not a git service", service)
 	}
-	c, err := Dial(l, peer)
+	c, err := dial(l, peer, true)
 	if err != nil {
 		return err
 	}

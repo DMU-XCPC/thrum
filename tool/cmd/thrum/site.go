@@ -215,7 +215,7 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(reach, list, show, doctor, invite, newSiteKeyCmd(), newSiteForgetCmd(), newSiteTransportCmd())
+	cmd.AddCommand(reach, list, show, doctor, invite, newSiteKeyCmd(), newSiteForgetCmd())
 	return cmd
 }
 
