@@ -1,7 +1,10 @@
 package e2e
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -98,4 +101,83 @@ func TestDaemonLock(t *testing.T) {
 	// A second daemon on the same workspace must refuse, not fight for the socket.
 	res := w.r().run("daemon", "run", "--listen", "127.0.0.1:0")
 	res.fails(t, "a second daemon", "already running")
+}
+
+func TestDaemonStatusHolds(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+	r.run("message", "send", "a2", "--subject", "held").ok(t, "send")
+	startDaemon(t, w, "127.0.0.1:0")
+
+	res := r.run("daemon", "status", "--json").ok(t, "status")
+	var data struct {
+		Held int `json:"held"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &data); err != nil {
+		t.Fatalf("status json: %v\n%s", err, res.stdout)
+	}
+	if data.Held != 1 {
+		t.Fatalf("the daemon reports %d messages, want 1", data.Held)
+	}
+}
+
+func TestDoctorReportsPeerState(t *testing.T) {
+	ts := setupTwoSites(t)
+	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	ts.w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "reach")
+	if out := ts.w1.r().run("site", "doctor").ok(t, "doctor down"); !strings.Contains(out.stdout, "did not answer") {
+		t.Fatalf("doctor with the peer down: %s", out.stdout)
+	}
+	startDaemon(t, ts.w2, p2)
+	if out := ts.w1.r().run("site", "doctor").ok(t, "doctor up"); !strings.Contains(out.stdout, "answered") {
+		t.Fatalf("doctor with the peer up: %s", out.stdout)
+	}
+	ts.w2.r().run("daemon", "stop").ok(t, "stop")
+	if out := ts.w1.r().run("site", "doctor").ok(t, "doctor down again"); !strings.Contains(out.stdout, "did not answer") {
+		t.Fatalf("doctor after the stop: %s", out.stdout)
+	}
+}
+
+func TestEventsWatchStreams(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+
+	cmd := exec.Command(thrumBin, "--root", w.root, "events", "--watch")
+	cmd.Env = envWith("THRUM_ROOT="+w.root, "THRUM_ACTOR=a2")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+	lines := make(chan string, 8)
+	go func() {
+		s := bufio.NewScanner(stdout)
+		for s.Scan() {
+			lines <- s.Text()
+		}
+	}()
+	time.Sleep(300 * time.Millisecond)
+	id := strings.TrimSpace(r.as("a1").run("message", "send", "a2", "--subject", "watched").ok(t, "send").stdout)
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case ln := <-lines:
+			if strings.Contains(ln, id) {
+				return
+			}
+		case <-deadline:
+			t.Fatal("the event stream did not deliver the message")
+		}
+	}
 }

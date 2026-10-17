@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -29,5 +30,33 @@ func TestConcurrentSync(t *testing.T) {
 		if !strings.Contains(list, "a4") || !strings.Contains(list, "a5") {
 			t.Fatalf("%s does not see both actors:\n%s", w.root, list)
 		}
+	}
+}
+
+// TestEventClockNeverGoesBackwards: with the persisted clock ahead of the wall
+// clock, the next events still increase.
+func TestEventClockNeverGoesBackwards(t *testing.T) {
+	w := newWorkspace(t)
+	w.write("var/state/clock", "9000000000000000000\n")
+	w.r().run("actor", "declare", "a4", "--kind", "agent").ok(t, "first")
+	w.r().run("actor", "declare", "a5", "--kind", "agent").ok(t, "second")
+	log := runGit(t, w.root, "log", "-2", "--format=%B")
+	var clocks []int64
+	for _, ln := range strings.Split(log, "\n") {
+		if !strings.HasPrefix(ln, "Thrum-Event: ") {
+			continue
+		}
+		fields := strings.Fields(strings.TrimPrefix(ln, "Thrum-Event: "))
+		n, err := strconv.ParseInt(fields[0], 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		clocks = append(clocks, n)
+	}
+	if len(clocks) != 2 {
+		t.Fatalf("found %d event trailers, want two", len(clocks))
+	}
+	if clocks[0] <= clocks[1] {
+		t.Fatalf("the clock went backwards: %v", clocks)
 	}
 }

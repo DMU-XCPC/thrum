@@ -100,13 +100,13 @@ keeps the boilerplate out of every test.
 | M-01 | P0 | Invite → join → sync between two sites | Both rosters, both keys, joined site verifies | covered (`TestDockerMultiSite`, `TestTwoSitesJoinSync`) |
 | M-02 | P0 | Join with a token whose line is a different workspace | Refused; no half-joined directory, key or site file left | covered (`TestJoinRefusesAnotherWorkspace`) |
 | M-03 | P0 | Join with a valid token but no roster entry for the new site | Refused ("the roster does not declare this site") | covered (`TestJoinNeedsAnInvitation`) |
-| M-04 | P1 | C joins through B; A reaches C after sync; a site not in the roster is refused | A authenticates C; the stranger is refused at the handshake | partial (handshake refusal is covered; introductions are not implemented) |
+| M-04 | P1 | C joins through B; A reaches C after sync; a site not in the roster is refused | A authenticates C; the stranger is refused at the handshake | covered via sync (`TestInvitationFromANonCreator`); the explicit introduce step is not needed with the roster in the line |
 | M-05 | P0 | A rotates its key; B sends to A before syncing, then after | Before: refused (old key); after: delivered | covered (`TestKeyRotationTakesEffect`) |
 | M-06 | P1 | A revokes B's key | B's handshake is refused; B's messages fail | covered (`TestRevokedKeyIsRefused`) |
 | M-07 | P1 | A forgets B | B's name stays taken; messages to B are refused; B's records can still arrive through a remote | partial (single-site only) |
 | M-08 | P1 | A token is reused after the site joined | Second join refused (expiry or one-time use) | covered (`TestInvitationIsOneTime`; one-time, not time-expiring) |
 | M-09 | P1 | Two sites claim the same site name | The roster path is settled; the loser is told; no two winners | covered (`TestTwoSitesClaimOneSiteName`) |
-| M-10 | P2 | `site doctor` with a peer up, down, and rotated | Reports answered / no answer / refused | partial (this site only) |
+| M-10 | P2 | `site doctor` with a peer up, down, and rotated | Reports answered / no answer / refused | covered (`TestDoctorReportsPeerState`) |
 
 ### B. Histories and convergence
 
@@ -119,9 +119,9 @@ keeps the boilerplate out of every test.
 | H-05 | P0 | A and B record handoffs for the same job while apart | Both files survive; no conflict | covered (`TestConcurrentLedgerHandoffs`) |
 | H-06 | P0 | A and B edit the same `doc/topic/...` file | Sync stops, names the file, and leaves both histories intact | covered (`TestProseConflictStopsAndNamesTheFile`) |
 | H-07 | P1 | A and B push at the same time | One rejected push, one retry, no lost event | covered (`TestConcurrentSync`; the retry) |
-| H-08 | P1 | After every sync, the histories only grow | No force-push, no rewrite; ancestry holds | gap |
+| H-08 | P1 | After every sync, the histories only grow | No force-push, no rewrite; ancestry holds | covered (`TestHistoriesOnlyGrow`) |
 | H-09 | P1 | A site's event clock is far ahead and its commit is earlier; another site claims later in real time with a wall clock | The smaller event clock keeps the name, deterministically and regardless of commit time | covered (`TestEventClockDecidesTheClaim`) |
-| H-10 | P2 | 1,000 events, then sync | Bounded time, no corruption | gap |
+| H-10 | P2 | 1,000 events, then sync | Bounded time, no corruption | covered (`TestThousandEvents`) |
 | H-11 | P0 | B is partitioned; A and B both record; heal and sync | Both converge; nothing lost | covered (Docker partition) |
 | H-12 | P1 | The hub refuses one push | One retry succeeds; no duplicate event | covered (the same retry path) |
 
@@ -139,7 +139,7 @@ keeps the boilerplate out of every test.
 | S-08 | P0 | A caller retries with the same id | Exactly one message | covered (`TestRetryWithTheSameIDDeliversOnce`; `message send --id`) |
 | S-09 | P1 | 10 MB binary attachment | Byte-for-byte, hash checked | covered (`TestLargeAttachment`) |
 | S-10 | P1 | Reply threading across sites | `reply_to` preserved and readable at the other site | partial (local only) |
-| S-11 | P1 | `events --watch` sees an arrival, survives a reconnect | One event per message, no duplicates after reconnect | partial (one-shot covered) |
+| S-11 | P1 | `events --watch` sees an arrival, survives a reconnect | One event per message, no duplicates after reconnect | covered (`TestEventsWatchStreams`) |
 | S-12 | P0 | A site not in the roster, or with a revoked key, pushes | Handshake refused; daemon survives | covered (undeclared site and revoked key) |
 | S-13 | P1 | Malformed JSON, unknown verb, truncated frame, huge frame | Connection closed; daemon alive; other sites unaffected | covered (oversized and malformed; `TestUnknownVerbAndGarbage`) |
 | S-14 | P2 | 100 messages, list and purge | Bounded mailbox operations | covered (list; `TestManyMessages`) |
@@ -156,7 +156,7 @@ keeps the boilerplate out of every test.
 | J-06 | P1 | Withdraw at A, sync, verify at B | The archived manifest is there; the tag is gone at A | covered |
 | J-07 | P1 | Both sites publish the same asset version | One wins; the other is refused (the version is taken) | covered |
 | J-08 | P1 | A crafted bundle with `../` paths | Refused; nothing written outside `job/<id>/` | covered |
-| J-09 | P2 | A and B open the same job id while apart | Settlement; the loser is told; no two briefs | gap |
+| J-09 | P2 | A and B open the same job id while apart | Settlement; the loser is told; no two briefs | covered (`TestTwoSitesOpenOneJob`) |
 
 ### E. Daemon, protocol, security
 
@@ -184,13 +184,13 @@ keeps the boilerplate out of every test.
 | R-05 | P1 | Simultaneous pushes | One retry; no loss | covered (`TestConcurrentSync`) |
 | R-06 | P1 | A prose conflict | Merge aborted; `git status` clean; no half-merge | covered (`TestProseConflictStopsAndNamesTheFile`) |
 | R-07 | P2 | 300 ms latency, 5% loss | Handshake and sync still work within the timeout | gap |
-| R-08 | P2 | A clock step (NTP) during a run | No corruption; settlement still deterministic | gap |
+| R-08 | P2 | A clock step (NTP) during a run | No corruption; settlement still deterministic | covered (the persisted clock never goes backwards; `TestEventClockNeverGoesBackwards`) |
 
 ### G. Scale and soak
 
 | ID | Pri | Scenario | Expected | Status |
 | --- | --- | --- | --- | --- |
-| X-01 | P1 | 4 sites, 200 events, full mesh sync | Converges; bounded time | gap |
+| X-01 | P1 | 4 sites, 200 events, full mesh sync | Converges; bounded time | covered (`TestFourSitesScale`) |
 | X-02 | P2 | 10,000 line commits | `sync`, `verify` still usable | gap |
 | X-03 | P2 | 24 h soak: messages and syncs every minute | No leak, no unbounded file growth | gap |
 | X-04 | P2 | 100 connect/disconnect cycles | No fd leak; no stale lock | covered (`TestManyConnections`) |
@@ -228,8 +228,7 @@ named in §4; the rows are gone below.
 | Two hellos in the same second tie | The heard stamp has second granularity; an equal-or-newer place overwrites, so the arrival decides | S-03/S-04 (tests separate them) |
 | A withdrawal leaves a peer's already-fetched tag in place | The peer does not re-push it and the remote is cleaned, but a materialise at that peer still works | J-06 (accepted) |
 | `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.hello`, `msg.push`, `stop` | C12, T2N |
-| `--wait`, `--capacity` and "start the daemon on join" are absent | `message send`, `site invite`, `join.Join` | S-06, M-08 |
-| `daemon status` reports no holdings | It returns site, workspace, version | D-04 |
+| `--capacity` and "start the daemon on join" are absent | `site invite`, `join.Join` | M-08 |
 
 ## 7. Execution
 

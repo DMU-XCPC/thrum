@@ -227,3 +227,65 @@ func TestTwoSitesClaimOneSiteName(t *testing.T) {
 	ts.w1.r().run("verify").ok(t, "verify w1")
 	ts.w2.r().run("verify").ok(t, "verify w2")
 }
+
+func TestHistoriesOnlyGrow(t *testing.T) {
+	ts := setupTwoSites(t)
+	lineRoot := strings.TrimSpace(runGit(t, ts.w1.root, "rev-list", "--max-parents=0", "HEAD"))
+	ledgerRoot := strings.TrimSpace(runGit(t, ts.w1.path("handoff"), "rev-list", "--max-parents=0", "HEAD"))
+	ts.w1.r().run("actor", "declare", "a4", "--kind", "agent").ok(t, "a4")
+	event := strings.TrimSpace(runGit(t, ts.w1.root, "rev-parse", "HEAD"))
+	ts.w1.r().run("sync").ok(t, "publish")
+	ts.w2.r().run("sync").ok(t, "fetch")
+
+	for _, c := range []struct{ dir, hash, what string }{
+		{ts.w1.root, lineRoot, "the line's first commit at w1"},
+		{ts.w2.root, lineRoot, "the line's first commit at w2"},
+		{ts.w1.path("handoff"), ledgerRoot, "the ledger's first commit at w1"},
+		{ts.w2.path("handoff"), ledgerRoot, "the ledger's first commit at w2"},
+		{ts.w1.root, event, "the event at w1"},
+		{ts.w2.root, event, "the event at w2"},
+	} {
+		if out, err := gitOutput(c.dir, "merge-base", "--is-ancestor", c.hash, "HEAD"); err != nil {
+			t.Fatalf("%s (%s) is not an ancestor: %v\n%s", c.what, c.hash, err, out)
+		}
+	}
+}
+
+func TestTwoSitesOpenOneJob(t *testing.T) {
+	ts := setupTwoSites(t)
+	ts.w1.r().run("job", "open", "j1", "--repo", "code", "--label", "up", "--goal", "from w1").ok(t, "w1")
+	ts.w2.r().run("job", "open", "j1", "--repo", "code", "--label", "two", "--goal", "from w2").ok(t, "w2")
+	ts.w1.r().run("sync").ok(t, "publish w1's brief")
+	settled := ts.w2.r().run("sync").ok(t, "settle")
+	if !strings.Contains(settled.stdout, "settled") {
+		t.Fatalf("the two briefs were not settled: %s", settled.stdout)
+	}
+	ts.w1.r().run("sync").ok(t, "w1 sync")
+	for _, w := range []*workspace{ts.w1, ts.w2} {
+		show := w.r().run("job", "show", "j1").ok(t, "show").stdout
+		if !strings.Contains(show, "from w1") {
+			t.Fatalf("%s kept the wrong brief:\n%s", w.root, show)
+		}
+	}
+	ts.w1.r().run("verify").ok(t, "verify w1")
+	ts.w2.r().run("verify").ok(t, "verify w2")
+}
+
+func TestInvitationFromANonCreator(t *testing.T) {
+	ts := setupTwoSites(t)
+	token := strings.TrimSpace(ts.w2.r().run("site", "invite", "s3", "--at", "127.0.0.1:0",
+		"--line", ts.origin, "--ledger", ts.ledger,
+		"--store", ts.w1.path("repos", "store.git"),
+		"--code", "code="+ts.w1.path("repos", "code.git")).ok(t, "invite").stdout)
+	ts.w2.r().run("sync").ok(t, "publish the invitation")
+	root := filepath.Join(t.TempDir(), "w3")
+	(&runner{t: t, root: root}).run("join", token, "--dir", root).ok(t, "join")
+	w3 := &workspace{t: t, root: root}
+	ts.w2.r().run("sync").ok(t, "the inviter sees the key")
+	ts.w1.r().run("sync").ok(t, "the creator learns through the sync")
+	w3.r().run("sync").ok(t, "the joined site syncs")
+	if show := ts.w1.r().run("site", "show", "s3").ok(t, "show"); !strings.Contains(show.stdout, "ssh-ed25519") {
+		t.Fatalf("site one did not learn the joined site's key: %s", show.stdout)
+	}
+	w3.r().run("verify").ok(t, "verify the joined site")
+}

@@ -24,6 +24,7 @@ func newMessageCmd() *cobra.Command {
 
 	var subject, bodyFile, job, replyTo, idFlag string
 	var attach []string
+	var wait time.Duration
 	send := &cobra.Command{
 		Use:   "send <actor>",
 		Short: "Push a message to the site that takes it",
@@ -41,7 +42,7 @@ func newMessageCmd() *cobra.Command {
 				}
 				files[filepath.Base(p)] = data
 			}
-			id, err := sendMessage(workspaceRoot(), args[0], subject, body, files, job, replyTo, idFlag)
+			id, err := sendMessage(workspaceRoot(), args[0], subject, body, files, job, replyTo, idFlag, wait)
 			if err != nil {
 				return err
 			}
@@ -55,6 +56,7 @@ func newMessageCmd() *cobra.Command {
 	send.Flags().StringVar(&job, "job", "", "the job it is about, if any")
 	send.Flags().StringVar(&replyTo, "reply-to", "", "the id it answers")
 	send.Flags().StringVar(&idFlag, "id", "", "reuse an id to make a retry idempotent")
+	send.Flags().DurationVar(&wait, "wait", 0, "retry for up to this long while the site is unreachable")
 
 	list := &cobra.Command{
 		Use:   "list",
@@ -136,7 +138,7 @@ func newMessageCmd() *cobra.Command {
 			if subject == "" {
 				subject = "re: " + msg.Subject
 			}
-			id, err := sendMessage(l, msg.From, subject, body, nil, msg.Job, msg.ID, "")
+			id, err := sendMessage(l, msg.From, subject, body, nil, msg.Job, msg.ID, "", 0)
 			if err != nil {
 				return err
 			}
@@ -164,7 +166,7 @@ func newMessageCmd() *cobra.Command {
 	return cmd
 }
 
-func sendMessage(l layout.Layout, to, subject string, body []byte, files map[string][]byte, job, replyTo, id string) (string, error) {
+func sendMessage(l layout.Layout, to, subject string, body []byte, files map[string][]byte, job, replyTo, id string, wait time.Duration) (string, error) {
 	from := actorName()
 	if _, ok, err := actors.Find(l, from); err != nil {
 		return "", err
@@ -197,7 +199,9 @@ func sendMessage(l layout.Layout, to, subject string, body []byte, files map[str
 		Sent:    time.Now().UTC().Format(format.RFC3339UTC),
 		Subject: subject, ReplyTo: replyTo, Job: job,
 	}
-	for attempt := 0; attempt < 2; attempt++ {
+	deadline := time.Now().Add(wait)
+	redirects := 0
+	for {
 		var err error
 		if site == actors.Site(l) {
 			err = messages.Send(l, msg, body, files)
@@ -211,14 +215,18 @@ func sendMessage(l layout.Layout, to, subject string, body []byte, files map[str
 			}
 		}
 		var notHere *daemon.NotHere
-		if errors.As(err, &notHere) && notHere.Site != "" && notHere.Site != site {
+		if errors.As(err, &notHere) && notHere.Site != "" && notHere.Site != site && redirects < 2 {
+			redirects++
 			site = notHere.Site
 			_ = actors.SetPlace(l, to, site, time.Now())
 			continue
 		}
+		if wait > 0 && time.Now().Before(deadline) {
+			time.Sleep(250 * time.Millisecond)
+			continue
+		}
 		return "", err
 	}
-	return "", fmt.Errorf("where %q is could not be established", to)
 }
 
 // askPlace asks this site's daemon, which asks the peers.

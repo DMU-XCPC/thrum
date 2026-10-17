@@ -140,3 +140,25 @@ func freePort(t *testing.T) int {
 	defer ln.Close()
 	return ln.Addr().(*net.TCPAddr).Port
 }
+
+func TestSendWaitsForTheSite(t *testing.T) {
+	ts := setupTwoSites(t)
+	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "reach")
+	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+	ts.w2.r().run("sync").ok(t, "sync a2")
+	ts.w1.r().run("sync").ok(t, "w1 sync")
+
+	done := make(chan result, 1)
+	go func() {
+		done <- ts.w2.r().as("a2").run("message", "send", "a1",
+			"--subject", "waited", "--wait", "5s")
+	}()
+	time.Sleep(700 * time.Millisecond)
+	startDaemon(t, ts.w1, p1)
+	res := <-done
+	res.ok(t, "the send waited for the site")
+	if mail := ts.w1.r().as("a1").run("message", "list").ok(t, "mail"); !strings.Contains(mail.stdout, "waited") {
+		t.Fatalf("the message did not arrive: %s", mail.stdout)
+	}
+}

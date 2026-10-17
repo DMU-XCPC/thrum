@@ -42,8 +42,8 @@ func newDaemonCmd() *cobra.Command {
 			if err := json.Unmarshal(resp.Data, &data); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "site      %v\nworkspace %v\nversion   %v\n",
-				data["site"], data["workspace"], data["version"])
+			fmt.Fprintf(cmd.OutOrStdout(), "site      %v\nworkspace %v\nversion   %v\nheld      %v\n",
+				data["site"], data["workspace"], data["version"], data["held"])
 			return nil
 		},
 	}

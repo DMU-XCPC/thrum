@@ -283,6 +283,7 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 	case "site.hello":
 		return payload(map[string]any{
 			"workspace": s.workspace, "site": s.site, "version": protocolVersion,
+			"held": held(s.l),
 		})
 	case "actor.where":
 		var args actorArgs
@@ -481,4 +482,29 @@ func loadKey(l layout.Layout) (ed25519.PrivateKey, error) {
 		return nil, fmt.Errorf("%s is not a site key seed", l.PrivateKey())
 	}
 	return ed25519.NewKeyFromSeed(seed), nil
+}
+
+// held is how many messages this site is holding, which is what `daemon status`
+// reports besides what it is.
+func held(l layout.Layout) int {
+	dirs, err := os.ReadDir(l.Mailboxes())
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, d := range dirs {
+		if !d.IsDir() {
+			continue
+		}
+		files, err := os.ReadDir(filepath.Join(l.Mailboxes(), d.Name()))
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if !f.IsDir() && strings.HasSuffix(f.Name(), ".md") {
+				n++
+			}
+		}
+	}
+	return n
 }
