@@ -49,9 +49,15 @@ func (l Layout) Archive() string       { return filepath.Join(l.Doc(), "archive"
 func (l Layout) DocTemplates() string  { return filepath.Join(l.Doc(), "template") }
 func (l Layout) Assets() string        { return filepath.Join(l.Doc(), "asset") }
 
-func (l Layout) Actor(name string) string    { return filepath.Join(l.Actors(), name+".yaml") }
+func (l Layout) Actor(name string) string { return filepath.Join(l.Actors(), name+".yaml") }
+func (l Layout) ArchivedActor(name string) string {
+	return filepath.Join(l.Archive(), "actor", name+".yaml")
+}
 func (l Layout) Site(name string) string     { return filepath.Join(l.Sites(), name+".yaml") }
 func (l Layout) RepoDecl(name string) string { return filepath.Join(l.RepoDecls(), name+".yaml") }
+func (l Layout) ArchivedRepo(name string) string {
+	return filepath.Join(l.Archive(), "repo", name+".yaml")
+}
 func (l Layout) WorktreeDecl(label string) string {
 	return filepath.Join(l.WorktreeDecls(), label+".yaml")
 }

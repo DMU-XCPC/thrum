@@ -41,7 +41,7 @@ type repoDecl struct {
 
 // Create instantiates a workspace: the line, the ledger, one bare repository per
 // declared code repository, the store, the runtime directories, and the skeleton.
-func Create(opts CreateOptions) error {
+func Create(opts CreateOptions) (err error) {
 	if !format.ValidSlug(opts.Site) {
 		return fmt.Errorf("%q is not a site name: a site name is a slug", opts.Site)
 	}
@@ -54,13 +54,24 @@ func Create(opts CreateOptions) error {
 			return fmt.Errorf("repository %q is named twice", c.Name)
 		}
 		seen[c.Name] = true
+		if c.Path != "" && !gitx.IsRepo(c.Path) {
+			return fmt.Errorf("code source %s is not a git repository", c.Path)
+		}
 	}
 
-	if entries, err := os.ReadDir(opts.Root); err == nil && len(entries) > 0 {
+	entries, statErr := os.ReadDir(opts.Root)
+	switch {
+	case statErr == nil && len(entries) > 0:
 		return fmt.Errorf("%s already exists and is not empty", opts.Root)
-	} else if err != nil && !os.IsNotExist(err) {
-		return err
+	case statErr != nil && !os.IsNotExist(statErr):
+		return statErr
 	}
+	created := os.IsNotExist(statErr)
+	defer func() {
+		if err != nil && created {
+			_ = os.RemoveAll(opts.Root)
+		}
+	}()
 	if err := os.MkdirAll(opts.Root, 0o755); err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ const version = "0.1.0"
 var (
 	rootFlag  string
 	actorFlag string
+	jsonFlag  bool
 )
 
 func main() {
@@ -35,7 +36,8 @@ func newRootCmd() *cobra.Command {
 	}
 	root.PersistentFlags().StringVar(&rootFlag, "root", "", "the workspace (default $THRUM_ROOT, then the current directory)")
 	root.PersistentFlags().StringVar(&actorFlag, "actor", "", "the actor name (default $THRUM_ACTOR, then $USER)")
-	root.AddCommand(newCreateCmd(), newVersionCmd())
+	root.PersistentFlags().BoolVar(&jsonFlag, "json", false, "print the answer as machine-readable data")
+	root.AddCommand(newCreateCmd(), newVersionCmd(), newActorCmd(), newRepoCmd())
 	return root
 }
 
