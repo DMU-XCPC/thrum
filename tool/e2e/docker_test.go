@@ -193,6 +193,50 @@ func TestDockerMultiSite(t *testing.T) {
 	if v := thrumIn(t, siteB, "thrum", "--root", "/w", "verify"); !strings.Contains(v, "ok") {
 		t.Fatalf("site two does not verify: %s", v)
 	}
+
+	// A partition: B is cut off. Local work continues, a message to B cannot be
+	// placed, and both histories converge when the link returns.
+	dockerOK(t, "network", "disconnect", network, siteB)
+	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "part-a", "--about", "while apart")
+	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "repo", "add", "part-b", "--about", "while apart")
+	if out, err := dockerTry("exec", siteB, "thrum", "--root", "/w", "sync"); err == nil {
+		t.Fatalf("site two synced while disconnected: %s", out)
+	}
+	if out, err := dockerTry("exec", siteA, "thrum", "--root", "/w", "--actor", "a1",
+		"message", "send", "a2", "--subject", "during the partition"); err == nil {
+		t.Fatalf("a message crossed a partition: %s", out)
+	}
+	dockerOK(t, "network", "connect", network, siteB)
+	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
+	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
+	for _, site := range []string{siteA, siteB} {
+		list := thrumIn(t, site, "thrum", "--root", "/w", "repo", "list")
+		if !strings.Contains(list, "part-a") || !strings.Contains(list, "part-b") {
+			t.Fatalf("%s did not converge after the partition: %s", site, list)
+		}
+	}
+	if v := thrumIn(t, siteB, "thrum", "--root", "/w", "verify"); !strings.Contains(v, "ok") {
+		t.Fatalf("site two does not verify after the partition: %s", v)
+	}
+
+	// The hub is down: recording and reading continue, sync fails, then it heals.
+	dockerOK(t, "stop", hub)
+	thrumIn(t, siteA, "thrum", "--root", "/w", "repo", "add", "part-c", "--about", "while the hub is down")
+	if out, err := dockerTry("exec", siteA, "thrum", "--root", "/w", "sync"); err == nil {
+		t.Fatalf("site one synced with the hub down: %s", out)
+	}
+	dockerOK(t, "start", hub)
+	dockerOK(t, "exec", "-d", hub, "/usr/local/bin/thrum-hub", "-root", "/srv", "-listen", "0.0.0.0:8080")
+	waitFor(t, 10*time.Second, "the hub to come back", func() bool {
+		_, err := dockerTry("exec", siteA, "sh", "-c", "git ls-remote http://"+hub+":8080/line.git")
+		return err == nil
+	})
+	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
+	if list := thrumIn(t, siteB, "thrum", "--root", "/w", "repo", "list"); !strings.Contains(list, "part-c") {
+		t.Fatalf("site two did not see the record made while the hub was down: %s", list)
+	}
 }
 
 func dockerTry(args ...string) (string, error) {

@@ -114,15 +114,15 @@ keeps the boilerplate out of every test.
 | --- | --- | --- | --- | --- |
 | H-01 | P0 | A writes actor a1, B writes actor a2 while apart; both sync | Both sites see both; no conflict | partial (local two-site only) |
 | H-02 | P0 | Two sites declare the same repository/actor while apart | Earlier claim wins; loser named; both converge | covered (`TestSettlement`) |
-| H-03 | P0 | Three sites claim one name, syncing in three different orders | The same winner at all three | gap |
+| H-03 | P0 | Three sites claim one name, syncing in three different orders | The same winner at all three | covered (`TestThreeSiteClaim`) |
 | H-04 | P1 | Three sites write disjoint events, sync pairwise in different orders | Identical trees at all three | gap |
-| H-05 | P0 | A and B record handoffs for the same job while apart | Both files survive; no conflict | gap |
+| H-05 | P0 | A and B record handoffs for the same job while apart | Both files survive; no conflict | covered (`TestConcurrentLedgerHandoffs`) |
 | H-06 | P0 | A and B edit the same `doc/topic/...` file | Sync stops, names the file, and leaves both histories intact | partial (exchange aborts; verify it names the path) |
 | H-07 | P1 | A and B push at the same time | One rejected push, one retry, no lost event | gap |
 | H-08 | P1 | After every sync, the histories only grow | No force-push, no rewrite; ancestry holds | gap |
 | H-09 | P1 | A clock is +10m, B is −10m; B claims a name later in real time but earlier by commit time | The design's monotonic clock keeps A; the current commit-time rule may pick B | **gap**: the rule is (commit time, hash) |
 | H-10 | P2 | 1,000 events, then sync | Bounded time, no corruption | gap |
-| H-11 | P0 | B is partitioned; A and B both record; heal and sync | Both converge; nothing lost | gap |
+| H-11 | P0 | B is partitioned; A and B both record; heal and sync | Both converge; nothing lost | covered (Docker partition) |
 | H-12 | P1 | The hub refuses one push | One retry succeeds; no duplicate event | gap |
 
 ### C. Messages and placement
@@ -177,8 +177,8 @@ keeps the boilerplate out of every test.
 
 | ID | Pri | Scenario | Expected | Status |
 | --- | --- | --- | --- | --- |
-| R-01 | P0 | Partition A/B; both record; heal; sync | Both converge; messages that needed the cut fail and say so | gap |
-| R-02 | P0 | Stop the hub; keep working locally; restart | Local commands work; sync fails cleanly; then converges | gap |
+| R-01 | P0 | Partition A/B; both record; heal; sync | Both converge; messages that needed the cut fail and say so | covered (Docker partition) |
+| R-02 | P0 | Stop the hub; keep working locally; restart | Local commands work; sync fails cleanly; then converges | covered (Docker hub down) |
 | R-03 | P1 | Kill the daemon mid-push | No partial mailbox entry; a retry works | gap |
 | R-04 | P1 | `docker restart` a site | Workspace survives; daemon restarts; mailbox intact | gap |
 | R-05 | P1 | Simultaneous pushes | One retry; no loss | gap |
@@ -226,6 +226,7 @@ named in §4; the rows are gone below.
 | --- | --- | --- |
 | Placement is not asked | `sendMessage` reads `var/location.yaml` and the actor's `home`; there is no `actor.where` call and no "not here" retry | S-03, S-04 |
 | Settlement uses commit time | `claimOf` reads `%ct` and the hash; the design asks for a monotonic clock, then site, then event id | H-09 |
+| Two stretches starting in the same second share a name | The handoff name is the started stamp, to the second; the test separates them with a sleep | H-05 |
 | The protocol version is not checked | `auth` verifies the workspace, the site and the signature; `hello.Version` is ignored | D-05 |
 | `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.here`, `msg.push`, `stop` | C12, T2N |
 | `actor.hello` is spelled `actor.here` | `dispatch` | D-01 |

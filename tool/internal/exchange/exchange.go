@@ -49,11 +49,17 @@ func Run(l layout.Layout) ([]Resolution, error) {
 		if err != nil {
 			return settled, err
 		}
-		if strings.TrimSpace(remotes) == "" {
+		names := strings.Fields(remotes)
+		if len(names) == 0 {
 			continue
 		}
-		if err := gitx.OK(dir, "fetch", "--all", "--prune"); err != nil {
-			return settled, fmt.Errorf("the repository %s: %w", d.Repo, err)
+		// Fetch every branch explicitly: a bare clone does not always carry a fetch
+		// refspec, and a handoff may name a commit on a branch that is not HEAD.
+		for _, remote := range names {
+			refspec := "+refs/heads/*:refs/remotes/" + remote + "/*"
+			if err := gitx.OK(dir, "fetch", "--prune", remote, refspec); err != nil {
+				return settled, fmt.Errorf("the repository %s: %w", d.Repo, err)
+			}
 		}
 	}
 	// The store is a repository of tags: fetch what peers published, and publish
@@ -192,7 +198,7 @@ func settle(dir string) ([]Resolution, error) {
 }
 
 func claimOf(dir, rev, path string) (claim, error) {
-	out, err := gitx.Run(dir, "log", "-1", "--format=%ct %H", rev, "--", path)
+	out, err := gitx.Run(dir, "log", "-1", "--diff-filter=A", "--format=%ct %H", rev, "--", path)
 	if err != nil {
 		return claim{}, err
 	}
