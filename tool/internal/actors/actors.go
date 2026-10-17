@@ -120,14 +120,26 @@ func Hello(l layout.Layout, name string, now time.Time) error {
 	} else if !ok {
 		return fmt.Errorf("actor %q is not declared", name)
 	}
+	return SetPlace(l, name, Site(l), now)
+}
+
+// SetPlace caches where a name was last heard. It is an address, not a claim that
+// the actor is working.
+func SetPlace(l layout.Layout, name, site string, now time.Time) error {
+	return SetPlaceAt(l, name, site, now.UTC().Format(format.RFC3339UTC))
+}
+
+// SetPlaceAt records a place only if it is at least as new as the one already
+// known, so a late broadcast cannot undo a later hello.
+func SetPlaceAt(l layout.Layout, name, site, heard string) error {
 	places := Places(l)
 	if places.Actors == nil {
 		places.Actors = map[string]records.Place{}
 	}
-	places.Actors[name] = records.Place{
-		Site:  Site(l),
-		Heard: now.UTC().Format(format.RFC3339UTC),
+	if existing, ok := places.Actors[name]; ok && existing.Heard > heard {
+		return nil
 	}
+	places.Actors[name] = records.Place{Site: site, Heard: heard}
 	if err := os.MkdirAll(l.Var(), 0o755); err != nil {
 		return err
 	}

@@ -40,6 +40,7 @@ type Request struct {
 type Response struct {
 	OK    bool            `json:"ok"`
 	Error string          `json:"error,omitempty"`
+	Code  string          `json:"code,omitempty"`
 	Data  json.RawMessage `json:"data,omitempty"`
 }
 
@@ -184,28 +185,31 @@ func (s *server) accept(ln net.Listener, remote bool) {
 			defer conn.Close()
 			_ = conn.SetDeadline(time.Now().Add(10 * time.Minute))
 			br := bufio.NewReader(conn)
+			caller := s.site
 			if remote {
-				if err := s.auth(conn, br); err != nil {
+				site, err := s.auth(conn, br)
+				if err != nil {
 					return
 				}
+				caller = site
 			}
-			s.serve(conn, br, remote)
+			s.serve(conn, br, remote, caller)
 		}()
 	}
 }
 
-func (s *server) auth(conn net.Conn, br *bufio.Reader) error {
+func (s *server) auth(conn net.Conn, br *bufio.Reader) (string, error) {
 	dec := json.NewDecoder(br)
 	enc := json.NewEncoder(conn)
-	refuse := func(format string, args ...any) error {
+	refuse := func(format string, args ...any) (string, error) {
 		msg := fmt.Sprintf(format, args...)
 		_ = enc.Encode(greeting{Error: msg})
-		return fmt.Errorf("%s", msg)
+		return "", fmt.Errorf("%s", msg)
 	}
 
 	var hello greeting
 	if err := dec.Decode(&hello); err != nil {
-		return err
+		return "", err
 	}
 	if hello.Workspace != s.workspace {
 		return refuse("that site is in a different workspace")
@@ -236,19 +240,22 @@ func (s *server) auth(conn net.Conn, br *bufio.Reader) error {
 		Workspace: s.workspace, Site: s.site, Version: protocolVersion,
 		Nonce: serverNonce, Signature: sign(key, hello.Nonce),
 	}); err != nil {
-		return err
+		return "", err
 	}
 	var proof greeting
 	if err := dec.Decode(&proof); err != nil {
-		return err
+		return "", err
 	}
 	if !verify(pub, serverNonce, proof.Signature) {
 		return refuse("site %q did not prove its key", hello.Site)
 	}
-	return enc.Encode(greeting{})
+	if err := enc.Encode(greeting{}); err != nil {
+		return "", err
+	}
+	return hello.Site, nil
 }
 
-func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool) {
+func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool, caller string) {
 	dec := json.NewDecoder(br)
 	enc := json.NewEncoder(conn)
 	for {
@@ -256,12 +263,13 @@ func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool) {
 		if err := dec.Decode(&req); err != nil {
 			return
 		}
-		_ = enc.Encode(s.dispatch(req, remote))
+		_ = enc.Encode(s.dispatch(req, remote, caller))
 	}
 }
 
 type actorArgs struct {
 	Actor string `json:"actor"`
+	Heard string `json:"heard,omitempty"`
 }
 
 type pushArgs struct {
@@ -270,7 +278,7 @@ type pushArgs struct {
 	Files   map[string]string `json:"files,omitempty"`
 }
 
-func (s *server) dispatch(req Request, remote bool) Response {
+func (s *server) dispatch(req Request, remote bool, caller string) Response {
 	switch req.Verb {
 	case "site.hello":
 		return payload(map[string]any{
@@ -281,24 +289,77 @@ func (s *server) dispatch(req Request, remote bool) Response {
 		if err := json.Unmarshal(req.Args, &args); err != nil {
 			return fail(err)
 		}
-		place, ok := actors.Places(s.l).Actors[args.Actor]
-		if !ok {
+		if place, ok := actors.Places(s.l).Actors[args.Actor]; ok && place.Site != "" {
+			return payload(map[string]any{"here": true, "site": place.Site, "heard": place.Heard})
+		}
+		if remote {
 			return payload(map[string]any{"here": false})
 		}
-		return payload(map[string]any{"here": true, "site": place.Site, "heard": place.Heard})
-	case "actor.here":
+		// Ask the peers, and keep the latest answer. A peer answers from its own
+		// table; it does not ask further, so the question cannot loop.
+		var bestSite, bestHeard string
+		for peer := range rosterOf(s.l) {
+			if peer == s.site {
+				continue
+			}
+			c, err := Dial(s.l, peer)
+			if err != nil {
+				continue
+			}
+			resp, err := c.Do(Request{Verb: "actor.where", Args: req.Args})
+			_ = c.Close()
+			if err != nil {
+				continue
+			}
+			var d struct {
+				Here  bool   `json:"here"`
+				Site  string `json:"site"`
+				Heard string `json:"heard"`
+			}
+			if err := json.Unmarshal(resp.Data, &d); err != nil {
+				continue
+			}
+			if d.Here && d.Site != "" && d.Heard > bestHeard {
+				bestSite, bestHeard = d.Site, d.Heard
+			}
+		}
+		if bestSite != "" {
+			_ = actors.SetPlaceAt(s.l, args.Actor, bestSite, bestHeard)
+			return payload(map[string]any{"here": true, "site": bestSite, "heard": bestHeard})
+		}
+		return payload(map[string]any{"here": false})
+	case "actor.hello":
 		var args actorArgs
 		if err := json.Unmarshal(req.Args, &args); err != nil {
 			return fail(err)
 		}
-		if err := actors.Hello(s.l, args.Actor, time.Now()); err != nil {
+		site := s.site
+		if remote {
+			site = caller
+		}
+		heard := args.Heard
+		if heard == "" {
+			heard = time.Now().UTC().Format(format.RFC3339UTC)
+		}
+		if err := actors.SetPlaceAt(s.l, args.Actor, site, heard); err != nil {
 			return fail(err)
+		}
+		if !remote {
+			go s.broadcastPlace(args)
 		}
 		return payload(map[string]bool{"ok": true})
 	case "msg.push":
 		var args pushArgs
 		if err := json.Unmarshal(req.Args, &args); err != nil {
 			return fail(err)
+		}
+		if place, ok := actors.Places(s.l).Actors[args.Message.To]; ok && place.Site != "" && place.Site != s.site {
+			data, _ := json.Marshal(map[string]string{"site": place.Site})
+			return Response{
+				Code:  "not_here",
+				Error: fmt.Sprintf("%s is at %s, not here", args.Message.To, place.Site),
+				Data:  data,
+			}
 		}
 		body, err := base64.StdEncoding.DecodeString(args.Body)
 		if err != nil {
@@ -327,6 +388,26 @@ func (s *server) dispatch(req Request, remote bool) Response {
 		return Response{OK: true}
 	default:
 		return fail(fmt.Errorf("unknown verb %q", req.Verb))
+	}
+}
+
+// broadcastPlace tells the peers where a name just said hello. It is best effort:
+// a peer that cannot be reached answers on the next hello or the next question.
+func (s *server) broadcastPlace(actor actorArgs) {
+	args, err := json.Marshal(actor)
+	if err != nil {
+		return
+	}
+	for peer := range rosterOf(s.l) {
+		if peer == s.site {
+			continue
+		}
+		c, err := Dial(s.l, peer)
+		if err != nil {
+			continue
+		}
+		_, _ = c.Do(Request{Verb: "actor.hello", Args: args})
+		_ = c.Close()
 	}
 }
 

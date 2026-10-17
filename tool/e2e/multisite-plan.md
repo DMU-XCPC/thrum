@@ -131,8 +131,8 @@ keeps the boilerplate out of every test.
 | --- | --- | --- | --- | --- |
 | S-01 | P0 | Local send, list, read, reply, purge | Delivered and read | covered (`TestMessages`) |
 | S-02 | P0 | Cross-site send through the daemons | Delivered and read | covered (`TestCrossSiteMessage`, Docker) |
-| S-03 | P0 | a1 moves from s1 to s2; s1 still has the old address; send to s1 | s1 says "not here", asks/corrects, delivers to s2; at most one failed attempt | **gap**: the sender reads its own table and home, never asks a peer, never retries |
-| S-04 | P0 | `actor hello` at s2 after the move | Subsequent sends from s1 go to s2 | **gap**: hello is local-only |
+| S-03 | P0 | a1 moves from s1 to s2; s1 still has the old address; send to s1 | s1 says "not here", asks/corrects, delivers to s2; at most one failed attempt | covered (`TestNotHereRetries`, `TestHelloMovesMail`) |
+| S-04 | P0 | `actor hello` at s2 after the move | Subsequent sends from s1 go to s2 | covered (`TestHelloMovesMail`) |
 | S-05 | P0 | Deliver, restart the daemon, list | The message is still there | covered (`TestMessagesSurviveADaemonRestart`) |
 | S-06 | P0 | Kill s2's daemon; send; restart; list | The send fails; nothing appears later | covered (`TestSenderDoesNotQueue`) |
 | S-07 | P1 | Kill the receiver mid-push of a large attachment | No partial message; a resend arrives whole | gap |
@@ -224,11 +224,9 @@ named in §4; the rows are gone below.
 
 | Gap | Evidence | Scenario |
 | --- | --- | --- |
-| Placement is not asked | `sendMessage` reads `var/location.yaml` and the actor's `home`; there is no `actor.where` call and no "not here" retry | S-03, S-04 |
 | Settlement uses commit time | `claimOf` reads `%ct` and the hash; the design asks for a monotonic clock, then site, then event id | H-09 |
 | Two stretches starting in the same second share a name | The handoff name is the started stamp, to the second; the test separates them with a sleep | H-05 |
-| `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.here`, `msg.push`, `stop` | C12, T2N |
-| `actor.hello` is spelled `actor.here` | `dispatch` | D-01 |
+| `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.hello`, `msg.push`, `stop` | C12, T2N |
 | `--wait`, `--capacity` and "start the daemon on join" are absent | `message send`, `site invite`, `join.Join` | S-06, M-08 |
 | `daemon status` reports no holdings | It returns site, workspace, version | D-04 |
 

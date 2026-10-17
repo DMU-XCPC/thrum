@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/actors"
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
+	"github.com/multiagentworkspace/thrum/tool/internal/format"
 )
 
 type actorView struct {
@@ -57,9 +59,17 @@ func newActorCmd() *cobra.Command {
 			if name == "" {
 				name = actorName()
 			}
-			if err := actors.Hello(workspaceRoot(), name, time.Now()); err != nil {
+			l := workspaceRoot()
+			now := time.Now().UTC()
+			if err := actors.Hello(l, name, now); err != nil {
 				return err
 			}
+			// The daemon tells the peers; without one, the local table is all there is.
+			helloArgs, _ := json.Marshal(struct {
+				Actor string `json:"actor"`
+				Heard string `json:"heard"`
+			}{name, now.Format(format.RFC3339UTC)})
+			_, _ = daemon.LocalDo(l, daemon.Request{Verb: "actor.hello", Args: helloArgs})
 			fmt.Fprintf(cmd.OutOrStdout(), "%s is here\n", name)
 			return nil
 		},

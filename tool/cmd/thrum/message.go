@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -181,6 +182,8 @@ func sendMessage(l layout.Layout, to, subject string, body []byte, files map[str
 	site := decl.Home
 	if p, ok := actors.Places(l).Actors[to]; ok && p.Site != "" {
 		site = p.Site
+	} else if placed, err := askPlace(l, to); err == nil && placed != "" {
+		site = placed
 	}
 	if site == "" {
 		return "", fmt.Errorf("where %q is cannot be established", to)
@@ -194,19 +197,53 @@ func sendMessage(l layout.Layout, to, subject string, body []byte, files map[str
 		Sent:    time.Now().UTC().Format(format.RFC3339UTC),
 		Subject: subject, ReplyTo: replyTo, Job: job,
 	}
-	if site == actors.Site(l) {
-		if err := messages.Send(l, msg, body, files); err != nil {
-			if errors.Is(err, messages.ErrExists) {
+	for attempt := 0; attempt < 2; attempt++ {
+		var err error
+		if site == actors.Site(l) {
+			err = messages.Send(l, msg, body, files)
+			if err == nil || errors.Is(err, messages.ErrExists) {
 				return msg.ID, nil
 			}
-			return "", err
+		} else {
+			err = daemon.Push(l, site, msg, body, files)
+			if err == nil {
+				return msg.ID, nil
+			}
 		}
-		return msg.ID, nil
-	}
-	if err := daemon.Push(l, site, msg, body, files); err != nil {
+		var notHere *daemon.NotHere
+		if errors.As(err, &notHere) && notHere.Site != "" && notHere.Site != site {
+			site = notHere.Site
+			_ = actors.SetPlace(l, to, site, time.Now())
+			continue
+		}
 		return "", err
 	}
-	return msg.ID, nil
+	return "", fmt.Errorf("where %q is could not be established", to)
+}
+
+// askPlace asks this site's daemon, which asks the peers.
+func askPlace(l layout.Layout, to string) (string, error) {
+	args, err := json.Marshal(struct {
+		Actor string `json:"actor"`
+	}{to})
+	if err != nil {
+		return "", err
+	}
+	resp, err := daemon.LocalDo(l, daemon.Request{Verb: "actor.where", Args: args})
+	if err != nil {
+		return "", err
+	}
+	var d struct {
+		Here bool   `json:"here"`
+		Site string `json:"site"`
+	}
+	if err := json.Unmarshal(resp.Data, &d); err != nil {
+		return "", err
+	}
+	if d.Here {
+		return d.Site, nil
+	}
+	return "", nil
 }
 
 func readBody(file string) ([]byte, error) {

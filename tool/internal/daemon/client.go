@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -18,6 +19,22 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/records"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
+
+// Refusal is a request the daemon declined, with a code a caller can act on.
+type Refusal struct {
+	Code    string
+	Message string
+	Data    json.RawMessage
+}
+
+func (r *Refusal) Error() string { return r.Message }
+
+// NotHere means the receiving site knows the actor is elsewhere.
+type NotHere struct {
+	Site string
+}
+
+func (n *NotHere) Error() string { return "not here: " + n.Site }
 
 // Client is a connection to one peer's daemon.
 type Client struct {
@@ -36,7 +53,7 @@ func (c *Client) Do(req Request) (Response, error) {
 		return Response{}, err
 	}
 	if !resp.OK {
-		return resp, fmt.Errorf("%s", resp.Error)
+		return resp, &Refusal{Code: resp.Code, Message: resp.Error, Data: resp.Data}
 	}
 	return resp, nil
 }
@@ -139,8 +156,20 @@ func Push(l layout.Layout, site string, msg records.Message, body []byte, files 
 	if err != nil {
 		return err
 	}
-	_, err = c.Do(Request{Verb: "msg.push", Args: args})
-	return err
+	resp, err := c.Do(Request{Verb: "msg.push", Args: args})
+	if err != nil {
+		var refusal *Refusal
+		if errors.As(err, &refusal) && refusal.Code == "not_here" {
+			var data struct {
+				Site string `json:"site"`
+			}
+			_ = json.Unmarshal(refusal.Data, &data)
+			return &NotHere{Site: data.Site}
+		}
+		return err
+	}
+	_ = resp
+	return nil
 }
 
 // LocalDo asks this machine's daemon. A missing socket is not an error the caller has
@@ -159,7 +188,7 @@ func LocalDo(l layout.Layout, req Request) (Response, error) {
 		return Response{}, err
 	}
 	if !resp.OK {
-		return resp, fmt.Errorf("%s", resp.Error)
+		return resp, &Refusal{Code: resp.Code, Message: resp.Error, Data: resp.Data}
 	}
 	return resp, nil
 }
