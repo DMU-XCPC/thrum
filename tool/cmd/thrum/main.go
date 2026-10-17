@@ -38,7 +38,8 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&actorFlag, "actor", "", "the actor name (default $THRUM_ACTOR, then $USER)")
 	root.PersistentFlags().BoolVar(&jsonFlag, "json", false, "print the answer as machine-readable data")
 	root.AddCommand(newCreateCmd(), newVersionCmd(), newActorCmd(), newRepoCmd(),
-		newJobCmd(), newWorktreeCmd(), newWorkCmd(), newWhereCmd(), newEnvCmd())
+		newJobCmd(), newWorktreeCmd(), newWorkCmd(), newWhereCmd(), newEnvCmd(),
+		newVerifyCmd(), newStatusCmd(), newCommitCmd(), newRetireCmd())
 	return root
 }
 

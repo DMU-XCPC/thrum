@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/actors"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
@@ -78,6 +79,13 @@ func Open(l layout.Layout, o OpenOptions, now time.Time) (string, error) {
 	} else if !ok {
 		return "", fmt.Errorf("no repository named %q", o.Repo)
 	}
+	if o.Owner != "" {
+		if _, ok, err := actors.Find(l, o.Owner); err != nil {
+			return "", err
+		} else if !ok {
+			return "", fmt.Errorf("owner %q is not a declared actor", o.Owner)
+		}
+	}
 
 	if _, err := worktrees.Declare(l, o.Label, o.Repo, o.Purpose, o.Ephemeral); err != nil {
 		return "", err
@@ -112,6 +120,11 @@ func Handoff(l layout.Layout, o HandoffOptions, agent string, now time.Time) err
 	}
 	if !ok {
 		return fmt.Errorf("no job named %q", o.Job)
+	}
+	if _, ok, err := actors.Find(l, agent); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("actor %q is not declared; declare it first", agent)
 	}
 	if b.Status != "active" {
 		return fmt.Errorf("job %q is %s, so no stretch of work is recorded for it", o.Job, b.Status)
