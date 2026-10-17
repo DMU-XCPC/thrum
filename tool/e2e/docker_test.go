@@ -237,6 +237,19 @@ func TestDockerMultiSite(t *testing.T) {
 	if list := thrumIn(t, siteB, "thrum", "--root", "/w", "repo", "list"); !strings.Contains(list, "part-c") {
 		t.Fatalf("site two did not see the record made while the hub was down: %s", list)
 	}
+
+	// A restart: the workspace survives; the daemon must be started again, and the
+	// lock from the process the restart killed must not stop it.
+	dockerOK(t, "restart", siteB)
+	dockerOK(t, "exec", "-d", siteB, "sh", "-c",
+		"thrum --root /w daemon run --listen 0.0.0.0:7702 >/tmp/daemon.log 2>&1")
+	waitFor(t, 10*time.Second, "the restarted daemon", func() bool {
+		_, err := dockerTry("exec", siteB, "thrum", "--root", "/w", "daemon", "status")
+		return err == nil
+	})
+	if v := thrumIn(t, siteB, "thrum", "--root", "/w", "verify"); !strings.Contains(v, "ok") {
+		t.Fatalf("site two does not verify after a restart: %s", v)
+	}
 }
 
 func dockerTry(args ...string) (string, error) {

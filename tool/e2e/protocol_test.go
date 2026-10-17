@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -137,7 +138,13 @@ func TestUnknownVerbAndGarbage(t *testing.T) {
 	}
 	_, _ = conn.Write([]byte("this is not json\n"))
 	_ = conn.Close()
-	ts.w1.r().run("daemon", "status").ok(t, "the daemon survived garbage")
+	big, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = big.Write(bytes.Repeat([]byte("x"), 1<<20))
+	_ = big.Close()
+	ts.w1.r().run("daemon", "status").ok(t, "the daemon survived an oversized frame")
 }
 
 func TestKeyRotationTakesEffect(t *testing.T) {
@@ -165,4 +172,19 @@ func TestRevokedKeyIsRefused(t *testing.T) {
 		fails(t, "the revoked key", "no key")
 
 	ts.w1.r().run("daemon", "status").ok(t, "the daemon survived the revoked key")
+}
+
+func TestManyConnections(t *testing.T) {
+	ts := setupTwoSites(t)
+	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	ts.w2.r().run("site", "reach", "s1", "--at", addr).ok(t, "reach")
+	startDaemon(t, ts.w1, addr)
+	for i := 0; i < 100; i++ {
+		c, err := daemon.Dial(layout.New(ts.w2.root), "s1")
+		if err != nil {
+			t.Fatalf("dial %d: %v", i, err)
+		}
+		_ = c.Close()
+	}
+	ts.w1.r().run("daemon", "status").ok(t, "the daemon survived the connections")
 }

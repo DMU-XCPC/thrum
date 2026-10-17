@@ -108,9 +108,6 @@ func One(dir string) ([]Resolution, error) {
 	if len(remotes) == 0 {
 		return nil, nil
 	}
-	if err := gitx.OK(dir, "fetch", "--all", "--prune"); err != nil {
-		return nil, err
-	}
 	branch, err := gitx.Run(dir, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
 		return nil, err
@@ -118,36 +115,47 @@ func One(dir string) ([]Resolution, error) {
 	branch = strings.TrimSpace(branch)
 
 	var settled []Resolution
-	for _, remote := range remotes {
-		ref := "refs/remotes/" + remote + "/" + branch
-		if _, err := gitx.Run(dir, "rev-parse", "--verify", "--quiet", ref); err != nil {
-			continue
-		}
-		identity := gitx.IdentityArgs(dir, "thrum")
-		args := append(append([]string{}, identity...), "merge", "--no-edit", remote+"/"+branch)
-		if err := gitx.OK(dir, args...); err != nil {
-			got, settleErr := settle(dir)
-			if settleErr != nil {
-				conflicts, _ := gitx.Run(dir, "diff", "--name-only", "--diff-filter=U")
-				_ = gitx.OK(dir, "merge", "--abort")
-				if names := strings.TrimSpace(conflicts); names != "" {
-					return settled, fmt.Errorf("the records do not go together: %s needs a person", names)
-				}
-				return settled, fmt.Errorf("the records do not go together: %v", err)
-			}
-			settled = append(settled, got...)
-		}
-	}
-	for _, remote := range remotes {
-		if err := gitx.OK(dir, "push", remote, branch); err != nil {
+	var pushErr error
+	// A push can lose a race with another site. Git's answer is one rejected push
+	// and one retry: fetch, merge again, and publish.
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := gitx.OK(dir, "fetch", "--all", "--prune"); err != nil {
 			return settled, err
 		}
+		for _, remote := range remotes {
+			ref := "refs/remotes/" + remote + "/" + branch
+			if _, err := gitx.Run(dir, "rev-parse", "--verify", "--quiet", ref); err != nil {
+				continue
+			}
+			identity := gitx.IdentityArgs(dir, "thrum")
+			args := append(append([]string{}, identity...), "merge", "--no-edit", remote+"/"+branch)
+			if err := gitx.OK(dir, args...); err != nil {
+				got, settleErr := settle(dir)
+				if settleErr != nil {
+					conflicts, _ := gitx.Run(dir, "diff", "--name-only", "--diff-filter=U")
+					_ = gitx.OK(dir, "merge", "--abort")
+					if names := strings.TrimSpace(conflicts); names != "" {
+						return settled, fmt.Errorf("the records do not go together: %s needs a person", names)
+					}
+					return settled, fmt.Errorf("the records do not go together: %v", err)
+				}
+				settled = append(settled, got...)
+			}
+		}
+		pushErr = nil
+		for _, remote := range remotes {
+			if err := gitx.OK(dir, "push", remote, branch); err != nil {
+				pushErr = err
+				break
+			}
+		}
+		if pushErr == nil {
+			return settled, nil
+		}
 	}
-	return settled, nil
+	return settled, fmt.Errorf("the records could not be published after a retry: %w", pushErr)
 }
 
-// A claim is ordered by the event's own clock, then the site, then the event id.
-// A commit without an event trailer falls back to its commit time.
 type claim struct {
 	clock int64
 	site  string

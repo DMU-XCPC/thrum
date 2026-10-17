@@ -184,3 +184,46 @@ func TestWorkingAnotherSitesJobIsRefused(t *testing.T) {
 	ts.w2.r().as("a2").run("work", "j1", "--label", "up2").
 		fails(t, "working another site's job", "is owned by")
 }
+
+func TestOrderIndependence(t *testing.T) {
+	ts := setupThreeSites(t)
+	ts.w1.r().run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	ts.w2.r().run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+	ts.w3.r().run("actor", "declare", "a3", "--kind", "agent").ok(t, "a3")
+	for _, w := range []*workspace{ts.w1, ts.w3, ts.w2, ts.w1, ts.w3, ts.w2} {
+		w.r().run("sync").ok(t, "sync")
+	}
+	trees := map[string]bool{}
+	for _, w := range []*workspace{ts.w1, ts.w2, ts.w3} {
+		trees[strings.TrimSpace(runGit(t, w.root, "rev-parse", "HEAD^{tree}"))] = true
+	}
+	if len(trees) != 1 {
+		t.Fatalf("the three sites ended with different trees: %v", trees)
+	}
+}
+
+func TestTwoSitesClaimOneSiteName(t *testing.T) {
+	ts := setupTwoSites(t)
+	invite := func(w *workspace) {
+		w.r().run("site", "invite", "s3", "--at", "127.0.0.1:0",
+			"--line", ts.origin, "--ledger", ts.ledger,
+			"--store", ts.w1.path("repos", "store.git"),
+			"--code", "code="+ts.w1.path("repos", "code.git")).ok(t, "invite s3")
+	}
+	invite(ts.w1)
+	ts.w1.r().run("sync").ok(t, "publish w1's invitation")
+	time.Sleep(1100 * time.Millisecond)
+	invite(ts.w2)
+	settled := ts.w2.r().run("sync").ok(t, "settle the site name")
+	if !strings.Contains(settled.stdout, "settled") {
+		t.Fatalf("the two invitations were not settled: %s", settled.stdout)
+	}
+	ts.w1.r().run("sync").ok(t, "w1 sync")
+	a := ts.w1.file("doc/site/s3.yaml")
+	b := ts.w2.file("doc/site/s3.yaml")
+	if a != b {
+		t.Fatalf("the roster disagrees:\n--- w1 ---\n%s\n--- w2 ---\n%s", a, b)
+	}
+	ts.w1.r().run("verify").ok(t, "verify w1")
+	ts.w2.r().run("verify").ok(t, "verify w2")
+}

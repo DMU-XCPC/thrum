@@ -2,10 +2,12 @@ package e2e
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -467,5 +469,45 @@ func TestBundlePathTraversalIsRefused(t *testing.T) {
 	}
 	if w.exists("escape.txt") {
 		t.Fatal("the import wrote outside the job")
+	}
+}
+
+func TestManyMessages(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+	for i := 0; i < 100; i++ {
+		r.as("a1").run("message", "send", "a2", "--subject", fmt.Sprintf("m%03d", i)).ok(t, "send")
+	}
+	msgs := jsonLines[struct {
+		ID string `json:"id"`
+	}](t, r.as("a2").run("message", "list", "--json").ok(t, "list").stdout)
+	if len(msgs) != 100 {
+		t.Fatalf("got %d messages, want 100", len(msgs))
+	}
+}
+
+func TestLargeAttachment(t *testing.T) {
+	ts := setupTwoSites(t)
+	twoSiteDaemons(t, ts)
+	big := make([]byte, 10<<20)
+	for i := range big {
+		big[i] = byte(i % 251)
+	}
+	f := filepath.Join(t.TempDir(), "big.bin")
+	if err := os.WriteFile(f, big, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id := strings.TrimSpace(ts.w2.r().as("a2").run("message", "send", "a1",
+		"--subject", "big", "--attach", f).ok(t, "send").stdout)
+	out := t.TempDir()
+	ts.w1.r().as("a1").run("message", "read", id, "--out", out).ok(t, "read")
+	got, err := os.ReadFile(filepath.Join(out, "big.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, big) {
+		t.Fatal("the attachment's bytes changed")
 	}
 }

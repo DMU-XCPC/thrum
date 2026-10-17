@@ -63,6 +63,13 @@ func TestDaemonLifecycle(t *testing.T) {
 	w := newWorkspace(t)
 	d := startDaemon(t, w, "127.0.0.1:0")
 
+	st, err := os.Stat(w.path("var", "daemon.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := st.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("the socket is %o, want 600", perm)
+	}
 	status := w.r().run("daemon", "status", "--json").ok(t, "status")
 	if !strings.Contains(status.stdout, `"site":"s1"`) {
 		t.Fatalf("status does not name the site: %s", status.stdout)
