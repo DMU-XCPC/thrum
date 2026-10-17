@@ -152,6 +152,7 @@ func twoSiteDaemons(t *testing.T, ts *twoSites) (p1 string) {
 	ts.w1.r().run("site", "reach", "s2", "--at", p2).ok(t, "w1 reaches s2")
 	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "w2 reaches s1")
 	startDaemon(t, ts.w1, p1)
+	startDaemon(t, ts.w2, p2)
 	ts.w1.r().as("a1").run("actor", "hello").ok(t, "a1 hello")
 	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "declare a2")
 	ts.w2.r().run("sync").ok(t, "sync a2")

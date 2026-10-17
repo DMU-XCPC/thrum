@@ -23,6 +23,9 @@ func TestSiteCommands(t *testing.T) {
 	}
 
 	r.run("site", "reach", "s1", "--at", "127.0.0.1:9999").ok(t, "reach")
+	if out := w.git("status", "--short"); strings.TrimSpace(out) != "" {
+		t.Fatalf("site reach dirtied the line:\n%s", out)
+	}
 	if show := r.run("site", "show", "s1").ok(t, "show"); !strings.Contains(show.stdout, "127.0.0.1:9999") {
 		t.Fatalf("reach did not take: %s", show.stdout)
 	}

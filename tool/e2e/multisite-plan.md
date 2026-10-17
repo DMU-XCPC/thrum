@@ -47,7 +47,7 @@ Topologies:
 - **T3** — three sites, one hub: transitivity, introductions, three-way claims.
 - **T3P** — three sites, one partitioned (A↔C works, A↔B cut), then healed.
 - **T4** — four sites for mesh sync and soak.
-- **T2N** — no hub: the daemon's own `git.serve` is the transport (blocked on C12).
+- **T2N** — no hub: not in this version; the external remote is the transport (`doc/thrum.md`).
 
 Each site is a container with its own workspace and its own daemon; the hub is a container
 serving the histories (today a test-only smart-HTTP server; switch the URLs to the daemon once
@@ -103,7 +103,7 @@ keeps the boilerplate out of every test.
 | M-04 | P1 | C joins through B; A reaches C after sync; a site not in the roster is refused | A authenticates C; the stranger is refused at the handshake | covered via sync (`TestInvitationFromANonCreator`); the explicit introduce step is not needed with the roster in the line |
 | M-05 | P0 | A rotates its key; B sends to A before syncing, then after | Before: refused (old key); after: delivered | covered (`TestKeyRotationTakesEffect`) |
 | M-06 | P1 | A revokes B's key | B's handshake is refused; B's messages fail | covered (`TestRevokedKeyIsRefused`) |
-| M-07 | P1 | A forgets B | B's name stays taken; messages to B are refused; B's records can still arrive through a remote | partial (single-site only) |
+| M-07 | P1 | A forgets B | B's name stays taken; messages to B are refused; B's records can still arrive through a remote | covered (`TestForgetRefusesTheForgottenSite`) |
 | M-08 | P1 | A token is reused after the site joined | Second join refused (expiry or one-time use) | covered (`TestInvitationIsOneTime`; one-time, not time-expiring) |
 | M-09 | P1 | Two sites claim the same site name | The roster path is settled; the loser is told; no two winners | covered (`TestTwoSitesClaimOneSiteName`) |
 | M-10 | P2 | `site doctor` with a peer up, down, and rotated | Reports answered / no answer / refused | covered (`TestDoctorReportsPeerState`) |
@@ -135,10 +135,10 @@ keeps the boilerplate out of every test.
 | S-04 | P0 | `actor hello` at s2 after the move | Subsequent sends from s1 go to s2 | covered (`TestHelloMovesMail`) |
 | S-05 | P0 | Deliver, restart the daemon, list | The message is still there | covered (`TestMessagesSurviveADaemonRestart`) |
 | S-06 | P0 | Kill s2's daemon; send; restart; list | The send fails; nothing appears later | covered (`TestSenderDoesNotQueue`) |
-| S-07 | P1 | Kill the receiver mid-push of a large attachment | No partial message; a resend arrives whole | gap |
+| S-07 | P1 | Kill the receiver mid-push of a large attachment | No partial message; a resend arrives whole | covered (the orphan directory is allowed, a half-message is not) |
 | S-08 | P0 | A caller retries with the same id | Exactly one message | covered (`TestRetryWithTheSameIDDeliversOnce`; `message send --id`) |
 | S-09 | P1 | 10 MB binary attachment | Byte-for-byte, hash checked | covered (`TestLargeAttachment`) |
-| S-10 | P1 | Reply threading across sites | `reply_to` preserved and readable at the other site | partial (local only) |
+| S-10 | P1 | Reply threading across sites | `reply_to` preserved and readable at the other site | covered (`TestCrossSiteMessage`) |
 | S-11 | P1 | `events --watch` sees an arrival, survives a reconnect | One event per message, no duplicates after reconnect | covered (`TestEventsWatchStreams`) |
 | S-12 | P0 | A site not in the roster, or with a revoked key, pushes | Handshake refused; daemon survives | covered (undeclared site and revoked key) |
 | S-13 | P1 | Malformed JSON, unknown verb, truncated frame, huge frame | Connection closed; daemon alive; other sites unaffected | covered (oversized and malformed; `TestUnknownVerbAndGarbage`) |
@@ -169,9 +169,9 @@ keeps the boilerplate out of every test.
 | D-05 | P1 | A peer speaks `thrum/2` | Refused clearly | covered (the version is refused, with a sentence) |
 | D-06 | P1 | Unknown verb, malformed request | An error response; the daemon stays up | covered (`TestUnknownVerbAndGarbage`) |
 | D-07 | P1 | Unix socket permissions; another user | Only this user can ask | covered (the socket is 0600; another user is not exercised) |
-| D-08 | P1 | `site reach` | Written under `var/`, never committed | partial (single-site) |
-| D-09 | P2 | One slow peer holds a connection | Other peers are not blocked | gap |
-| D-10 | P2 | A 100 MB attachment | Memory bound, clear refusal or success | gap |
+| D-08 | P1 | `site reach` | Written under `var/`, never committed | covered (`TestSiteCommands`: the line stays clean) |
+| D-09 | P2 | One slow peer holds a connection | Other peers are not blocked | covered (`TestSlowPeerDoesNotBlock`) |
+| D-10 | P2 | A 100 MB attachment | Memory bound, clear refusal or success | accepted: 10 MB tested, 100 MB not promised (`doc/thrum.md` Known limits) |
 
 ### F. Failure and recovery
 
@@ -179,11 +179,11 @@ keeps the boilerplate out of every test.
 | --- | --- | --- | --- | --- |
 | R-01 | P0 | Partition A/B; both record; heal; sync | Both converge; messages that needed the cut fail and say so | covered (Docker partition) |
 | R-02 | P0 | Stop the hub; keep working locally; restart | Local commands work; sync fails cleanly; then converges | covered (Docker hub down) |
-| R-03 | P1 | Kill the daemon mid-push | No partial mailbox entry; a retry works | gap |
+| R-03 | P1 | Kill the daemon mid-push | No partial mailbox entry; a retry works | covered (`TestKilledDaemonLeavesNoPartialMessage`) |
 | R-04 | P1 | `docker restart` a site | Workspace survives; daemon restarts; mailbox intact | covered (Docker restart) |
 | R-05 | P1 | Simultaneous pushes | One retry; no loss | covered (`TestConcurrentSync`) |
 | R-06 | P1 | A prose conflict | Merge aborted; `git status` clean; no half-merge | covered (`TestProseConflictStopsAndNamesTheFile`) |
-| R-07 | P2 | 300 ms latency, 5% loss | Handshake and sync still work within the timeout | gap |
+| R-07 | P2 | 300 ms latency, 5% loss | Handshake and sync still work within the timeout | partial: 300 ms covered (`TestSlowLink`); loss is nightly |
 | R-08 | P2 | A clock step (NTP) during a run | No corruption; settlement still deterministic | covered (the persisted clock never goes backwards; `TestEventClockNeverGoesBackwards`) |
 
 ### G. Scale and soak
@@ -191,8 +191,8 @@ keeps the boilerplate out of every test.
 | ID | Pri | Scenario | Expected | Status |
 | --- | --- | --- | --- | --- |
 | X-01 | P1 | 4 sites, 200 events, full mesh sync | Converges; bounded time | covered (`TestFourSitesScale`) |
-| X-02 | P2 | 10,000 line commits | `sync`, `verify` still usable | gap |
-| X-03 | P2 | 24 h soak: messages and syncs every minute | No leak, no unbounded file growth | gap |
+| X-02 | P2 | 10,000 line commits | `sync`, `verify` still usable | partial: 1,000 in the default suite; 10,000 nightly |
+| X-03 | P2 | 24 h soak: messages and syncs every minute | No leak, no unbounded file growth | partial: 6 s in the default suite; 24 h nightly |
 | X-04 | P2 | 100 connect/disconnect cycles | No fd leak; no stale lock | covered (`TestManyConnections`) |
 
 ## 5. Coverage matrix
@@ -210,7 +210,7 @@ keeps the boilerplate out of every test.
 | C9 | H-11, R-01, R-02 |
 | C10 | R-02, R-04 |
 | C11 | D-05 |
-| C12 | T2N (blocked), J-04, J-05 |
+| C12 | not in this version (`doc/thrum.md`); J-04, J-05 |
 | C13 | J-05, J-06, J-07 |
 | C14 | D-03, R-04 |
 
@@ -227,8 +227,8 @@ named in §4; the rows are gone below.
 | Two stretches starting in the same second share a name | The handoff name is the started stamp, to the second; the test separates them with a sleep | H-05 |
 | Two hellos in the same second tie | The heard stamp has second granularity; an equal-or-newer place overwrites, so the arrival decides | S-03/S-04 (tests separate them) |
 | A withdrawal leaves a peer's already-fetched tag in place | The peer does not re-push it and the remote is cleaned, but a materialise at that peer still works | J-06 (accepted) |
-| `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.hello`, `msg.push`, `stop` | C12, T2N |
-| `--capacity` and "start the daemon on join" are absent | `site invite`, `join.Join` | M-08 |
+| `history.exchange` and `git.serve` are absent | Accepted and recorded in `doc/thrum.md`: the transport is an external remote; the verbs are reserved | C12, T2N |
+| `--capacity` and "start the daemon on join" are absent | Accepted and recorded in `doc/thrum.md` / `doc/commands.md`: no capacity in this version; the machine's init starts the daemon | M-08 |
 
 ## 7. Execution
 

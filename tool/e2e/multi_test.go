@@ -83,6 +83,7 @@ func TestCrossSiteMessage(t *testing.T) {
 	w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "w2 reaches s1")
 
 	startDaemon(t, w1, p1)
+	startDaemon(t, w2, p2)
 	w1.r().as("a1").run("actor", "hello").ok(t, "a1 hello")
 	w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "declare a2")
 	w2.r().run("sync").ok(t, "sync a2")
@@ -103,6 +104,22 @@ func TestCrossSiteMessage(t *testing.T) {
 	}
 	if doctor := w2.r().run("site", "doctor").ok(t, "doctor"); !strings.Contains(doctor.stdout, "answered") {
 		t.Fatalf("doctor did not reach s1: %s", doctor.stdout)
+	}
+
+	replyID := strings.TrimSpace(ts.w1.r().as("a1").withStdin("replied\n", "message", "reply", id,
+		"--subject", "re:", "--body", "-").ok(t, "reply").stdout)
+	back := jsonLines[struct {
+		ID      string `json:"id"`
+		ReplyTo string `json:"reply_to"`
+	}](t, ts.w2.r().as("a2").run("message", "list", "--json").ok(t, "a2 list").stdout)
+	found := false
+	for _, m := range back {
+		if m.ID == replyID && m.ReplyTo == id {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the reply did not carry reply_to: %s", strings.TrimSpace(fmt.Sprint(back)))
 	}
 }
 

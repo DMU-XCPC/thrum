@@ -29,7 +29,7 @@ changes.
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
 | `thrum create <dir> --site <name> [--code <name>=<path>]…` | Instantiates a workspace from the template thrum carries: the line, the ledger, one repository per `--code`, and the store — the runtime directories, the entry point and skill an actor is handed, this site's declaration, and the first event. | Never a plain file copy: bare repositories have to be initialised, and a repository cannot carry an empty directory. |
-| `thrum join <token>` | Makes this machine another site: proves the token, presents a key, takes the roster and the repositories, starts the daemon, and registers the key. | A site the roster does not declare is refused rather than half-joined. |
+| `thrum join <token>` | Makes this machine another site: proves the token, presents a key, takes the roster and the repositories, and registers the key. | A site the roster does not declare is refused rather than half-joined; starting the daemon is the machine's init, not the join. |
 | `thrum update` | Brings the unversioned skeleton up to date: the ignore rules, the empty directories, the entry point and the skill. Reports differing copy-me files and writes them only when asked. | Never touches a versioned file on its own initiative, and never removes a directory. |
 | `thrum verify` | Runs every mechanical check, including the two that read across boundaries — a handoff's `job` must name a brief in the line, and its `repo` must equal the brief's — and reads the values the conventions declare. | Reports; it never repairs. A wrong repair costs more than a stale record. |
 | `thrum status` | The picture: the board, the sites, the payloads, and this actor's mail. | Reads only. |
@@ -39,7 +39,7 @@ changes.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum site invite [--capacity <n>]` | Writes the new roster entry and prints a token that names the workspace and this site. | One event. The token expires, and it is the only secret that has to move by hand. |
+| `thrum site invite` | Writes the new roster entry and prints a token that names the workspace and this site. | One event. The token is one-time, and it is the only secret that has to move by hand. |
 | `thrum site list`, `thrum site show <name>` | The roster, and what each site is and where it is. | Reads only. |
 | `thrum site reach <name> --at <host:port>` | Overrides where a peer listens. | Site-local, never committed; normally written for you at join. |
 | `thrum site doctor` | For each peer: declared, addressed, key known, last answered, protocol understood. | Reads only, and useful precisely when something is unreachable. |

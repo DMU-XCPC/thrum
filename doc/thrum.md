@@ -204,9 +204,11 @@ workspace whose sites are apart for a day should not have to stop recording.
 
 ## Git
 
-The daemons serve the workspace's repositories, so peers fetch and push through the fabric
-rather than needing an external remote. The rules are the ones the shared histories already
-imply:
+In this version the transport is an external git remote the sites share: a site fetches,
+merges and pushes through it. The daemon's `git.serve` and `history.exchange` verbs are
+reserved for the version that moves that traffic onto the fabric; where the sites already
+share an external remote, none of it is needed (see "When something is down"). The rules are
+the ones the shared histories already imply:
 
 | Repository | Ref | Rule |
 | --- | --- | --- |
@@ -228,9 +230,10 @@ it.
 ## Joining
 
 1. **Invite**, from a site already in the workspace: one event writing the new roster entry,
-   and a token that names the workspace and the inviting site and expires.
+   and a one-time token that names the workspace and the inviting site.
 2. **Join**, on the new machine: prove the token, present a key, take the roster and the
-   repositories, start the daemon, and register the key in the roster as a second event.
+   repositories, and register the key in the roster as a second event. Starting the daemon is
+   the machine's own init, not a side effect of the join: a join leaves no process running.
 3. **Introduce**: the inviting site tells the peers it can reach that the new site exists and
    where it listens. A peer accepts an introduction only for a site the roster declares.
 
@@ -244,8 +247,9 @@ requests. The handshake carries the workspace, the site, the protocol range, and
 caller answers; a mismatch is refused clearly, which is a small cost now and the thing that
 makes a mixed-version fleet debuggable later.
 
-The verbs are named `noun.verb` throughout — `site.hello`, `actor.where`, `actor.hello`,
-`msg.push`, `history.exchange`, `git.serve` — because the previous design's half-and-half naming
+The verbs are named `noun.verb` throughout — in this version `site.hello`, `actor.where`,
+`actor.hello`, `msg.push` and `stop`; `history.exchange` and `git.serve` are reserved for the
+version that serves git from the daemon — because the previous design's half-and-half naming
 was a regret, and a wire is the wrong place to discover that.
 
 ## When something is down
@@ -259,6 +263,19 @@ was a regret, and a wire is the wrong place to discover that.
 Nothing is refused because the fabric is unhappy, except the thing that genuinely needed the
 fabric. There is no hidden queue and no invented liveness: a thing that could not be placed was
 not placed, and it says so.
+
+## Known limits
+
+A handoff's name is the moment its stretch started, to the second, so two stretches that start
+in the same second share a name and one of them has to record again. A hello's `heard` stamp has
+the same granularity: two hellos in one second are ordered by arrival.
+
+A withdrawal deletes the publisher's tag and the remote's, and a peer never pushes a tag it did
+not publish. A peer that already fetched the tag keeps its local copy — it still materialises —
+and the version number stays taken.
+
+An attachment travels base64 inside the JSON protocol. Ten megabytes is the tested bound; a
+hundred is not promised. `site invite` has no capacity in this version.
 
 ## What the fabric must not do
 

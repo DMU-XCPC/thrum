@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -288,4 +289,25 @@ func TestInvitationFromANonCreator(t *testing.T) {
 		t.Fatalf("site one did not learn the joined site's key: %s", show.stdout)
 	}
 	w3.r().run("verify").ok(t, "verify the joined site")
+}
+
+func TestForgetRefusesTheForgottenSite(t *testing.T) {
+	ts := setupTwoSites(t)
+	p1 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	ts.w2.r().run("site", "reach", "s1", "--at", p1).ok(t, "reach")
+	ts.w2.r().as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+	ts.w2.r().run("sync").ok(t, "sync a2")
+	ts.w1.r().run("sync").ok(t, "w1 sync")
+	startDaemon(t, ts.w1, p1)
+	ts.w2.r().as("a2").run("message", "send", "a1", "--subject", "before").ok(t, "before")
+
+	ts.w1.r().run("site", "forget", "s2").ok(t, "forget")
+	ts.w1.r().run("sync").ok(t, "publish the forget")
+	ts.w2.r().as("a2").run("message", "send", "a1", "--subject", "after").
+		fails(t, "a forgotten site", "not declared")
+
+	// The records still travel through the remote; only the fabric identity is gone.
+	ts.w2.r().run("sync").ok(t, "the records still travel")
+	ts.w1.r().run("sync").ok(t, "w1 sync")
+	ts.w1.r().run("verify").ok(t, "verify the site that forgot")
 }
