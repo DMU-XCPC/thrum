@@ -78,6 +78,11 @@ export THRUM_ACTOR=agent-3f9c     # or --actor <name> on every command
 - **A name must be declared before it can write anything:**
   `thrum actor declare <name> --kind agent|human`, once. `thrum actor hello` then says where your
   mail is now. There is no session and nothing to end — `actors.md` has both.
+- **If your harness can wake you, bind the name to this session.** One call to the harness's own
+  tool — the project's convention names it — records which session this actor is, and it is the one
+  startup step thrum cannot do for you, because only the harness knows. Without it, delivery is
+  unchanged: `thrum message list` still has your mail, and you are only slower to hear.
+  `messages.md` has the contract.
 
 ## What you may touch
 
@@ -99,7 +104,8 @@ the failure it prevents is silent. In one line each: the directory thrum names; 
 3. **Read this project's rules.** `doc/convention/`, in number order. The order is the priority. An
    empty directory means this project has written no policy yet: say that in your handoff rather
    than inventing a rule for it.
-4. **Check your mail.** `thrum message list`, and `thrum message read <id>` for one. A message is
+4. **Check your mail.** If you bound your name to this session, mail also arrives as turns; either
+   way, `thrum message list` is where it is, and `thrum message read <id>` reads one. A message is
    process information and is never in a handoff, so this is the only place it arrives — and it is
    often why the last actor stopped. `messages.md` has sending and reading.
 5. **Take it up.** `thrum work <job-id> --repo <name> --label <label>` opens the job when it is not open yet,

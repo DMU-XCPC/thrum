@@ -2,13 +2,14 @@
 
 This wakes a DSH session when the actor it is working as receives a message.
 
-It is **not part of the workspace format**. `doc/design.md` says how a particular agent or
+It is **not part of the workspace format**. The design says the plugin is an optimization over
+delivery and that waking is the harness's business (`doc/thrum.md`); how a particular agent or
 team works is an agreement between that agent and whoever runs it, and this is one such
 agreement: it is written against DSH, it lives outside any workspace, and a workspace does
 not know it exists. Everything it uses is something the design already promises — the
-`thrum` command line, `--json` output, the mailbox under `var/msg/<actor>/`, and the fact
-that a message appears whole or not at all. Nothing here may become a reason for the
-format to change; any other harness can have an equivalent.
+`thrum` command line, `--json` output, the event stream, the mailbox under `var/msg/<actor>/`,
+and the fact that a message appears whole or not at all. Nothing here may become a reason for
+the format to change; any other harness can have an equivalent.
 
 ## Why it is needed at all
 
@@ -24,26 +25,29 @@ turn to run".
 ```text
         thrum                            the plugin                      DSH
   ┌──────────────────┐            ┌────────────────────────┐     ┌──────────────────┐
-  │ var/msg/<actor>/ │            │  feed: reads the stream│     │ agent.followup() │
-  │  <id>.md         │──watch────▶│  registry: actor→session│────▶│ session/flush    │
-  └──────────────────┘  JSONL     └────────────────────────┘     └──────────────────┘
+  │ thrum events     │            │  feed: reads the stream│     │ agent.followup() │
+  │  --json (JSONL)  │──stream───▶│  registry: actor→session│────▶│ session/flush    │
+  └──────────────────┘            └────────────────────────┘     └──────────────────┘
                                               ▲
                                     tool call: thrum_watch(actor)
 ```
 
-**The feed** is `thrum message list --watch --json`, one message per line. It prints what is
-already in the mailbox before it starts reporting arrivals, which is the only chance to see
-what arrived while nobody was watching — nothing is re-delivered.
+**The feed** is `thrum events --json`, one event per line. A `message.delivered` names the id and
+the subject, never the body, so the nudge says what arrived and `thrum message read` is where the
+body is. The stream is a hint — a missed event is never a lost message — so on start the plugin also
+reads `thrum message list` once, which is the only chance to see what arrived while nobody was
+watching.
 
 **The binding** is the hard half, and it is why there is a tool. A watcher's callback runs
 outside any agent's asynchronous chain (DSH's initiator scope covers only the driver's own
 work, and a host timer must explicitly opt out of it), so a plugin cannot ask "which agent
 am I?" when a message lands. And the actor name is a host-process fact, not a per-session
 one. So the session says who it is: the agent calls `thrum_watch(actor)` once, and the
-plugin records `<root, actor> → sessionId`.
+plugin records `<root, actor> → sessionId` and runs `thrum actor hello` for it.
 
-That call belongs where the agent already is at the start of a stretch, and the skill's
-loop is where it goes — see *What this needs from the manual*, below.
+That call is the actor's initialization step. The workspace manual states the obligation —
+*Binding, waking, and reading* in `.agents/skills/workspace-actor/messages.md` — and the
+project's convention names the tool; see *What a project has to add*, below.
 
 ## The tool
 
@@ -56,7 +60,9 @@ thrum_watch(actor, root?)  →  { watching, root, mailbox }
 - `root` — the workspace. Omitted, it is the plugin's configured root, and failing that the
   session's own working directory, because the workspace root is where an actor starts.
 
-Calling it twice rebinds, which is what a session that switched jobs wants.
+Calling it says hello for the actor (`thrum actor hello`), so the fabric knows where to push, and
+subscribes to `thrum events` for that name. Calling it twice rebinds, which is what a session that
+switched jobs wants.
 
 ## What it does when something goes wrong
 
@@ -81,10 +87,10 @@ the tooling's, and a harness's bookkeeping has no business in it.
 
 ## What a project has to add: one convention
 
-The plugin cannot be useful if nobody calls the tool, and the actor is only told to call it
-if the project says so. That sentence does **not** belong in the workspace material: the
-tooling-owned skeleton states what is true of every workspace, and a tool named after one
-harness's plugin is not that.
+The plugin cannot be useful if nobody calls the tool. The workspace manual states the obligation —
+bind your name to this session if your harness can wake you — but it deliberately does **not** name
+the tool: the skeleton states what is true of every workspace, and a tool named after one
+harness's plugin is not that. What the manual cannot say, the project can.
 
 It belongs where a project's own agent policy already goes — a convention, which is
 versioned, travels with the records, and is read in number order before work starts:
@@ -93,9 +99,9 @@ versioned, travels with the records, and is read in number order before work sta
 # 01-waking-on-messages
 
 Call `thrum_watch` with your actor name once at the start of a stretch, before you begin
-work. Messages then arrive as ordinary turns instead of waiting for you to look. A session
-that skips it is not wrong — it will find its mail the next time it checks — it is only
-slower to hear.
+work. It binds this session to the name and says hello for you; messages then arrive as
+ordinary turns instead of waiting for you to look. A session that skips it is not wrong — it
+will find its mail the next time it checks — it is only slower to hear.
 ```
 
 A project without DSH writes the equivalent for whatever it runs, which is the point: this

@@ -28,6 +28,12 @@ thrum actor hello                              # tell the fabric where your mail
 `kind` changes what a reader expects and nothing about what you may do. `actor hello` is how mail
 finds you: it is an address, not a claim about working, and it does not expire.
 
+**If your harness can wake you, bind your name to this session once.** A plugin is what turns "a
+message arrived" into a new turn, and it has to be told which session is this actor. The tool is
+your harness's, and `doc/convention/` names it — call it once, at the start of the stretch. Without
+it you lose only the nudge: `thrum message list` still has your mail. `.agents/skills/workspace-actor/messages.md`
+has the contract.
+
 **If nobody gave you a job id**, there are two lawful ways in: ask for one, or open the job
 yourself — `thrum work <new-id> --repo <name> --label <label> --goal '<what it is for>'`. Work that
 begins as "read this and find out" is still a job: a stretch nobody can find is a stretch nobody

@@ -48,17 +48,25 @@ said hello — and pushes the message there.
   information and it is not. Look at your mail before you hand off, because whoever continues will
   not see it otherwise.
 
-## A wake is an agent's business; a human reads
+## Binding, waking, and reading
 
-thrum delivers, and it does not wake anybody. Waking is a fact about a harness — a session's turn, a
-terminal, a bell — and this design knows none of them.
+thrum delivers, and it does not wake anybody. Waking is a fact about a harness — a session's turn,
+a terminal, a bell — and this design knows none of them.
 
-- **An agent** may run a plugin that binds a name to a session, keeps the place current with
-  `thrum actor hello`, and turns `thrum events` into a turn.
+**An agent that wants mail as turns binds its name to its session once, at the start of the
+stretch.** That is the one startup step thrum cannot do for you: the plugin has to know which
+session is this actor, and only the harness knows. The call is the harness's own tool, so **your
+project's convention names it** — the workspace skeleton cannot, because a tool named after one
+harness is not true of every workspace.
+
+- **The binding** records `(workspace, actor) → session`, and normally also says hello for you
+  (`thrum actor hello`), so mail has somewhere to go.
+- **The plugin** subscribes to `thrum events` and turns a `message.delivered` into a turn. It is an
+  optimization over delivery, never the delivery path.
 - **A human** runs `thrum message list`, or their shell does.
 
-The plugin is an optimization over delivery, never the delivery path. A harness without one loses
-only the nudge; the mailbox is still the truth.
+Skip the binding and nothing about delivery changes: the mailbox is still the truth, and
+`thrum message list` finds what arrived while nobody was listening. You are only slower to hear.
 
 ## When to send one
 

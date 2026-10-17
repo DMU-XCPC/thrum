@@ -33,6 +33,11 @@ stale and are rebuilt from these documents.
   is placed by name through the fabric and pushed to the actor's last-known place, where it
   waits to be read; the sender never queues, so a send that cannot be placed says so instead of
   inventing a backlog.
+- **The binding is the harness's step, not thrum's.** An agent that wants mail as turns calls its
+  harness's tool once at the start, which records which session is this actor and says hello for
+  it. The workspace manual states the obligation and the project's convention names the tool,
+  because the skeleton cannot name one harness's plugin. thrum never wakes anybody, and a session
+  that skips the binding loses only the nudge.
 - **Two shared histories, and both merge.** The line (`doc/`) holds the decisions, and no two
   sites write one file there: a brief has the one site working its job, and a name claimed twice
   is settled by a deterministic order rather than merged. The ledger (`handoff/`) holds the

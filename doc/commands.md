@@ -80,7 +80,7 @@ decision and nothing else should make one as a side effect.
 | `thrum message list [--watch]`, `thrum message read <id>` | Reads this actor's mailbox at the site holding it, reached through the fabric. | Reads only. `--watch` keeps reporting arrivals, and prints the backlog before it starts. |
 | `thrum message reply <id>` | Sends a message whose `reply_to` names the one answered. | A message is never retracted or edited; a correction is another message. |
 | `thrum message purge <id>` | Removes a message and its attachments. | Manual on purpose: nothing collects messages, because nothing can know which still matter. |
-| `thrum events [--json]` | The local event stream: a message arrived, a job's state changed, a shared history moved. | A hint for a plugin. A missed event is never a lost message. |
+| `thrum events [--json]` | The local event stream: a message arrived, a job's state changed, a shared history moved. | A hint for a plugin. Binding a name to a session is the harness's tool, not this command; a missed event is never a lost message. |
 
 ## Jobs
 

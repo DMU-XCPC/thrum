@@ -35,8 +35,8 @@ thrum actor retire dana              # when the actor is finished with
 - **Declaration is one event, and nothing else creates an actor.** A name must exist before it can
   author a record or be sent anything; a command that finds the name undeclared refuses and says to
   declare it. Nothing makes an actor as a side effect.
-- **`kind` says what a reader should expect** — a human reads their mail, an agent may be woken by a
-  plugin — and never what is permitted.
+- **`kind` says what a reader should expect** — a human reads their mail, an agent may bind its name
+  to a session and be woken — and never what is permitted.
 - **`home` is where mail waits** when the fabric has never seen the actor say hello. The site that
   declared it is the home unless another is named.
 
@@ -49,6 +49,11 @@ itself. A name has a kind and a place, and that is the whole of it.
 `thrum actor hello` is the only thing that moves an actor: *my mail is here now*. It is a plain CLI
 command, the same for a person at a keyboard and for an agent's wrapper. A plugin may run it on the
 actor's behalf, but nothing depends on a plugin existing — `messages.md` has that half.
+
+**An agent that wants its mail as turns binds its name to its session once, at the start** — one
+call to the harness's own tool, named by the project's convention. That is not a session: it records
+which running session is this actor, and it says hello on the actor's behalf. Skip it and you lose
+only the nudge; `messages.md` has the contract.
 
 **Nothing ages out.** A place is corrected by saying hello somewhere else, and by a delivery that
 arrives where the actor no longer is; by nothing else. A daemon may drop a cached address to save
