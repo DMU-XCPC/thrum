@@ -1,0 +1,272 @@
+# Multi-site test plan
+
+Status: proposal. The single-site suite (`tool/e2e`, 24 tests) and one Docker happy path exist.
+This plan is what has to be added to make the claims in `doc/thrum.md` true *under distance,
+concurrency and failure*, not just when everything is up.
+
+The plan is deliberately honest about what will fail today. Each scenario is marked:
+
+- **covered** — an existing test exercises it;
+- **partial** — only a local or single-site version exists;
+- **gap** — not covered, and the current implementation is expected to fail or to need a
+  decision first. The gap is named.
+
+## 1. What is promised
+
+The scenarios are derived from the design, not from the implementation:
+
+| # | Claim | Where |
+| --- | --- | --- |
+| C1 | A site joins only by invitation; the roster declares it before it is trusted. | `thrum.md` Joining |
+| C2 | A peer accepts a site only if the roster declares it, and the handshake proves its key. | `thrum.md` The wire |
+| C3 | Two sites writing different paths converge; a name claimed twice is settled, and the loser is told. | `thrum.md` The shared histories |
+| C4 | The ledger is append-only and merges by union; nothing seen is rewritten. | `thrum.md` The shared histories |
+| C5 | A message is placed or it is not sent; the sender never queues. | `thrum.md` Messages |
+| C6 | The receiving site holds a message across a daemon restart. | `thrum.md` Messages |
+| C7 | An address is asked, not merged; a stale address costs one failed delivery and one retry. | `thrum.md` Finding an actor |
+| C8 | A message arrives whole or not at all, and an id cannot deliver twice. | `thrum.md` Messages |
+| C9 | A peer being down stops messages there and merging with it, and nothing else. | `thrum.md` When something is down |
+| C10 | A daemon being down does not stop local commands. | `thrum.md` When something is down |
+| C11 | The protocol is versioned and a mismatch is refused clearly. | `thrum.md` The wire |
+| C12 | The daemons serve the repositories, so a peer needs no external remote. | `thrum.md` Git |
+| C13 | The store's tags are created once, never moved, deleted only by withdrawal. | `thrum.md` Git |
+| C14 | Restarting the daemon loses nothing durable. | `commands.md` Daemon |
+
+## 2. Levels and topologies
+
+| Level | What | Where |
+| --- | --- | --- |
+| L1 | One site, the CLI, the records | `tool/e2e` (done) |
+| L2 | Two sites, happy path over a network | `TestDockerMultiSite` (done) |
+| L3 | Two to four sites, adversarial: partitions, crashes, skew, races, revocation | **this plan** |
+| L4 | Scale and soak | **this plan** |
+
+Topologies:
+
+- **T2** — two site containers, one hub.
+- **T3** — three sites, one hub: transitivity, introductions, three-way claims.
+- **T3P** — three sites, one partitioned (A↔C works, A↔B cut), then healed.
+- **T4** — four sites for mesh sync and soak.
+- **T2N** — no hub: the daemon's own `git.serve` is the transport (blocked on C12).
+
+Each site is a container with its own workspace and its own daemon; the hub is a container
+serving the histories (today a test-only smart-HTTP server; switch the URLs to the daemon once
+`git.serve` exists).
+
+## 3. Harness
+
+### 3.1 Containers
+
+- Unique names per run (`thrum-<pid>-<rand>-a`), one network per run, `t.Cleanup` removes both.
+- The binary is `docker cp`'d into the containers (not bind-mounted: the daemon may be remote,
+  and a file mount onto a missing path becomes a directory).
+- State is container-local; the bundle transfer is `docker cp` through a host temp dir.
+- `alpine/git:latest` is required; the test skips when it or Docker is absent.
+
+### 3.2 Faults
+
+| Fault | Mechanism | Notes |
+| --- | --- | --- |
+| Peer unreachable | `docker network disconnect <net> <site>` / `connect` | The cheapest partition; no privileges. |
+| Peer frozen | `docker pause` / `unpause` | The TCP stack accepts, the process does not answer: tests timeouts. |
+| Daemon crash | `docker exec kill -9 <pid>`; `docker exec pkill -9 thrum` | Tests stale lock and socket. |
+| Site restart | `docker restart` | State survives; the daemon must be started again. |
+| Slow link | `tc qdisc netem` inside a `NET_ADMIN` container, or a small Go TCP shim | P2; needs `iproute2` in the image or a shim. |
+| Clock skew | `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE` in the command's environment | Changes the commit time without touching the host clock. This is exactly the field the current settlement reads. |
+| Mid-push kill | a large attachment plus `kill -9` at a chosen moment | Tests whole-or-not-at-all; may need retries to hit the window. |
+| Hub down | `docker stop <hub>` | Local work continues; sync fails. |
+
+### 3.3 Evidence
+
+Every failing test dumps, for each site: `thrum verify`, `site list`, `site doctor`,
+`daemon status`, `git -C <root> log --oneline -20`, `git -C <root>/handoff log --oneline -20`,
+`find var/msg -type f`, and the daemon log. The dump is attached to the test log; a helper
+keeps the boilerplate out of every test.
+
+### 3.4 Determinism
+
+- No `sleep` as an assertion: poll with a deadline (default 10s) and a clear failure.
+- Never assert a generated id, a timestamp or a commit hash; capture what the command printed.
+- Docker tests run serially per network; a test that needs parallelism gets its own network.
+- Every test leaves no container behind; a `TestMain` sweep removes names matching the prefix
+  before the run starts.
+
+## 4. Scenario catalog
+
+### A. Membership and identity
+
+| ID | Pri | Scenario | Expected | Status |
+| --- | --- | --- | --- | --- |
+| M-01 | P0 | Invite → join → sync between two sites | Both rosters, both keys, joined site verifies | covered (`TestDockerMultiSite`, `TestTwoSitesJoinSync`) |
+| M-02 | P0 | Join with a token whose line is a different workspace | Refused; no half-joined directory, key or site file left | **gap**: the workspace-id check happens after the clone, key and site write, and nothing rolls back |
+| M-03 | P0 | Join with a valid token but no roster entry for the new site | Refused ("the roster does not declare this site") | **gap**: `join` writes the entry itself if it is absent |
+| M-04 | P1 | C joins through B; A reaches C after sync; a site not in the roster is refused | A authenticates C; the stranger is refused at the handshake | partial (handshake refusal is covered; introductions are not implemented) |
+| M-05 | P0 | A rotates its key; B sends to A before syncing, then after | Before: refused (old key); after: delivered | gap |
+| M-06 | P1 | A revokes B's key | B's handshake is refused; B's messages fail | gap |
+| M-07 | P1 | A forgets B | B's name stays taken; messages to B are refused; B's records can still arrive through a remote | partial (single-site only) |
+| M-08 | P1 | A token is reused after the site joined | Second join refused (expiry or one-time use) | **gap**: the token has no nonce and no expiry |
+| M-09 | P1 | Two sites claim the same site name | The roster path is settled; the loser is told; no two winners | gap |
+| M-10 | P2 | `site doctor` with a peer up, down, and rotated | Reports answered / no answer / refused | partial (this site only) |
+
+### B. Histories and convergence
+
+| ID | Pri | Scenario | Expected | Status |
+| --- | --- | --- | --- | --- |
+| H-01 | P0 | A writes actor a1, B writes actor a2 while apart; both sync | Both sites see both; no conflict | partial (local two-site only) |
+| H-02 | P0 | Two sites declare the same repository/actor while apart | Earlier claim wins; loser named; both converge | covered (`TestSettlement`) |
+| H-03 | P0 | Three sites claim one name, syncing in three different orders | The same winner at all three | gap |
+| H-04 | P1 | Three sites write disjoint events, sync pairwise in different orders | Identical trees at all three | gap |
+| H-05 | P0 | A and B record handoffs for the same job while apart | Both files survive; no conflict | gap |
+| H-06 | P0 | A and B edit the same `doc/topic/...` file | Sync stops, names the file, and leaves both histories intact | partial (exchange aborts; verify it names the path) |
+| H-07 | P1 | A and B push at the same time | One rejected push, one retry, no lost event | gap |
+| H-08 | P1 | After every sync, the histories only grow | No force-push, no rewrite; ancestry holds | gap |
+| H-09 | P1 | A clock is +10m, B is −10m; B claims a name later in real time but earlier by commit time | The design's monotonic clock keeps A; the current commit-time rule may pick B | **gap**: the rule is (commit time, hash) |
+| H-10 | P2 | 1,000 events, then sync | Bounded time, no corruption | gap |
+| H-11 | P0 | B is partitioned; A and B both record; heal and sync | Both converge; nothing lost | gap |
+| H-12 | P1 | The hub refuses one push | One retry succeeds; no duplicate event | gap |
+
+### C. Messages and placement
+
+| ID | Pri | Scenario | Expected | Status |
+| --- | --- | --- | --- | --- |
+| S-01 | P0 | Local send, list, read, reply, purge | Delivered and read | covered (`TestMessages`) |
+| S-02 | P0 | Cross-site send through the daemons | Delivered and read | covered (`TestCrossSiteMessage`, Docker) |
+| S-03 | P0 | a1 moves from s1 to s2; s1 still has the old address; send to s1 | s1 says "not here", asks/corrects, delivers to s2; at most one failed attempt | **gap**: the sender reads its own table and home, never asks a peer, never retries |
+| S-04 | P0 | `actor hello` at s2 after the move | Subsequent sends from s1 go to s2 | **gap**: hello is local-only |
+| S-05 | P0 | Deliver, restart the daemon, list | The message is still there | gap (mailboxes are files; make it explicit) |
+| S-06 | P0 | Kill s2's daemon; send; restart; list | The send fails; nothing appears later | gap |
+| S-07 | P1 | Kill the receiver mid-push of a large attachment | No partial message; a resend arrives whole | gap |
+| S-08 | P0 | A caller retries with the same id | Exactly one message | **gap**: the CLI generates a new id per invocation, so a shell retry duplicates |
+| S-09 | P1 | 10 MB binary attachment | Byte-for-byte, hash checked | gap |
+| S-10 | P1 | Reply threading across sites | `reply_to` preserved and readable at the other site | partial (local only) |
+| S-11 | P1 | `events --watch` sees an arrival, survives a reconnect | One event per message, no duplicates after reconnect | partial (one-shot covered) |
+| S-12 | P0 | A site not in the roster, or with a revoked key, pushes | Handshake refused; daemon survives | gap |
+| S-13 | P1 | Malformed JSON, unknown verb, truncated frame, huge frame | Connection closed; daemon alive; other sites unaffected | gap |
+| S-14 | P2 | 100 messages, list and purge | Bounded mailbox operations | gap |
+
+### D. Jobs, code, bundles, assets
+
+| ID | Pri | Scenario | Expected | Status |
+| --- | --- | --- | --- | --- |
+| J-01 | P0 | A opens a job and hands off; B syncs and verifies | B sees the brief and the handoff; the head resolves | covered (Docker) |
+| J-02 | P0 | B tries to work A's job branch without a decision | Either the design's one-writer rule is enforced, or the gap is documented | gap (test the current behaviour first) |
+| J-03 | P1 | Bundle exported at A, imported at B | Payload intact | covered (Docker) |
+| J-04 | P1 | Import at B before the code arrived | Refused ("fetch the code first") | gap |
+| J-05 | P0 | Asset published at A, `sync`, materialise at B | Bytes arrive | **gap**: `sync` fetches code repositories but not the store; the tag is unknown at B |
+| J-06 | P1 | Withdraw at A, sync, verify at B | The archived manifest is there; the tag is gone at A | gap |
+| J-07 | P1 | Both sites publish the same asset version | One wins; the other is refused (the version is taken) | gap |
+| J-08 | P1 | A crafted bundle with `../` paths | Refused; nothing written outside `job/<id>/` | partial (code checks; no test) |
+| J-09 | P2 | A and B open the same job id while apart | Settlement; the loser is told; no two briefs | gap |
+
+### E. Daemon, protocol, security
+
+| ID | Pri | Scenario | Expected | Status |
+| --- | --- | --- | --- | --- |
+| D-01 | P0 | Handshake: right keys; wrong workspace; undeclared site; bad signature | Accepted / refused with a reason | partial (happy and workspace id; the negative cases have no test) |
+| D-02 | P0 | A peer sends `stop` | Refused (local only) | gap |
+| D-03 | P0 | `kill -9` the daemon, then `daemon run` again | Starts; the stale lock is not a tombstone | **gap**: `O_EXCL` lock with a deferred remove leaves a stale file |
+| D-04 | P0 | A second daemon on the same workspace | Refused | covered (`TestDaemonLock`) |
+| D-05 | P1 | A peer speaks `thrum/2` | Refused clearly | **gap**: the version is carried but not checked |
+| D-06 | P1 | Unknown verb, malformed request | An error response; the daemon stays up | gap |
+| D-07 | P1 | Unix socket permissions; another user | Only this user can ask | gap (0600 is set; no test) |
+| D-08 | P1 | `site reach` | Written under `var/`, never committed | partial (single-site) |
+| D-09 | P2 | One slow peer holds a connection | Other peers are not blocked | gap |
+| D-10 | P2 | A 100 MB attachment | Memory bound, clear refusal or success | gap |
+
+### F. Failure and recovery
+
+| ID | Pri | Scenario | Expected | Status |
+| --- | --- | --- | --- | --- |
+| R-01 | P0 | Partition A/B; both record; heal; sync | Both converge; messages that needed the cut fail and say so | gap |
+| R-02 | P0 | Stop the hub; keep working locally; restart | Local commands work; sync fails cleanly; then converges | gap |
+| R-03 | P1 | Kill the daemon mid-push | No partial mailbox entry; a retry works | gap |
+| R-04 | P1 | `docker restart` a site | Workspace survives; daemon restarts; mailbox intact | gap |
+| R-05 | P1 | Simultaneous pushes | One retry; no loss | gap |
+| R-06 | P1 | A prose conflict | Merge aborted; `git status` clean; no half-merge | partial |
+| R-07 | P2 | 300 ms latency, 5% loss | Handshake and sync still work within the timeout | gap |
+| R-08 | P2 | A clock step (NTP) during a run | No corruption; settlement still deterministic | gap |
+
+### G. Scale and soak
+
+| ID | Pri | Scenario | Expected | Status |
+| --- | --- | --- | --- | --- |
+| X-01 | P1 | 4 sites, 200 events, full mesh sync | Converges; bounded time | gap |
+| X-02 | P2 | 10,000 line commits | `sync`, `verify` still usable | gap |
+| X-03 | P2 | 24 h soak: messages and syncs every minute | No leak, no unbounded file growth | gap |
+| X-04 | P2 | 100 connect/disconnect cycles | No fd leak; no stale lock | gap |
+
+## 5. Coverage matrix
+
+| Claim | Scenarios |
+| --- | --- |
+| C1 | M-01, M-03, M-08 |
+| C2 | M-04, D-01, D-05, S-12 |
+| C3 | H-02, H-03, H-04, H-09, J-09 |
+| C4 | H-05, H-08, J-06 |
+| C5 | S-06, S-03 |
+| C6 | S-05, R-04 |
+| C7 | S-03, S-04 |
+| C8 | S-07, S-08 |
+| C9 | H-11, R-01, R-02 |
+| C10 | R-02, R-04 |
+| C11 | D-05 |
+| C12 | T2N (blocked), J-04, J-05 |
+| C13 | J-05, J-06, J-07 |
+| C14 | D-03, R-04 |
+
+## 6. Gaps this plan will expose
+
+These are read off the code, not guessed; each gets a test before it gets a fix.
+
+| Gap | Evidence | Scenario |
+| --- | --- | --- |
+| `join` is not atomic | The clone, key, `var/site` and site file are written before the workspace-id check, and there is no rollback | M-02 |
+| `join` declares a site the roster does not | `if !ok { site = records.Site{Site: t.Site} }` | M-03 |
+| The token is a permanent credential | `join.Token` has no nonce and no expiry | M-08, D-10 |
+| A sent message is not deduplicated across retries | The CLI calls `messages.NewID()` on every send; only a caller that reuses the id is safe | S-08 |
+| Placement is not asked | `sendMessage` reads `var/location.yaml` and the actor's `home`; there is no `actor.where` call and no "not here" retry | S-03, S-04 |
+| The store is not exchanged | `exchange.Run` fetches the line, the ledger and the code repositories; the store is never fetched | J-05 |
+| Settlement uses commit time | `claimOf` reads `%ct` and the hash; the design asks for a monotonic clock, then site, then event id | H-09 |
+| The protocol version is not checked | `auth` verifies the workspace, the site and the signature; `hello.Version` is ignored | D-05 |
+| A stale lock survives `kill -9` | `O_EXCL` lock with a deferred remove | D-03 |
+| `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.here`, `msg.push`, `stop` | C12, T2N |
+| `actor.hello` is spelled `actor.here` | `dispatch` | D-01 |
+| `--wait`, `--capacity` and "start the daemon on join" are absent | `message send`, `site invite`, `join.Join` | S-06, M-08 |
+| `daemon status` reports no holdings | It returns site, workspace, version | D-04 |
+
+## 7. Execution
+
+### Phase 0 — before writing more tests
+
+- Decide the gaps that are design questions rather than code: C8's retry identity, C7's ask/correct,
+  C12's `git.serve`, C11's version policy. A test that encodes the wrong answer is worse than none.
+
+### Phase 1 — P0 (must pass before a multi-site claim)
+
+Order: M-02, M-03, M-08, D-03, S-03/04, S-05/06/08, J-05, H-03, H-05, H-11, R-01, R-02,
+D-01, D-02, S-12.
+
+Estimated 2–3 days including the fixes that tests force.
+
+### Phase 2 — P1
+
+H-04, H-06, H-07, H-09, H-12, M-05..M-07, S-07, S-09..S-11, J-04, J-06..J-08, D-05..D-08,
+R-03..R-06, X-01.
+
+### Phase 3 — P2
+
+Latency, soak, scale, 100 MB, slowloris, clock steps.
+
+### CI
+
+- PR: `go test ./e2e` (Docker path if available) and the P0 multi-site set.
+- Nightly: P1 + X-01; weekly: soak.
+- Each test is run three times before it is trusted; a flake is a bug in the test or in the code,
+  and is not retried away.
+
+### Exit criteria
+
+- All P0 green on three consecutive runs.
+- No P1 flake over a week.
+- Every gap in §6 is either closed or recorded as an accepted deviation in `doc/thrum.md`, with
+  the test marked "expected" and the reason.

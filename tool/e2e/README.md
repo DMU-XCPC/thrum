@@ -33,3 +33,7 @@ What it exercises over the network:
 `e2e/hub` is a minimal git smart-HTTP server used only by that test: the
 `alpine/git` image has no `git-daemon`, and the test needs a transport, not an
 authentication scheme.
+
+The multi-site plan — partitions, crashes, clock skew, revocation, three sites,
+scale — is in [multisite-plan.md](multisite-plan.md). It marks what is covered,
+what is partial, and which gaps it expects to expose.
