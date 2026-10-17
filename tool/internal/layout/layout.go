@@ -61,6 +61,9 @@ func (l Layout) ArchivedRepo(name string) string {
 func (l Layout) WorktreeDecl(label string) string {
 	return filepath.Join(l.WorktreeDecls(), label+".yaml")
 }
+func (l Layout) ArchivedWorktree(label string) string {
+	return filepath.Join(l.Archive(), "worktree", label+".yaml")
+}
 
 func (l Layout) TaskDir(job string) string { return filepath.Join(l.Tasks(), job) }
 func (l Layout) Brief(job string) string   { return filepath.Join(l.TaskDir(job), "brief.md") }
