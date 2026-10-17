@@ -52,6 +52,7 @@ func Verify(l layout.Layout) []Problem {
 	c.jobs()
 	c.handoffs()
 	c.conventions()
+	c.manifests()
 	c.topics()
 	c.skeleton()
 	return c.ps
@@ -440,6 +441,63 @@ func (c *checker) oneTitle(path string) {
 	}
 	if n != 1 {
 		c.add(path, "wants exactly one H1 title, has %d", n)
+	}
+}
+
+func (c *checker) manifests() {
+	entries, err := os.ReadDir(c.l.Assets())
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		files, err := os.ReadDir(filepath.Join(c.l.Assets(), name))
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
+				continue
+			}
+			version := strings.TrimSuffix(f.Name(), ".md")
+			path := c.l.Manifest(name, version)
+			var m records.Manifest
+			body, ok, err := readDoc(path, &m)
+			if err != nil {
+				c.add(path, "%v", err)
+				continue
+			}
+			if !ok {
+				continue
+			}
+			if m.Asset != name {
+				c.add(path, "asset does not equal its directory")
+			}
+			if m.Version != version {
+				c.add(path, "version does not equal its file name")
+			}
+			if m.Location == "" {
+				c.add(path, "no location")
+			}
+			if m.Location == "store" {
+				want := format.AssetTag(name, version)
+				if m.Ref != want {
+					c.add(path, "ref is not %s", want)
+				} else if _, err := gitx.Run("", "--git-dir", c.l.Store(), "rev-parse", "--verify", "--quiet", "refs/tags/"+m.Ref); err != nil {
+					c.add(path, "the tag does not exist in the store")
+				}
+			}
+			if m.SHA256 != "" && !hex64.MatchString(m.SHA256) {
+				c.add(path, "sha256 is not 64 hex digits")
+			}
+			if !hasSection(body, "Description") {
+				c.add(path, "no ## Description section")
+			}
+			c.oneTitle(path)
+		}
 	}
 }
 
