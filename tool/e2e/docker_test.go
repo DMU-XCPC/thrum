@@ -81,6 +81,8 @@ func TestDockerMultiSite(t *testing.T) {
 	thrumIn(t, siteA, "sh", "-c",
 		"cd /w/repos/code.git && git push -q http://"+hub+":8080/code.git --all")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "--actor", "a1", "actor", "declare", "a1", "--kind", "agent")
+	thrumIn(t, siteA, "sh", "-c",
+		"cd /w/repos/store.git && git remote add origin http://"+hub+":8080/store.git")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
 	token := strings.TrimSpace(thrumIn(t, siteA, "thrum", "--root", "/w", "site", "invite", "s2",
 		"--at", siteB+":7702",
@@ -156,6 +158,17 @@ func TestDockerMultiSite(t *testing.T) {
 	thrumIn(t, siteB, "thrum", "--root", "/w", "bundle", "import", "/tmp/j1.tgz")
 	if got := thrumIn(t, siteB, "sh", "-c", "cat /w/job/j1/log/x.log"); !strings.Contains(got, "evidence") {
 		t.Fatalf("the bundle did not carry the payload: %s", got)
+	}
+
+	// A cross-site asset: the store is a repository too, and sync exchanges it.
+	thrumIn(t, siteA, "sh", "-c", "echo cross-asset > /tmp/asset.bin")
+	thrumIn(t, siteA, "thrum", "--root", "/w", "asset", "ingest", "/tmp/asset.bin")
+	thrumIn(t, siteA, "thrum", "--root", "/w", "asset", "publish", "cross", "2026-10-18", "--description", "cross-site")
+	thrumIn(t, siteA, "thrum", "--root", "/w", "sync")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "asset", "materialise", "cross", "2026-10-18", "--job", "j1")
+	if got := thrumIn(t, siteB, "sh", "-c", "cat /w/job/j1/data/asset.bin"); !strings.Contains(got, "cross-asset") {
+		t.Fatalf("the asset did not cross: %s", got)
 	}
 
 	// The same name claimed on both sites, settled deterministically.

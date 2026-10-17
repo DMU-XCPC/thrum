@@ -56,6 +56,29 @@ func Run(l layout.Layout) ([]Resolution, error) {
 			return settled, fmt.Errorf("the repository %s: %w", d.Repo, err)
 		}
 	}
+	// The store is a repository of tags: fetch what peers published, and publish
+	// what this site did. A tag is never moved, so a rejected push is a real conflict.
+	if store := l.Store(); store != "" {
+		if _, err := os.Stat(store); err == nil {
+			remotes, err := gitx.Run(store, "remote")
+			if err != nil {
+				return settled, err
+			}
+			names := strings.Fields(remotes)
+			for _, remote := range names {
+				if err := gitx.OK(store, "fetch", remote, "+refs/tags/*:refs/tags/*"); err != nil {
+					return settled, fmt.Errorf("the store: %w", err)
+				}
+			}
+			if tags, err := gitx.Run(store, "tag"); err == nil && strings.TrimSpace(tags) != "" {
+				for _, remote := range names {
+					if err := gitx.OK(store, "push", remote, "--tags"); err != nil {
+						return settled, fmt.Errorf("the store: %w", err)
+					}
+				}
+			}
+		}
+	}
 	return settled, nil
 }
 

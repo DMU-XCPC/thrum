@@ -98,13 +98,13 @@ keeps the boilerplate out of every test.
 | ID | Pri | Scenario | Expected | Status |
 | --- | --- | --- | --- | --- |
 | M-01 | P0 | Invite → join → sync between two sites | Both rosters, both keys, joined site verifies | covered (`TestDockerMultiSite`, `TestTwoSitesJoinSync`) |
-| M-02 | P0 | Join with a token whose line is a different workspace | Refused; no half-joined directory, key or site file left | **gap**: the workspace-id check happens after the clone, key and site write, and nothing rolls back |
-| M-03 | P0 | Join with a valid token but no roster entry for the new site | Refused ("the roster does not declare this site") | **gap**: `join` writes the entry itself if it is absent |
+| M-02 | P0 | Join with a token whose line is a different workspace | Refused; no half-joined directory, key or site file left | covered (`TestJoinRefusesAnotherWorkspace`) |
+| M-03 | P0 | Join with a valid token but no roster entry for the new site | Refused ("the roster does not declare this site") | covered (`TestJoinNeedsAnInvitation`) |
 | M-04 | P1 | C joins through B; A reaches C after sync; a site not in the roster is refused | A authenticates C; the stranger is refused at the handshake | partial (handshake refusal is covered; introductions are not implemented) |
 | M-05 | P0 | A rotates its key; B sends to A before syncing, then after | Before: refused (old key); after: delivered | gap |
 | M-06 | P1 | A revokes B's key | B's handshake is refused; B's messages fail | gap |
 | M-07 | P1 | A forgets B | B's name stays taken; messages to B are refused; B's records can still arrive through a remote | partial (single-site only) |
-| M-08 | P1 | A token is reused after the site joined | Second join refused (expiry or one-time use) | **gap**: the token has no nonce and no expiry |
+| M-08 | P1 | A token is reused after the site joined | Second join refused (expiry or one-time use) | covered (`TestInvitationIsOneTime`; one-time, not time-expiring) |
 | M-09 | P1 | Two sites claim the same site name | The roster path is settled; the loser is told; no two winners | gap |
 | M-10 | P2 | `site doctor` with a peer up, down, and rotated | Reports answered / no answer / refused | partial (this site only) |
 
@@ -133,10 +133,10 @@ keeps the boilerplate out of every test.
 | S-02 | P0 | Cross-site send through the daemons | Delivered and read | covered (`TestCrossSiteMessage`, Docker) |
 | S-03 | P0 | a1 moves from s1 to s2; s1 still has the old address; send to s1 | s1 says "not here", asks/corrects, delivers to s2; at most one failed attempt | **gap**: the sender reads its own table and home, never asks a peer, never retries |
 | S-04 | P0 | `actor hello` at s2 after the move | Subsequent sends from s1 go to s2 | **gap**: hello is local-only |
-| S-05 | P0 | Deliver, restart the daemon, list | The message is still there | gap (mailboxes are files; make it explicit) |
-| S-06 | P0 | Kill s2's daemon; send; restart; list | The send fails; nothing appears later | gap |
+| S-05 | P0 | Deliver, restart the daemon, list | The message is still there | covered (`TestMessagesSurviveADaemonRestart`) |
+| S-06 | P0 | Kill s2's daemon; send; restart; list | The send fails; nothing appears later | covered (`TestSenderDoesNotQueue`) |
 | S-07 | P1 | Kill the receiver mid-push of a large attachment | No partial message; a resend arrives whole | gap |
-| S-08 | P0 | A caller retries with the same id | Exactly one message | **gap**: the CLI generates a new id per invocation, so a shell retry duplicates |
+| S-08 | P0 | A caller retries with the same id | Exactly one message | covered (`TestRetryWithTheSameIDDeliversOnce`; `message send --id`) |
 | S-09 | P1 | 10 MB binary attachment | Byte-for-byte, hash checked | gap |
 | S-10 | P1 | Reply threading across sites | `reply_to` preserved and readable at the other site | partial (local only) |
 | S-11 | P1 | `events --watch` sees an arrival, survives a reconnect | One event per message, no duplicates after reconnect | partial (one-shot covered) |
@@ -152,7 +152,7 @@ keeps the boilerplate out of every test.
 | J-02 | P0 | B tries to work A's job branch without a decision | Either the design's one-writer rule is enforced, or the gap is documented | gap (test the current behaviour first) |
 | J-03 | P1 | Bundle exported at A, imported at B | Payload intact | covered (Docker) |
 | J-04 | P1 | Import at B before the code arrived | Refused ("fetch the code first") | gap |
-| J-05 | P0 | Asset published at A, `sync`, materialise at B | Bytes arrive | **gap**: `sync` fetches code repositories but not the store; the tag is unknown at B |
+| J-05 | P0 | Asset published at A, `sync`, materialise at B | Bytes arrive | covered (Docker cross-site asset; `sync` exchanges store tags) |
 | J-06 | P1 | Withdraw at A, sync, verify at B | The archived manifest is there; the tag is gone at A | gap |
 | J-07 | P1 | Both sites publish the same asset version | One wins; the other is refused (the version is taken) | gap |
 | J-08 | P1 | A crafted bundle with `../` paths | Refused; nothing written outside `job/<id>/` | partial (code checks; no test) |
@@ -164,7 +164,7 @@ keeps the boilerplate out of every test.
 | --- | --- | --- | --- | --- |
 | D-01 | P0 | Handshake: right keys; wrong workspace; undeclared site; bad signature | Accepted / refused with a reason | partial (happy and workspace id; the negative cases have no test) |
 | D-02 | P0 | A peer sends `stop` | Refused (local only) | gap |
-| D-03 | P0 | `kill -9` the daemon, then `daemon run` again | Starts; the stale lock is not a tombstone | **gap**: `O_EXCL` lock with a deferred remove leaves a stale file |
+| D-03 | P0 | `kill -9` the daemon, then `daemon run` again | Starts; the stale lock is not a tombstone | covered (`TestDaemonRecoversFromAStaleLock`) |
 | D-04 | P0 | A second daemon on the same workspace | Refused | covered (`TestDaemonLock`) |
 | D-05 | P1 | A peer speaks `thrum/2` | Refused clearly | **gap**: the version is carried but not checked |
 | D-06 | P1 | Unknown verb, malformed request | An error response; the daemon stays up | gap |
@@ -218,17 +218,15 @@ keeps the boilerplate out of every test.
 
 These are read off the code, not guessed; each gets a test before it gets a fix.
 
+The first execution (2026-10-17) closed six of them: join atomicity, the roster requirement,
+the one-time token, idempotent retries, the store exchange and the stale lock. Their tests are
+named in §4; the rows are gone below.
+
 | Gap | Evidence | Scenario |
 | --- | --- | --- |
-| `join` is not atomic | The clone, key, `var/site` and site file are written before the workspace-id check, and there is no rollback | M-02 |
-| `join` declares a site the roster does not | `if !ok { site = records.Site{Site: t.Site} }` | M-03 |
-| The token is a permanent credential | `join.Token` has no nonce and no expiry | M-08, D-10 |
-| A sent message is not deduplicated across retries | The CLI calls `messages.NewID()` on every send; only a caller that reuses the id is safe | S-08 |
 | Placement is not asked | `sendMessage` reads `var/location.yaml` and the actor's `home`; there is no `actor.where` call and no "not here" retry | S-03, S-04 |
-| The store is not exchanged | `exchange.Run` fetches the line, the ledger and the code repositories; the store is never fetched | J-05 |
 | Settlement uses commit time | `claimOf` reads `%ct` and the hash; the design asks for a monotonic clock, then site, then event id | H-09 |
 | The protocol version is not checked | `auth` verifies the workspace, the site and the signature; `hello.Version` is ignored | D-05 |
-| A stale lock survives `kill -9` | `O_EXCL` lock with a deferred remove | D-03 |
 | `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.here`, `msg.push`, `stop` | C12, T2N |
 | `actor.hello` is spelled `actor.here` | `dispatch` | D-01 |
 | `--wait`, `--capacity` and "start the daemon on join" are absent | `message send`, `site invite`, `join.Join` | S-06, M-08 |

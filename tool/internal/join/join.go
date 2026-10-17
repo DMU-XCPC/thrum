@@ -3,7 +3,10 @@
 package join
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -26,6 +29,7 @@ type Token struct {
 	Ledger    string            `json:"ledger"`
 	Store     string            `json:"store,omitempty"`
 	Repos     map[string]string `json:"repos,omitempty"`
+	Nonce     string            `json:"nonce,omitempty"`
 }
 
 // Encode renders a token as one copy-pasteable string.
@@ -55,12 +59,30 @@ func Decode(s string) (Token, error) {
 
 // Join makes the workspace at root another site of the token's workspace.
 func Join(root string, t Token) error {
+	existed := false
+	if _, err := os.Stat(root); err == nil {
+		existed = true
+	}
 	if entries, err := os.ReadDir(root); err == nil && len(entries) > 0 {
 		return fmt.Errorf("%s already exists and is not empty", root)
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
 	}
+	done := false
+	defer func() {
+		if done {
+			return
+		}
+		if !existed {
+			_ = os.RemoveAll(root)
+			return
+		}
+		entries, _ := os.ReadDir(root)
+		for _, e := range entries {
+			_ = os.RemoveAll(filepath.Join(root, e.Name()))
+		}
+	}()
 
 	// The line comes first: it is the history everything else is understood against.
 	if err := gitx.OK("", "clone", t.Line, root); err != nil {
@@ -74,6 +96,29 @@ func Join(root string, t Token) error {
 		if err := gitx.OK(l.Root, "checkout", "-B", "main", "origin/main"); err != nil {
 			return err
 		}
+	}
+
+	// Refuse before writing anything: a token from another workspace, a site the
+	// roster does not declare, and a used invitation all leave nothing behind.
+	if t.Workspace != "" {
+		got, err := WorkspaceID(l.Root)
+		if err != nil {
+			return err
+		}
+		if got != t.Workspace {
+			return fmt.Errorf("that line is a different workspace")
+		}
+	}
+	var site records.Site
+	ok, err := records.Read(l.Site(t.Site), &site)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("the roster does not declare %q: invite it first", t.Site)
+	}
+	if site.Invite == "" || site.Invite != InviteHash(t.Nonce) {
+		return fmt.Errorf("that invitation has been used, or it names another site")
 	}
 
 	if err := workspace.WriteSkeleton(l); err != nil {
@@ -144,28 +189,10 @@ func Join(root string, t Token) error {
 		return err
 	}
 
-	// The invitation declared the site; joining registers its key, as a second event.
-	var site records.Site
-	ok, err := records.Read(l.Site(t.Site), &site)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		site = records.Site{Site: t.Site}
-	}
 	site.Key = pub
+	site.Invite = ""
 	if err := records.Write(l.Site(t.Site), site); err != nil {
 		return err
-	}
-
-	if t.Workspace != "" {
-		got, err := WorkspaceID(l.Root)
-		if err != nil {
-			return err
-		}
-		if got != t.Workspace {
-			return fmt.Errorf("that line is a different workspace")
-		}
 	}
 
 	if err := line.Commit(l.Root, []string{l.Site(t.Site)},
@@ -177,7 +204,23 @@ func Join(root string, t Token) error {
 			return fmt.Errorf("the key is recorded here, but it could not be published: %w", err)
 		}
 	}
+	done = true
 	return nil
+}
+
+// NewNonce is the one-time secret an invitation carries.
+func NewNonce() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
+
+// InviteHash is what the roster keeps, so a leaked roster does not leak a token.
+func InviteHash(nonce string) string {
+	sum := sha256.Sum256([]byte(nonce))
+	return hex.EncodeToString(sum[:])
 }
 
 // WorkspaceID is the line's first commit: the durable name of the workspace.

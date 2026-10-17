@@ -4,6 +4,7 @@ package messages
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,10 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 	"github.com/multiagentworkspace/thrum/tool/internal/records"
 )
+
+// ErrExists means the id is already in this mailbox: a retry is a no-op, not a
+// second delivery.
+var ErrExists = errors.New("already delivered")
 
 // NewID is opaque and unique: a message id carries nothing, because it is for a
 // machine, and the subject is for a person.
@@ -38,7 +43,7 @@ func Send(l layout.Layout, msg records.Message, body []byte, files map[string][]
 	}
 	path := filepath.Join(box, msg.ID+".md")
 	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("message %s is already in %s's mailbox", msg.ID, msg.To)
+		return fmt.Errorf("%w: message %s is already in %s's mailbox", ErrExists, msg.ID, msg.To)
 	}
 
 	if len(files) > 0 {

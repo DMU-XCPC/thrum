@@ -74,7 +74,8 @@ func newSiteCmd() *cobra.Command {
 			if err := os.MkdirAll(l.Sites(), 0o755); err != nil {
 				return err
 			}
-			if err := records.Write(l.Site(name), records.Site{Site: name, Reach: inviteAt}); err != nil {
+			nonce := join.NewNonce()
+			if err := records.Write(l.Site(name), records.Site{Site: name, Reach: inviteAt, Invite: join.InviteHash(nonce)}); err != nil {
 				return err
 			}
 			if err := line.Commit(l.Root, []string{l.Site(name)},
@@ -83,7 +84,7 @@ func newSiteCmd() *cobra.Command {
 			}
 			token, err := join.Encode(join.Token{
 				Workspace: ws, Site: name, Line: lineURL, Ledger: ledgerURL,
-				Store: storeURL, Repos: repoURLs,
+				Store: storeURL, Repos: repoURLs, Nonce: nonce,
 			})
 			if err != nil {
 				return err

@@ -15,9 +15,10 @@ type Actor struct {
 // Site is one machine's entry in the roster. A site that has been invited but has
 // not joined yet has no key.
 type Site struct {
-	Site  string `yaml:"site" json:"site"`
-	Key   string `yaml:"key,omitempty" json:"key,omitempty"`
-	Reach string `yaml:"reach,omitempty" json:"reach,omitempty"`
+	Site   string `yaml:"site" json:"site"`
+	Key    string `yaml:"key,omitempty" json:"key,omitempty"`
+	Reach  string `yaml:"reach,omitempty" json:"reach,omitempty"`
+	Invite string `yaml:"invite,omitempty" json:"invite,omitempty"`
 }
 
 // Repo is one code repository the project has.

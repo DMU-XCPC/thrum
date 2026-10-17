@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,7 +21,7 @@ import (
 func newMessageCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "message", Short: "Send another actor a message, and read your own"}
 
-	var subject, bodyFile, job, replyTo string
+	var subject, bodyFile, job, replyTo, idFlag string
 	var attach []string
 	send := &cobra.Command{
 		Use:   "send <actor>",
@@ -39,7 +40,7 @@ func newMessageCmd() *cobra.Command {
 				}
 				files[filepath.Base(p)] = data
 			}
-			id, err := sendMessage(workspaceRoot(), args[0], subject, body, files, job, replyTo)
+			id, err := sendMessage(workspaceRoot(), args[0], subject, body, files, job, replyTo, idFlag)
 			if err != nil {
 				return err
 			}
@@ -52,6 +53,7 @@ func newMessageCmd() *cobra.Command {
 	send.Flags().StringArrayVar(&attach, "attach", nil, "a file to carry with the message")
 	send.Flags().StringVar(&job, "job", "", "the job it is about, if any")
 	send.Flags().StringVar(&replyTo, "reply-to", "", "the id it answers")
+	send.Flags().StringVar(&idFlag, "id", "", "reuse an id to make a retry idempotent")
 
 	list := &cobra.Command{
 		Use:   "list",
@@ -133,7 +135,7 @@ func newMessageCmd() *cobra.Command {
 			if subject == "" {
 				subject = "re: " + msg.Subject
 			}
-			id, err := sendMessage(l, msg.From, subject, body, nil, msg.Job, msg.ID)
+			id, err := sendMessage(l, msg.From, subject, body, nil, msg.Job, msg.ID, "")
 			if err != nil {
 				return err
 			}
@@ -161,7 +163,7 @@ func newMessageCmd() *cobra.Command {
 	return cmd
 }
 
-func sendMessage(l layout.Layout, to, subject string, body []byte, files map[string][]byte, job, replyTo string) (string, error) {
+func sendMessage(l layout.Layout, to, subject string, body []byte, files map[string][]byte, job, replyTo, id string) (string, error) {
 	from := actorName()
 	if _, ok, err := actors.Find(l, from); err != nil {
 		return "", err
@@ -184,13 +186,19 @@ func sendMessage(l layout.Layout, to, subject string, body []byte, files map[str
 		return "", fmt.Errorf("where %q is cannot be established", to)
 	}
 
+	if id == "" {
+		id = messages.NewID()
+	}
 	msg := records.Message{
-		ID: messages.NewID(), From: from, To: to, Site: actors.Site(l),
+		ID: id, From: from, To: to, Site: actors.Site(l),
 		Sent:    time.Now().UTC().Format(format.RFC3339UTC),
 		Subject: subject, ReplyTo: replyTo, Job: job,
 	}
 	if site == actors.Site(l) {
 		if err := messages.Send(l, msg, body, files); err != nil {
+			if errors.Is(err, messages.ErrExists) {
+				return msg.ID, nil
+			}
 			return "", err
 		}
 		return msg.ID, nil

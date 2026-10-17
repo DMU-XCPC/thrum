@@ -7,11 +7,13 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -69,9 +71,23 @@ func Run(l layout.Layout, listen string) error {
 	if err := os.MkdirAll(l.Var(), 0o755); err != nil {
 		return err
 	}
+	if pid, err := readLock(l.DaemonLock()); err == nil {
+		if processAlive(pid) {
+			return fmt.Errorf("a daemon is already running here (pid %d)", pid)
+		}
+		_ = os.Remove(l.DaemonLock())
+	} else if !os.IsNotExist(err) {
+		// A lock nobody can read is a leftover, not a daemon.
+		_ = os.Remove(l.DaemonLock())
+	}
 	lock, err := os.OpenFile(l.DaemonLock(), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("a daemon is already running here")
+	}
+	if _, err := fmt.Fprintf(lock, "%d\n", os.Getpid()); err != nil {
+		_ = lock.Close()
+		_ = os.Remove(l.DaemonLock())
+		return err
 	}
 	defer func() {
 		_ = lock.Close()
@@ -280,6 +296,9 @@ func (s *server) dispatch(req Request, remote bool) Response {
 			files[name] = data
 		}
 		if err := messages.Send(s.l, args.Message, body, files); err != nil {
+			if errors.Is(err, messages.ErrExists) {
+				return payload(map[string]any{"id": args.Message.ID, "duplicate": true})
+			}
 			return fail(err)
 		}
 		return payload(map[string]string{"id": args.Message.ID})
@@ -331,6 +350,27 @@ func reachFor(l layout.Layout, site string, roster map[string]records.Site) stri
 		return s.Reach
 	}
 	return ""
+}
+
+func readLock(path string) (int, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 {
+		return 0, fmt.Errorf("unreadable lock")
+	}
+	return pid, nil
+}
+
+func processAlive(pid int) bool {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = p.Signal(syscall.Signal(0))
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 func loadKey(l layout.Layout) (ed25519.PrivateKey, error) {
