@@ -75,6 +75,10 @@ func newSiteKeyCmd() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("no site named %q", name)
 			}
+			if s.Key == "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s has no key to revoke\n", name)
+				return nil
+			}
 			s.Key = ""
 			if err := records.Write(l.Site(name), s); err != nil {
 				return err
