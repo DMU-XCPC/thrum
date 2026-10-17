@@ -24,6 +24,7 @@ type CodeSource struct {
 type CreateOptions struct {
 	Root string
 	Site string
+	At   string
 	Code []CodeSource
 }
 
@@ -114,7 +115,7 @@ func Create(opts CreateOptions) (err error) {
 	if err != nil {
 		return err
 	}
-	if err := writeDecl(l.Site(opts.Site), siteDecl{Site: opts.Site, Key: pub}); err != nil {
+	if err := writeDecl(l.Site(opts.Site), siteDecl{Site: opts.Site, Key: pub, Reach: opts.At}); err != nil {
 		return err
 	}
 	for _, c := range opts.Code {

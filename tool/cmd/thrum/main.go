@@ -102,6 +102,7 @@ func newCreateCmd() *cobra.Command {
 			if err := workspace.Create(workspace.CreateOptions{
 				Root: args[0],
 				Site: site,
+				At:   at,
 				Code: sources,
 			}); err != nil {
 				return err

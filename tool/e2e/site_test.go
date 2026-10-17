@@ -109,3 +109,20 @@ func TestBundleNeedsTheRecords(t *testing.T) {
 	w2 := newWorkspace(t)
 	w2.r().run("bundle", "import", bundle).fails(t, "import without the records", "not here")
 }
+
+func TestCreateRecordsTheSitesAddress(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "ws")
+	src := filepath.Join(dir, "src")
+	initRepo(t, src)
+	(&runner{t: t, root: root}).run("create", root, "--site", "s1",
+		"--at", "127.0.0.1:7700", "--code", "code="+src).ok(t, "create")
+	w := &workspace{t: t, root: root, src: src}
+	if !strings.Contains(w.file("doc/site/s1.yaml"), "127.0.0.1:7700") {
+		t.Fatalf("the roster does not carry the address: %s", w.file("doc/site/s1.yaml"))
+	}
+	show := w.r().run("site", "show", "s1").ok(t, "show")
+	if !strings.Contains(show.stdout, "127.0.0.1:7700") {
+		t.Fatalf("site show does not report the address: %s", show.stdout)
+	}
+}
