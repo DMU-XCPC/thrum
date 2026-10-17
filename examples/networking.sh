@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # A two-site thrum network, end to end, on one machine.
 #
-# The bootstrap at the start is what a real deployment replaces with a URL the
-# joining machine can reach (a bare repository over ssh, or a bundle): it carries
-# the line and the ledger once. After `site transport` the histories move through
-# the daemons and the bootstrap is deleted.
+# The joining site takes its first line and ledger from the inviting site's live
+# workspace (a URL it can reach, here a local path). The join pushes its key back
+# into that line, and create has already set receive.denyCurrentBranch=updateInstead
+# so the inviting site's worktree follows. After `site transport` the histories move
+# through the daemons; nothing external is left.
 #
 # Usage: examples/networking.sh [work-directory]
 set -euo pipefail
@@ -14,7 +15,6 @@ BIN="${THRUM:-$ROOT/.gocache/thrum}"
 BASE="${1:-$(mktemp -d)}"
 S1="$BASE/s1"
 S2="$BASE/s2"
-BOOT="$BASE/bootstrap"
 P1=7801
 P2=7802
 CODE="$BASE/code"
@@ -32,7 +32,7 @@ at() {
   "$BIN" --root "$root" "$@"
 }
 
-mkdir -p "$BASE" "$BOOT"
+mkdir -p "$BASE"
 run git init -q -b main "$CODE"
 echo demo > "$CODE/README"
 run git -C "$CODE" add -A
@@ -42,25 +42,15 @@ run git -C "$CODE" -c user.name=t -c user.email=t@t commit -qm "init"
 run "$BIN" create "$S1" --site s1 --code "code=$CODE"
 at "$S1" actor declare alice --kind human
 
-# A bootstrap the joining machine can reach. In a real network this is an ssh
-# URL or a bundle; here it is a bare directory.
-run git init --bare -q "$BOOT/line.git"
-run git init --bare -q "$BOOT/ledger.git"
-run git -C "$S1" remote add origin "$BOOT/line.git"
-run git -C "$S1" push -q -u origin main
-run git -C "$S1/handoff" remote add origin "$BOOT/ledger.git"
-run git -C "$S1/handoff" push -q -u origin main
-
-# Invite and join.
-say "$BIN --root $S1 site invite s2 --at 127.0.0.1:$P2 --line $BOOT/line.git --ledger $BOOT/ledger.git --store $S1/repos/store.git --code code=$S1/repos/code.git"
+# Invite and join: the token points at site one's live workspace, which site two
+# can reach. In a real network that is an ssh:// URL; here it is the local path.
+say "$BIN --root $S1 site invite s2 --at 127.0.0.1:$P2 --line $S1 --ledger $S1/handoff --store $S1/repos/store.git --code code=$S1/repos/code.git"
 TOKEN=$("$BIN" --root "$S1" site invite s2 --at "127.0.0.1:$P2" \
-  --line "$BOOT/line.git" --ledger "$BOOT/ledger.git" \
+  --line "$S1" --ledger "$S1/handoff" \
   --store "$S1/repos/store.git" --code "code=$S1/repos/code.git")
 printf 'token: %s...\n' "${TOKEN:0:48}"
-at "$S1" sync
 say "$BIN join <token> --dir $S2"
 "$BIN" join "$TOKEN" --dir "$S2"
-at "$S1" sync
 
 # Where each site listens, and where it reaches the other.
 at "$S1" site reach s2 --at "127.0.0.1:$P2"
@@ -70,8 +60,6 @@ at "$S1" site reach s1 --at "127.0.0.1:$P1"
 # Move every repository onto the other site's daemon.
 at "$S1" site transport s2
 at "$S2" site transport s1
-say "rm -rf $BOOT   # nothing external is left"
-rm -rf "$BOOT"
 
 # Start the two daemons (in a real deployment this is systemd, not a shell).
 say "$BIN --root $S1 daemon run &"
