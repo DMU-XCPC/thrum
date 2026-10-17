@@ -41,8 +41,14 @@ func newSyncCmd() *cobra.Command {
 		Short: "Fetch the peers, merge both shared histories, and publish",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := exchange.Run(workspaceRoot()); err != nil {
+			settled, err := exchange.Run(workspaceRoot())
+			if err != nil {
 				return err
+			}
+			for _, r := range settled {
+				fmt.Fprintf(cmd.OutOrStdout(),
+					"settled %s: the earlier claim (%s) keeps it; the other (%s, %s) is void\n",
+					r.Path, r.Winner, r.Loser, r.LoserSide)
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "exchanged")
 			return nil
