@@ -101,8 +101,8 @@ keeps the boilerplate out of every test.
 | M-02 | P0 | Join with a token whose line is a different workspace | Refused; no half-joined directory, key or site file left | covered (`TestJoinRefusesAnotherWorkspace`) |
 | M-03 | P0 | Join with a valid token but no roster entry for the new site | Refused ("the roster does not declare this site") | covered (`TestJoinNeedsAnInvitation`) |
 | M-04 | P1 | C joins through B; A reaches C after sync; a site not in the roster is refused | A authenticates C; the stranger is refused at the handshake | partial (handshake refusal is covered; introductions are not implemented) |
-| M-05 | P0 | A rotates its key; B sends to A before syncing, then after | Before: refused (old key); after: delivered | gap |
-| M-06 | P1 | A revokes B's key | B's handshake is refused; B's messages fail | gap |
+| M-05 | P0 | A rotates its key; B sends to A before syncing, then after | Before: refused (old key); after: delivered | covered (`TestKeyRotationTakesEffect`) |
+| M-06 | P1 | A revokes B's key | B's handshake is refused; B's messages fail | covered (`TestRevokedKeyIsRefused`) |
 | M-07 | P1 | A forgets B | B's name stays taken; messages to B are refused; B's records can still arrive through a remote | partial (single-site only) |
 | M-08 | P1 | A token is reused after the site joined | Second join refused (expiry or one-time use) | covered (`TestInvitationIsOneTime`; one-time, not time-expiring) |
 | M-09 | P1 | Two sites claim the same site name | The roster path is settled; the loser is told; no two winners | gap |
@@ -140,7 +140,7 @@ keeps the boilerplate out of every test.
 | S-09 | P1 | 10 MB binary attachment | Byte-for-byte, hash checked | gap |
 | S-10 | P1 | Reply threading across sites | `reply_to` preserved and readable at the other site | partial (local only) |
 | S-11 | P1 | `events --watch` sees an arrival, survives a reconnect | One event per message, no duplicates after reconnect | partial (one-shot covered) |
-| S-12 | P0 | A site not in the roster, or with a revoked key, pushes | Handshake refused; daemon survives | gap |
+| S-12 | P0 | A site not in the roster, or with a revoked key, pushes | Handshake refused; daemon survives | covered (undeclared site and revoked key) |
 | S-13 | P1 | Malformed JSON, unknown verb, truncated frame, huge frame | Connection closed; daemon alive; other sites unaffected | gap |
 | S-14 | P2 | 100 messages, list and purge | Bounded mailbox operations | gap |
 
@@ -162,12 +162,12 @@ keeps the boilerplate out of every test.
 
 | ID | Pri | Scenario | Expected | Status |
 | --- | --- | --- | --- | --- |
-| D-01 | P0 | Handshake: right keys; wrong workspace; undeclared site; bad signature | Accepted / refused with a reason | partial (happy and workspace id; the negative cases have no test) |
-| D-02 | P0 | A peer sends `stop` | Refused (local only) | gap |
+| D-01 | P0 | Handshake: right keys; wrong workspace; undeclared site; bad signature | Accepted / refused with a reason | covered (`TestDaemonRefusesBadHandshakes`) |
+| D-02 | P0 | A peer sends `stop` | Refused (local only) | covered (`TestPeerCannotStopTheDaemon`) |
 | D-03 | P0 | `kill -9` the daemon, then `daemon run` again | Starts; the stale lock is not a tombstone | covered (`TestDaemonRecoversFromAStaleLock`) |
 | D-04 | P0 | A second daemon on the same workspace | Refused | covered (`TestDaemonLock`) |
-| D-05 | P1 | A peer speaks `thrum/2` | Refused clearly | **gap**: the version is carried but not checked |
-| D-06 | P1 | Unknown verb, malformed request | An error response; the daemon stays up | gap |
+| D-05 | P1 | A peer speaks `thrum/2` | Refused clearly | covered (the version is refused, with a sentence) |
+| D-06 | P1 | Unknown verb, malformed request | An error response; the daemon stays up | covered (`TestUnknownVerbAndGarbage`) |
 | D-07 | P1 | Unix socket permissions; another user | Only this user can ask | gap (0600 is set; no test) |
 | D-08 | P1 | `site reach` | Written under `var/`, never committed | partial (single-site) |
 | D-09 | P2 | One slow peer holds a connection | Other peers are not blocked | gap |
@@ -227,7 +227,6 @@ named in §4; the rows are gone below.
 | Placement is not asked | `sendMessage` reads `var/location.yaml` and the actor's `home`; there is no `actor.where` call and no "not here" retry | S-03, S-04 |
 | Settlement uses commit time | `claimOf` reads `%ct` and the hash; the design asks for a monotonic clock, then site, then event id | H-09 |
 | Two stretches starting in the same second share a name | The handoff name is the started stamp, to the second; the test separates them with a sleep | H-05 |
-| The protocol version is not checked | `auth` verifies the workspace, the site and the signature; `hello.Version` is ignored | D-05 |
 | `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.here`, `msg.push`, `stop` | C12, T2N |
 | `actor.hello` is spelled `actor.here` | `dispatch` | D-01 |
 | `--wait`, `--capacity` and "start the daemon on join" are absent | `message send`, `site invite`, `join.Join` | S-06, M-08 |

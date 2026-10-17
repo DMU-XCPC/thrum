@@ -49,12 +49,12 @@ type greeting struct {
 	Version   string `json:"version"`
 	Nonce     string `json:"nonce"`
 	Signature string `json:"signature,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 type server struct {
 	l         layout.Layout
 	site      string
-	key       ed25519.PrivateKey
 	roster    map[string]records.Site
 	workspace string
 	stop      chan struct{}
@@ -146,8 +146,7 @@ func newServer(l layout.Layout) (*server, error) {
 	if site == "" {
 		return nil, fmt.Errorf("this machine does not name its site")
 	}
-	key, err := loadKey(l)
-	if err != nil {
+	if _, err := loadKey(l); err != nil {
 		return nil, err
 	}
 	roster := map[string]records.Site{}
@@ -172,7 +171,7 @@ func newServer(l layout.Layout) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &server{l: l, site: site, key: key, roster: roster, workspace: ws, stop: make(chan struct{})}, nil
+	return &server{l: l, site: site, roster: roster, workspace: ws, stop: make(chan struct{})}, nil
 }
 
 func (s *server) accept(ln net.Listener, remote bool) {
@@ -198,22 +197,44 @@ func (s *server) accept(ln net.Listener, remote bool) {
 func (s *server) auth(conn net.Conn, br *bufio.Reader) error {
 	dec := json.NewDecoder(br)
 	enc := json.NewEncoder(conn)
+	refuse := func(format string, args ...any) error {
+		msg := fmt.Sprintf(format, args...)
+		_ = enc.Encode(greeting{Error: msg})
+		return fmt.Errorf("%s", msg)
+	}
 
 	var hello greeting
 	if err := dec.Decode(&hello); err != nil {
 		return err
 	}
 	if hello.Workspace != s.workspace {
-		return fmt.Errorf("that site is in a different workspace")
+		return refuse("that site is in a different workspace")
 	}
-	peer, ok := s.roster[hello.Site]
+	if hello.Version != protocolVersion {
+		return refuse("that site speaks protocol %q, this site speaks %q", hello.Version, protocolVersion)
+	}
+	// Read the roster for each handshake: a rotation, a revocation or a forget must
+	// take effect without restarting the daemon.
+	peer, ok := rosterOf(s.l)[hello.Site]
 	if !ok {
-		return fmt.Errorf("site %q is not declared", hello.Site)
+		return refuse("site %q is not declared", hello.Site)
 	}
+	if peer.Key == "" {
+		return refuse("site %q has no key", hello.Site)
+	}
+	pub, err := workspace.ParseSiteKey(peer.Key)
+	if err != nil {
+		return refuse("site %q has a key this site cannot read", hello.Site)
+	}
+	key, err := loadKey(s.l)
+	if err != nil {
+		return refuse("this site has no usable key")
+	}
+
 	serverNonce := nonce()
 	if err := enc.Encode(greeting{
 		Workspace: s.workspace, Site: s.site, Version: protocolVersion,
-		Nonce: serverNonce, Signature: sign(s.key, hello.Nonce),
+		Nonce: serverNonce, Signature: sign(key, hello.Nonce),
 	}); err != nil {
 		return err
 	}
@@ -221,14 +242,10 @@ func (s *server) auth(conn net.Conn, br *bufio.Reader) error {
 	if err := dec.Decode(&proof); err != nil {
 		return err
 	}
-	pub, err := workspace.ParseSiteKey(peer.Key)
-	if err != nil {
-		return err
-	}
 	if !verify(pub, serverNonce, proof.Signature) {
-		return fmt.Errorf("site %q did not prove its key", hello.Site)
+		return refuse("site %q did not prove its key", hello.Site)
 	}
-	return nil
+	return enc.Encode(greeting{})
 }
 
 func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool) {

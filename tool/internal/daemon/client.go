@@ -82,9 +82,17 @@ func Dial(l layout.Layout, peer string) (*Client, error) {
 		conn.Close()
 		return nil, err
 	}
+	if reply.Error != "" {
+		conn.Close()
+		return nil, fmt.Errorf("%s refused: %s", peer, reply.Error)
+	}
 	if reply.Workspace != ws {
 		conn.Close()
 		return nil, fmt.Errorf("that site is in a different workspace")
+	}
+	if reply.Version != protocolVersion {
+		conn.Close()
+		return nil, fmt.Errorf("site %q speaks protocol %q, this site speaks %q", peer, reply.Version, protocolVersion)
 	}
 	pub, err := workspace.ParseSiteKey(target.Key)
 	if err != nil {
@@ -98,6 +106,15 @@ func Dial(l layout.Layout, peer string) (*Client, error) {
 	if err := enc.Encode(greeting{Signature: sign(key, reply.Nonce)}); err != nil {
 		conn.Close()
 		return nil, err
+	}
+	var ack greeting
+	if err := dec.Decode(&ack); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("%s did not answer the proof: %w", peer, err)
+	}
+	if ack.Error != "" {
+		conn.Close()
+		return nil, fmt.Errorf("%s refused: %s", peer, ack.Error)
 	}
 	return &Client{conn: conn, enc: enc, dec: dec}, nil
 }
