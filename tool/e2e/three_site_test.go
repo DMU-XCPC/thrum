@@ -124,3 +124,63 @@ func TestConcurrentLedgerHandoffs(t *testing.T) {
 	}
 	ts.w3.r().run("verify").ok(t, "verify the joined evidence")
 }
+
+// TestEventClockDecidesTheClaim: the derived order is the event's clock, not the
+// commit time. Site one's clock is far ahead and its commit is earlier; site two's
+// commit is later but its clock is smaller, and site two keeps the name.
+func TestEventClockDecidesTheClaim(t *testing.T) {
+	ts := setupTwoSites(t)
+	ts.w1.write("var/state/clock", "9000000000000000000\n")
+	early := []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}
+	late := []string{"GIT_AUTHOR_DATE=2026-06-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-06-01T00:00:00Z"}
+	ts.w1.r().with(early...).run("repo", "add", "shared", "--about", "from w1").ok(t, "claim on w1")
+	ts.w1.r().run("sync").ok(t, "publish w1's claim")
+	ts.w2.r().with(late...).run("repo", "add", "shared", "--about", "from w2").ok(t, "claim on w2")
+	settled := ts.w2.r().run("sync").ok(t, "settle")
+	if !strings.Contains(settled.stdout, "settled") {
+		t.Fatalf("the claim was not settled: %s", settled.stdout)
+	}
+	ts.w1.r().run("sync").ok(t, "w1 sync")
+
+	a := ts.w1.file("doc/repo/shared.yaml")
+	b := ts.w2.file("doc/repo/shared.yaml")
+	if a != b {
+		t.Fatalf("the sites disagree:\n--- w1 ---\n%s\n--- w2 ---\n%s", a, b)
+	}
+	if !strings.Contains(a, "from w2") {
+		t.Fatalf("the smaller event clock did not keep the name:\n%s", a)
+	}
+}
+
+func TestProseConflictStopsAndNamesTheFile(t *testing.T) {
+	ts := setupTwoSites(t)
+	ts.w1.write("doc/topic/shared/overview.md", "# Shared\n\nfrom w1\n")
+	ts.w1.r().run("commit", "--summary", "added the topic", "--", "doc/topic/shared").ok(t, "w1 adds the topic")
+	ts.w1.r().run("sync").ok(t, "publish the topic")
+	ts.w2.r().run("sync").ok(t, "site two has the base")
+
+	ts.w2.write("doc/topic/shared/overview.md", "# Shared\n\nfrom w2\n")
+	ts.w2.r().run("commit", "--summary", "edited at w2", "--", "doc/topic/shared").ok(t, "w2 edits")
+	ts.w1.write("doc/topic/shared/overview.md", "# Shared\n\nfrom w1 again\n")
+	ts.w1.r().run("commit", "--summary", "edited at w1", "--", "doc/topic/shared").ok(t, "w1 edits")
+	ts.w1.r().run("sync").ok(t, "publish w1's edit")
+
+	res := ts.w2.r().run("sync")
+	res.fails(t, "a prose conflict", "do not go together")
+	if !strings.Contains(res.output(), "overview.md") {
+		t.Fatalf("the conflict does not name the file: %s", res.output())
+	}
+	if out := ts.w2.git("status", "--short"); strings.TrimSpace(out) != "" {
+		t.Fatalf("the merge was not aborted cleanly:\n%s", out)
+	}
+}
+
+func TestWorkingAnotherSitesJobIsRefused(t *testing.T) {
+	ts := setupTwoSites(t)
+	ts.w1.r().run("work", "j1", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "open at w1")
+	ts.w1.r().run("sync").ok(t, "publish the job")
+	ts.w2.r().run("sync").ok(t, "site two sees the job")
+
+	ts.w2.r().as("a2").run("work", "j1", "--label", "up2").
+		fails(t, "working another site's job", "is owned by")
+}

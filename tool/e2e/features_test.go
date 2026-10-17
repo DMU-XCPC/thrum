@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -356,4 +358,114 @@ func TestVerifyCatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.run("verify").ok(t, "verify after repairing the records")
+}
+
+func TestAssetVersionIsTakenAcrossSites(t *testing.T) {
+	ts := setupTwoSites(t)
+	one := filepath.Join(t.TempDir(), "one.bin")
+	if err := os.WriteFile(one, []byte("one"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts.w1.r().run("asset", "ingest", one).ok(t, "ingest at w1")
+	ts.w1.r().run("asset", "publish", "cross", "2026-10-18", "--description", "one").ok(t, "publish at w1")
+	ts.w1.r().run("sync").ok(t, "publish the version")
+	ts.w2.r().run("sync").ok(t, "site two learns the version")
+
+	two := filepath.Join(t.TempDir(), "two.bin")
+	if err := os.WriteFile(two, []byte("two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts.w2.r().run("asset", "ingest", two).ok(t, "ingest at w2")
+	ts.w2.r().run("asset", "publish", "cross", "2026-10-18").
+		fails(t, "the version is taken", "already published")
+}
+
+func TestBundleBeforeTheCodeIsRefused(t *testing.T) {
+	ts := setupTwoSites(t)
+	ts.w1.r().run("work", "j1", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "open at w1")
+	wt := ts.w1.path("worktree", "up")
+	if err := os.WriteFile(filepath.Join(wt, "README"), []byte("a change\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, wt, "add", "-A")
+	runGit(t, wt, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "work")
+	ts.w1.r().run("job", "handoff", "j1", "--status", "partial", "--next", "finish").ok(t, "handoff")
+	ts.w1.r().run("sync").ok(t, "publish")
+
+	// Site two takes the histories but not the code: the head cannot resolve.
+	runGit(t, ts.w2.path("repos", "code.git"), "remote", "remove", "origin")
+	ts.w2.r().run("sync").ok(t, "site two syncs the histories only")
+	bundle := filepath.Join(t.TempDir(), "j1.tgz")
+	ts.w1.r().run("bundle", "export", "j1", "--out", bundle).ok(t, "export")
+	ts.w2.r().run("bundle", "import", bundle).fails(t, "import before the code", "fetch the code first")
+}
+
+func TestWithdrawalCrossesTheHistories(t *testing.T) {
+	ts := setupTwoSites(t)
+	one := filepath.Join(t.TempDir(), "one.bin")
+	if err := os.WriteFile(one, []byte("one"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts.w1.r().run("asset", "ingest", one).ok(t, "ingest")
+	ts.w1.r().run("asset", "publish", "cross", "2026-10-18").ok(t, "publish")
+	ts.w1.r().run("sync").ok(t, "publish the version")
+	ts.w2.r().run("sync").ok(t, "site two learns the version")
+	ts.w2.r().run("verify").ok(t, "site two verifies")
+
+	ts.w1.r().run("asset", "withdraw", "cross", "2026-10-18", "--why", "wrong bytes").ok(t, "withdraw")
+	ts.w1.r().run("sync").ok(t, "publish the withdrawal")
+	ts.w2.r().run("sync").ok(t, "site two learns the withdrawal")
+	if tags := runGit(t, ts.w1.path("repos", "store.git"), "tag"); strings.TrimSpace(tags) != "" {
+		t.Fatalf("the withdrawn tag is still at site one: %s", tags)
+	}
+	ts.w2.mustExist("doc/archive/asset/cross/2026-10-18.md")
+	ts.w2.r().run("verify").ok(t, "verify after the withdrawal")
+}
+
+type bundleEntry struct {
+	name    string
+	content string
+}
+
+func makeBundle(t *testing.T, path string, entries []bundleEntry) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	for _, e := range entries {
+		if err := tw.WriteHeader(&tar.Header{Name: e.name, Mode: 0o644, Size: int64(len(e.content))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(e.content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBundlePathTraversalIsRefused(t *testing.T) {
+	w := newWorkspace(t)
+	path := filepath.Join(t.TempDir(), "evil.tgz")
+	makeBundle(t, path, []bundleEntry{
+		{"bundle.yaml", "job: j1\nhandoff: 2026-01-01T00-00-00Z.md\n"},
+		{"job/j1/../../escape.txt", "x"},
+	})
+	w.r().run("bundle", "import", path).fails(t, "a path outside the payload", "outside the payload")
+	if _, err := os.Stat(filepath.Join(filepath.Dir(w.root), "escape.txt")); err == nil {
+		t.Fatal("the import wrote outside the workspace")
+	}
+	if w.exists("escape.txt") {
+		t.Fatal("the import wrote outside the job")
+	}
 }

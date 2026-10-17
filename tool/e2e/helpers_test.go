@@ -77,6 +77,12 @@ type runner struct {
 	env  []string
 }
 
+func (r *runner) with(env ...string) *runner {
+	cp := *r
+	cp.env = append(append([]string{}, r.env...), env...)
+	return &cp
+}
+
 func (r *runner) as(actor string) *runner {
 	cp := *r
 	cp.env = append(append([]string{}, r.env...), "THRUM_ACTOR="+actor)

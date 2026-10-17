@@ -48,6 +48,9 @@ func newWorkCmd() *cobra.Command {
 				return nil
 			}
 
+			if b.Owner != "" && b.Owner != actorName() {
+				return fmt.Errorf("job %q is owned by %s; reassign it before working here", id, b.Owner)
+			}
 			if b.Owner == "" {
 				if err := jobs.Claim(l, id, actorName()); err != nil {
 					return err

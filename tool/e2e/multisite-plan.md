@@ -117,10 +117,10 @@ keeps the boilerplate out of every test.
 | H-03 | P0 | Three sites claim one name, syncing in three different orders | The same winner at all three | covered (`TestThreeSiteClaim`) |
 | H-04 | P1 | Three sites write disjoint events, sync pairwise in different orders | Identical trees at all three | gap |
 | H-05 | P0 | A and B record handoffs for the same job while apart | Both files survive; no conflict | covered (`TestConcurrentLedgerHandoffs`) |
-| H-06 | P0 | A and B edit the same `doc/topic/...` file | Sync stops, names the file, and leaves both histories intact | partial (exchange aborts; verify it names the path) |
+| H-06 | P0 | A and B edit the same `doc/topic/...` file | Sync stops, names the file, and leaves both histories intact | covered (`TestProseConflictStopsAndNamesTheFile`) |
 | H-07 | P1 | A and B push at the same time | One rejected push, one retry, no lost event | gap |
 | H-08 | P1 | After every sync, the histories only grow | No force-push, no rewrite; ancestry holds | gap |
-| H-09 | P1 | A clock is +10m, B is −10m; B claims a name later in real time but earlier by commit time | The design's monotonic clock keeps A; the current commit-time rule may pick B | **gap**: the rule is (commit time, hash) |
+| H-09 | P1 | A site's event clock is far ahead and its commit is earlier; another site claims later in real time with a wall clock | The smaller event clock keeps the name, deterministically and regardless of commit time | covered (`TestEventClockDecidesTheClaim`) |
 | H-10 | P2 | 1,000 events, then sync | Bounded time, no corruption | gap |
 | H-11 | P0 | B is partitioned; A and B both record; heal and sync | Both converge; nothing lost | covered (Docker partition) |
 | H-12 | P1 | The hub refuses one push | One retry succeeds; no duplicate event | gap |
@@ -149,13 +149,13 @@ keeps the boilerplate out of every test.
 | ID | Pri | Scenario | Expected | Status |
 | --- | --- | --- | --- | --- |
 | J-01 | P0 | A opens a job and hands off; B syncs and verifies | B sees the brief and the handoff; the head resolves | covered (Docker) |
-| J-02 | P0 | B tries to work A's job branch without a decision | Either the design's one-writer rule is enforced, or the gap is documented | gap (test the current behaviour first) |
+| J-02 | P0 | B tries to work A's job branch without a decision | Either the design's one-writer rule is enforced, or the gap is documented | covered (the owner's refusal; `TestWorkingAnotherSitesJobIsRefused`) |
 | J-03 | P1 | Bundle exported at A, imported at B | Payload intact | covered (Docker) |
-| J-04 | P1 | Import at B before the code arrived | Refused ("fetch the code first") | gap |
+| J-04 | P1 | Import at B before the code arrived | Refused ("fetch the code first") | covered |
 | J-05 | P0 | Asset published at A, `sync`, materialise at B | Bytes arrive | covered (Docker cross-site asset; `sync` exchanges store tags) |
-| J-06 | P1 | Withdraw at A, sync, verify at B | The archived manifest is there; the tag is gone at A | gap |
-| J-07 | P1 | Both sites publish the same asset version | One wins; the other is refused (the version is taken) | gap |
-| J-08 | P1 | A crafted bundle with `../` paths | Refused; nothing written outside `job/<id>/` | partial (code checks; no test) |
+| J-06 | P1 | Withdraw at A, sync, verify at B | The archived manifest is there; the tag is gone at A | covered |
+| J-07 | P1 | Both sites publish the same asset version | One wins; the other is refused (the version is taken) | covered |
+| J-08 | P1 | A crafted bundle with `../` paths | Refused; nothing written outside `job/<id>/` | covered |
 | J-09 | P2 | A and B open the same job id while apart | Settlement; the loser is told; no two briefs | gap |
 
 ### E. Daemon, protocol, security
@@ -224,8 +224,9 @@ named in §4; the rows are gone below.
 
 | Gap | Evidence | Scenario |
 | --- | --- | --- |
-| Settlement uses commit time | `claimOf` reads `%ct` and the hash; the design asks for a monotonic clock, then site, then event id | H-09 |
 | Two stretches starting in the same second share a name | The handoff name is the started stamp, to the second; the test separates them with a sleep | H-05 |
+| Two hellos in the same second tie | The heard stamp has second granularity; an equal-or-newer place overwrites, so the arrival decides | S-03/S-04 (tests separate them) |
+| A withdrawal leaves a peer's already-fetched tag in place | The peer does not re-push it and the remote is cleaned, but a materialise at that peer still works | J-06 (accepted) |
 | `history.exchange` and `git.serve` are absent | The daemon's verbs are `site.hello`, `actor.where`, `actor.hello`, `msg.push`, `stop` | C12, T2N |
 | `--wait`, `--capacity` and "start the daemon on join" are absent | `message send`, `site invite`, `join.Join` | S-06, M-08 |
 | `daemon status` reports no holdings | It returns site, workspace, version | D-04 |

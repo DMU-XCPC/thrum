@@ -8,7 +8,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/assets"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 	"github.com/multiagentworkspace/thrum/tool/internal/repos"
@@ -76,9 +78,16 @@ func Run(l layout.Layout) ([]Resolution, error) {
 					return settled, fmt.Errorf("the store: %w", err)
 				}
 			}
-			if tags, err := gitx.Run(store, "tag"); err == nil && strings.TrimSpace(tags) != "" {
+			published, err := assets.Published(l)
+			if err != nil {
+				return settled, err
+			}
+			for _, tag := range published {
+				if _, err := gitx.Run(store, "rev-parse", "--verify", "--quiet", "refs/tags/"+tag); err != nil {
+					continue
+				}
 				for _, remote := range names {
-					if err := gitx.OK(store, "push", remote, "--tags"); err != nil {
+					if err := gitx.OK(store, "push", remote, "refs/tags/"+tag); err != nil {
 						return settled, fmt.Errorf("the store: %w", err)
 					}
 				}
@@ -119,7 +128,11 @@ func One(dir string) ([]Resolution, error) {
 		if err := gitx.OK(dir, args...); err != nil {
 			got, settleErr := settle(dir)
 			if settleErr != nil {
+				conflicts, _ := gitx.Run(dir, "diff", "--name-only", "--diff-filter=U")
 				_ = gitx.OK(dir, "merge", "--abort")
+				if names := strings.TrimSpace(conflicts); names != "" {
+					return settled, fmt.Errorf("the records do not go together: %s needs a person", names)
+				}
 				return settled, fmt.Errorf("the records do not go together: %v", err)
 			}
 			settled = append(settled, got...)
@@ -133,14 +146,24 @@ func One(dir string) ([]Resolution, error) {
 	return settled, nil
 }
 
+// A claim is ordered by the event's own clock, then the site, then the event id.
+// A commit without an event trailer falls back to its commit time.
 type claim struct {
-	time int64
-	hash string
+	clock int64
+	site  string
+	id    string
+	hash  string
 }
 
 func (c claim) earlierThan(o claim) bool {
-	if c.time != o.time {
-		return c.time < o.time
+	if c.clock != o.clock {
+		return c.clock < o.clock
+	}
+	if c.site != o.site {
+		return c.site < o.site
+	}
+	if c.id != o.id {
+		return c.id < o.id
 	}
 	return c.hash < o.hash
 }
@@ -210,7 +233,33 @@ func claimOf(dir, rev, path string) (claim, error) {
 	if err != nil {
 		return claim{}, err
 	}
-	return claim{time: t, hash: fields[1]}, nil
+	hash := fields[1]
+	if msg, err := gitx.Run(dir, "log", "-1", "--format=%B", hash); err == nil {
+		if clock, site, id, ok := parseEvent(msg); ok {
+			return claim{clock: clock, site: site, id: id, hash: hash}, nil
+		}
+	}
+	return claim{clock: t * int64(time.Second), hash: hash}, nil
+}
+
+// parseEvent reads the trailer the line puts on every event.
+func parseEvent(message string) (int64, string, string, bool) {
+	for _, ln := range strings.Split(message, "\n") {
+		ln = strings.TrimSpace(ln)
+		if !strings.HasPrefix(ln, "Thrum-Event: ") {
+			continue
+		}
+		fields := strings.Fields(strings.TrimPrefix(ln, "Thrum-Event: "))
+		if len(fields) < 3 {
+			return 0, "", "", false
+		}
+		clock, err := strconv.ParseInt(fields[0], 10, 64)
+		if err != nil {
+			return 0, "", "", false
+		}
+		return clock, fields[1], fields[2], true
+	}
+	return 0, "", "", false
 }
 
 func hasBase(stages string) bool {

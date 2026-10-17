@@ -116,6 +116,9 @@ func Publish(l layout.Layout, name, version, from, description string, now time.
 	if _, err := gitx.Run("", "--git-dir", l.Store(), "tag", tag, commit); err != nil {
 		return err
 	}
+	if err := markPublished(l, tag); err != nil {
+		return err
+	}
 
 	m := records.Manifest{Asset: name, Version: version, Location: "store", Ref: tag}
 	if sha, size, ok, err := singleBlob(l.Store(), commit); err != nil {
@@ -199,6 +202,7 @@ func Withdraw(l layout.Layout, name, version, why string, now time.Time) error {
 	}
 	if m.Ref != "" {
 		_, _ = gitx.Run("", "--git-dir", l.Store(), "tag", "-d", m.Ref)
+		unpublish(l, m.Ref)
 	}
 	return line.Commit(l.Root, []string{live, archived},
 		fmt.Sprintf("retire asset/%s/%s: withdrawn", name, version))
@@ -318,4 +322,69 @@ func none(s string) string {
 		return "None."
 	}
 	return s
+}
+
+// Published is the tags this site published. Sync pushes these and only these, so
+// a tag fetched from a peer is never pushed back, and a withdrawal is not undone
+// by a peer that still has the old tag.
+func Published(l layout.Layout) ([]string, error) {
+	b, err := os.ReadFile(filepath.Join(l.StateDir(), "tags"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, ln := range strings.Split(string(b), "\n") {
+		if ln = strings.TrimSpace(ln); ln != "" {
+			out = append(out, ln)
+		}
+	}
+	return out, nil
+}
+
+func writePublished(l layout.Layout, tags []string) error {
+	if err := os.MkdirAll(l.StateDir(), 0o755); err != nil {
+		return err
+	}
+	var b strings.Builder
+	for _, t := range tags {
+		b.WriteString(t + "\n")
+	}
+	return format.WriteFileAtomic(filepath.Join(l.StateDir(), "tags"), []byte(b.String()))
+}
+
+func markPublished(l layout.Layout, tag string) error {
+	tags, err := Published(l)
+	if err != nil {
+		return err
+	}
+	for _, t := range tags {
+		if t == tag {
+			return nil
+		}
+	}
+	return writePublished(l, append(tags, tag))
+}
+
+func unpublish(l layout.Layout, tag string) {
+	tags, err := Published(l)
+	if err != nil {
+		return
+	}
+	var out []string
+	for _, t := range tags {
+		if t != tag {
+			out = append(out, t)
+		}
+	}
+	_ = writePublished(l, out)
+	remotes, err := gitx.Run(l.Store(), "remote")
+	if err != nil {
+		return
+	}
+	for _, remote := range strings.Fields(remotes) {
+		_ = gitx.OK(l.Store(), "push", remote, ":refs/tags/"+tag)
+	}
 }
