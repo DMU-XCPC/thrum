@@ -20,16 +20,17 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
-// Token is what an invitation carries. It is the only secret that has to move by
-// hand, and it names the workspace and the repositories to take.
+// Token is what an invitation carries: the workspace, the new site, the inviting
+// site's address and key, and the one-time nonce. It names no repository and no URL
+// the joiner has to understand.
 type Token struct {
-	Workspace string            `json:"workspace"`
-	Site      string            `json:"site"`
-	Line      string            `json:"line"`
-	Ledger    string            `json:"ledger"`
-	Store     string            `json:"store,omitempty"`
-	Repos     map[string]string `json:"repos,omitempty"`
-	Nonce     string            `json:"nonce,omitempty"`
+	Workspace string `json:"workspace"`
+	Site      string `json:"site"`
+	Peer      string `json:"peer"`
+	Reach     string `json:"reach"`
+	PeerKey   string `json:"peer_key"`
+	At        string `json:"at,omitempty"`
+	Nonce     string `json:"nonce"`
 }
 
 // Encode renders a token as one copy-pasteable string.
@@ -51,13 +52,15 @@ func Decode(s string) (Token, error) {
 	if err := json.Unmarshal(raw, &t); err != nil {
 		return Token{}, fmt.Errorf("that is not an invitation token: %w", err)
 	}
-	if t.Site == "" || t.Line == "" {
-		return Token{}, fmt.Errorf("the invitation names no site or no line")
+	if t.Site == "" || t.Peer == "" || t.Reach == "" || t.PeerKey == "" || t.Nonce == "" {
+		return Token{}, fmt.Errorf("the invitation is incomplete")
 	}
 	return t, nil
 }
 
-// Join makes the workspace at root another site of the token's workspace.
+// Join makes the workspace at root another site of the token's workspace. It takes
+// the line, the ledger and the store through the inviting site's daemon, registers
+// its key there, and leaves no repository with a thrum remote.
 func Join(root string, t Token) error {
 	existed := false
 	if _, err := os.Stat(root); err == nil {
@@ -84,19 +87,33 @@ func Join(root string, t Token) error {
 		}
 	}()
 
+	encoded, err := Encode(t)
+	if err != nil {
+		return err
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if strings.ContainsAny(exe, " \t\n") {
+		return fmt.Errorf("the thrum binary path contains a space; the join transport cannot carry it")
+	}
+	url := func(repo, service string) string {
+		return "ext::" + exe + " git-proxy --join-token " + encoded +
+			" --repo " + repo + " --service " + service
+	}
+
 	// The line comes first: it is the history everything else is understood against.
-	if err := gitx.OK("", "clone", t.Line, root); err != nil {
+	if err := gitx.OK("", "-c", "protocol.ext.allow=always", "clone", url("line", "upload-pack"), root); err != nil {
 		return err
 	}
 	l := layout.New(root)
-
-	// A line whose remote HEAD names a branch that does not exist clones without a
-	// checkout. The workspace's line is main, so take it.
 	if _, err := gitx.Run(l.Root, "rev-parse", "--verify", "HEAD"); err != nil {
 		if err := gitx.OK(l.Root, "checkout", "-B", "main", "origin/main"); err != nil {
 			return err
 		}
 	}
+	_ = gitx.OK(l.Root, "remote", "remove", "origin")
 
 	// Refuse before writing anything: a token from another workspace, a site the
 	// roster does not declare, and a used invitation all leave nothing behind.
@@ -143,42 +160,30 @@ func Join(root string, t Token) error {
 		}
 	}
 
-	// The ledger, and this site's copies of the bare repositories.
-	if t.Ledger != "" {
-		if err := gitx.OK("", "clone", t.Ledger, l.Ledger()); err != nil {
+	// The ledger.
+	if err := gitx.OK("", "-c", "protocol.ext.allow=always", "clone", url("ledger", "upload-pack"), l.Ledger()); err != nil {
+		return err
+	}
+	if _, err := gitx.Run(l.Ledger(), "rev-parse", "--verify", "HEAD"); err != nil {
+		if err := gitx.OK(l.Ledger(), "checkout", "-B", "main", "origin/main"); err != nil {
 			return err
 		}
-		if _, err := gitx.Run(l.Ledger(), "rev-parse", "--verify", "HEAD"); err != nil {
-			if err := gitx.OK(l.Ledger(), "checkout", "-B", "main", "origin/main"); err != nil {
-				return err
-			}
-		}
 	}
+	_ = gitx.OK(l.Ledger(), "remote", "remove", "origin")
 	for _, dir := range []string{l.Root, l.Ledger()} {
 		if err := gitx.OK(dir, "config", "receive.denyCurrentBranch", "updateInstead"); err != nil {
 			return err
 		}
 	}
-	if t.Store != "" {
-		if err := gitx.OK("", "clone", "--bare", t.Store, l.Store()); err != nil {
-			return err
-		}
-	} else if _, err := os.Stat(l.Store()); os.IsNotExist(err) {
-		if err := gitx.OK("", "init", "--bare", l.Store()); err != nil {
-			return err
-		}
+
+	// The store, bare.
+	if err := gitx.OK("", "-c", "protocol.ext.allow=always", "clone", "--bare", url("store", "upload-pack"), l.Store()); err != nil {
+		return err
 	}
-	for name, url := range t.Repos {
-		if url == "" {
-			continue
-		}
-		if _, err := os.Stat(l.CodeRepo(name)); err == nil {
-			continue
-		}
-		if err := gitx.OK("", "clone", "--bare", url, l.CodeRepo(name)); err != nil {
-			return err
-		}
-	}
+	_ = gitx.OK(l.Store(), "remote", "remove", "origin")
+
+	// The code repositories are the project's own: the declaration is in the line,
+	// the content is not carried by thrum.
 
 	if err := os.WriteFile(l.SiteFile(), []byte(t.Site+"\n"), 0o644); err != nil {
 		return err
@@ -199,15 +204,13 @@ func Join(root string, t Token) error {
 	if err := records.Write(l.Site(t.Site), site); err != nil {
 		return err
 	}
-
 	if err := line.Commit(l.Root, []string{l.Site(t.Site)},
 		fmt.Sprintf("site %s: key registered", t.Site)); err != nil {
 		return err
 	}
-	if remotes, err := gitx.Run(l.Root, "remote"); err == nil && strings.TrimSpace(remotes) != "" {
-		if err := gitx.OK(l.Root, "push", "origin", "main"); err != nil {
-			return fmt.Errorf("the key is recorded here, but it could not be published: %w", err)
-		}
+	if err := gitx.OK(l.Root, "-c", "protocol.ext.allow=always", "push",
+		url("line", "receive-pack"), "main"); err != nil {
+		return fmt.Errorf("the key is recorded here, but it could not be published: %w", err)
 	}
 	done = true
 	return nil

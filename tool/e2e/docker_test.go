@@ -59,63 +59,53 @@ func TestDockerMultiSite(t *testing.T) {
 		dockerOK(t, "exec", c.name, "chmod", "+x", c.target)
 	}
 	dockerOK(t, "exec", hub, "mkdir", "-p", "/srv")
-	for _, name := range []string{"line.git", "ledger.git", "store.git", "code.git"} {
-		dockerOK(t, "exec", hub, "git", "init", "--bare", "-b", "main", "/srv/"+name)
-	}
+	dockerOK(t, "exec", hub, "git", "init", "--bare", "-b", "main", "/srv/code.git")
 	dockerOK(t, "exec", siteA, "mkdir", "-p", "/w")
 	dockerOK(t, "exec", siteB, "mkdir", "-p", "/w")
 	dockerOK(t, "exec", "-d", hub, "/usr/local/bin/thrum-hub", "-root", "/srv", "-listen", "0.0.0.0:8080")
 	waitFor(t, 10*time.Second, "the git hub", func() bool {
-		_, err := dockerTry("exec", siteA, "sh", "-c", "git ls-remote http://"+hub+":8080/line.git")
+		_, err := dockerTry("exec", siteA, "sh", "-c", "git ls-remote http://"+hub+":8080/code.git")
 		return err == nil
 	})
 
-	// Site one: a code source, a workspace, and the bootstrap histories.
+	// Site one: a code source, a workspace, and its daemon.
 	thrumIn(t, siteA, "sh", "-c",
 		"git init -q -b main /tmp/code && cd /tmp/code && echo base > README && git add -A && git -c user.name=t -c user.email=t@t commit -qm init")
 	thrumIn(t, siteA, "thrum", "create", "/w", "--site", "s1", "--code", "code=/tmp/code")
 	thrumIn(t, siteA, "sh", "-c",
-		"cd /w && git remote add origin http://"+hub+":8080/line.git && git push -q -u origin main")
-	thrumIn(t, siteA, "sh", "-c",
-		"cd /w/handoff && git remote add origin http://"+hub+":8080/ledger.git && git push -q -u origin main")
-	thrumIn(t, siteA, "sh", "-c",
 		"cd /w/repos/code.git && git push -q http://"+hub+":8080/code.git --all")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "--actor", "a1", "actor", "declare", "a1", "--kind", "agent")
-	token := strings.TrimSpace(thrumIn(t, siteA, "thrum", "--root", "/w", "site", "invite", "s2",
-		"--at", siteB+":7702",
-		"--line", "http://"+hub+":8080/line.git",
-		"--ledger", "http://"+hub+":8080/ledger.git",
-		"--store", "http://"+hub+":8080/store.git",
-		"--code", "code=http://"+hub+":8080/code.git"))
-	if token == "" {
-		t.Fatal("invite printed no token")
-	}
-	// The invitation has to be in the hub for the join.
-	thrumIn(t, siteA, "sh", "-c", "cd /w && git push -q origin main")
-
-	// Site two joins over the network and registers its key.
-	thrumIn(t, siteB, "thrum", "--root", "/w", "--dir", "/w", "join", token)
-	// The join's key went to the hub; site one takes it there.
-	thrumIn(t, siteA, "sh", "-c", "cd /w && git fetch -q origin && git merge -q --ff-only origin/main")
-	if keyed := thrumIn(t, siteA, "thrum", "--root", "/w", "site", "show", "s2"); !strings.Contains(keyed, "ssh-ed25519") {
-		t.Fatalf("site one did not learn site two's key: %s", keyed)
-	}
-
-	// The two daemons, on their own ports, over the Docker network.
+	thrumIn(t, siteA, "thrum", "--root", "/w", "site", "reach", "s1", "--at", siteA+":7701")
 	dockerOK(t, "exec", "-d", siteA, "sh", "-c",
 		"thrum --root /w daemon run --listen 0.0.0.0:7701 >/tmp/daemon.log 2>&1")
-	dockerOK(t, "exec", "-d", siteB, "sh", "-c",
-		"thrum --root /w daemon run --listen 0.0.0.0:7702 >/tmp/daemon.log 2>&1")
 	waitFor(t, 10*time.Second, "site one's daemon", func() bool {
 		_, err := dockerTry("exec", siteA, "thrum", "--root", "/w", "daemon", "status")
 		return err == nil
 	})
+
+	// The invitation names the new site's address only; the join goes through site
+	// one's daemon and registers site two's key there.
+	token := strings.TrimSpace(thrumIn(t, siteA, "thrum", "--root", "/w", "site", "invite", "s2",
+		"--at", siteB+":7702"))
+	if token == "" {
+		t.Fatal("invite printed no token")
+	}
+	thrumIn(t, siteB, "thrum", "--root", "/w", "--dir", "/w", "join", token)
+	thrumIn(t, siteB, "thrum", "--root", "/w", "site", "reach", "s1", "--at", siteA+":7701")
+	thrumIn(t, siteB, "thrum", "--root", "/w", "site", "reach", "s2", "--at", siteB+":7702")
+	thrumIn(t, siteA, "thrum", "--root", "/w", "site", "reach", "s2", "--at", siteB+":7702")
+	if keyed := thrumIn(t, siteA, "thrum", "--root", "/w", "site", "show", "s2"); !strings.Contains(keyed, "ssh-ed25519") {
+		t.Fatalf("site one did not learn site two's key: %s", keyed)
+	}
+	dockerOK(t, "exec", "-d", siteB, "sh", "-c",
+		"thrum --root /w daemon run --listen 0.0.0.0:7702 >/tmp/daemon.log 2>&1")
 	waitFor(t, 10*time.Second, "site two's daemon", func() bool {
 		_, err := dockerTry("exec", siteB, "thrum", "--root", "/w", "daemon", "status")
 		return err == nil
 	})
-	thrumIn(t, siteA, "thrum", "--root", "/w", "site", "reach", "s2", "--at", siteB+":7702")
-	thrumIn(t, siteB, "thrum", "--root", "/w", "site", "reach", "s1", "--at", siteA+":7701")
+	// The code is the project's: site two materialises it with the project's git.
+	thrumIn(t, siteB, "sh", "-c",
+		"git clone -q --bare http://"+hub+":8080/code.git /w/repos/code.git")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "--actor", "a1", "actor", "hello")
 	thrumIn(t, siteB, "thrum", "--root", "/w", "--actor", "a2", "actor", "declare", "a2", "--kind", "agent")
 	thrumIn(t, siteB, "thrum", "--root", "/w", "sync")

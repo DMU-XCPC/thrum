@@ -44,13 +44,6 @@ func TestSyncThroughTheDaemon(t *testing.T) {
 		_ = exec.Command("git", "-C", w.root, "remote", "remove", "origin").Run()
 		_ = exec.Command("git", "-C", w.path("handoff"), "remote", "remove", "origin").Run()
 	}
-	if err := os.RemoveAll(ts.origin); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.RemoveAll(ts.ledger); err != nil {
-		t.Fatal(err)
-	}
-
 	ts.w1.r().run("actor", "declare", "a4", "--kind", "agent").ok(t, "a4")
 	ts.w1.r().run("sync").ok(t, "w1 sync")
 	// The push updated site two's checked-out line as it landed.

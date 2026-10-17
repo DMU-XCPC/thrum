@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/actors"
+	"github.com/multiagentworkspace/thrum/tool/internal/join"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 	"github.com/multiagentworkspace/thrum/tool/internal/records"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
@@ -248,6 +249,86 @@ func Proxy(l layout.Layout, peer, repo, service string) error {
 		}
 	}()
 	_, err = io.Copy(os.Stdout, c.br)
+	return err
+}
+
+// JoinProxy carries a git service to the inviting site's daemon on a one-time
+// invitation, before this machine has a workspace or a roster entry with its key.
+func JoinProxy(t join.Token, repo, service string) error {
+	if service != "upload-pack" && service != "receive-pack" {
+		return fmt.Errorf("%q is not a git service", service)
+	}
+	conn, err := net.DialTimeout("tcp", t.Reach, 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("the inviting site did not answer: %w", err)
+	}
+	defer conn.Close()
+	br := bufio.NewReader(conn)
+	enc := json.NewEncoder(conn)
+	dec := json.NewDecoder(br)
+	if err := enc.Encode(greeting{
+		Workspace: t.Workspace, Site: t.Site, Version: protocolVersion,
+		Nonce: t.Nonce, Join: true,
+	}); err != nil {
+		return err
+	}
+	var reply greeting
+	if err := dec.Decode(&reply); err != nil {
+		return err
+	}
+	if reply.Error != "" {
+		return fmt.Errorf("the inviting site refused: %s", reply.Error)
+	}
+	if reply.Workspace != t.Workspace {
+		return fmt.Errorf("that site is in a different workspace")
+	}
+	if reply.Version != protocolVersion {
+		return fmt.Errorf("the inviting site speaks protocol %q, this site speaks %q", reply.Version, protocolVersion)
+	}
+	pub, err := workspace.ParseSiteKey(t.PeerKey)
+	if err != nil {
+		return err
+	}
+	if !verify(pub, t.Nonce, reply.Signature) {
+		return fmt.Errorf("the inviting site did not prove its key")
+	}
+	if err := enc.Encode(greeting{}); err != nil {
+		return err
+	}
+	var ack greeting
+	if err := dec.Decode(&ack); err != nil {
+		return err
+	}
+	if ack.Error != "" {
+		return fmt.Errorf("the inviting site refused: %s", ack.Error)
+	}
+	args, err := json.Marshal(struct {
+		Repo    string `json:"repo"`
+		Service string `json:"service"`
+	}{repo, service})
+	if err != nil {
+		return err
+	}
+	if err := enc.Encode(Request{Verb: "git.serve", Args: args}); err != nil {
+		return err
+	}
+	var resp Response
+	if err := dec.Decode(&resp); err != nil {
+		return err
+	}
+	if !resp.OK {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	if _, err := conn.Write([]byte{'\n'}); err != nil {
+		return err
+	}
+	go func() {
+		_, _ = io.Copy(conn, os.Stdin)
+		if tcp, ok := conn.(*net.TCPConn); ok {
+			_ = tcp.CloseWrite()
+		}
+	}()
+	_, err = io.Copy(os.Stdout, br)
 	return err
 }
 

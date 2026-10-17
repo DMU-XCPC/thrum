@@ -21,25 +21,11 @@ func setupThreeSites(t *testing.T) *threeSites {
 	t.Helper()
 	dir := t.TempDir()
 	w1 := newWorkspace(t)
-	line := filepath.Join(dir, "line.git")
-	ledger := filepath.Join(dir, "ledger.git")
-	runGit(t, w1.root, "init", "--bare", line)
-	runGit(t, w1.root, "remote", "add", "origin", line)
-	runGit(t, w1.root, "push", "-q", "-u", "origin", "main")
-	runGit(t, w1.root, "init", "--bare", ledger)
-	runGit(t, w1.path("handoff"), "remote", "add", "origin", ledger)
-	runGit(t, w1.path("handoff"), "push", "-q", "-u", "origin", "main")
-
-	invite := func(name string) string {
-		return strings.TrimSpace(w1.r().run("site", "invite", name, "--at", "127.0.0.1:0",
-			"--line", line, "--ledger", ledger,
-			"--store", w1.path("repos", "store.git"),
-			"--code", "code="+w1.path("repos", "code.git")).ok(t, "invite "+name).stdout)
-	}
-	token2 := invite("s2")
-	token3 := invite("s3")
-	runGit(t, w1.root, "push", "-q", "origin", "main")
-
+	p1 := firstSite(t, w1)
+	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	p3 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	token2 := strings.TrimSpace(w1.r().run("site", "invite", "s2", "--at", p2).ok(t, "invite s2").stdout)
+	token3 := strings.TrimSpace(w1.r().run("site", "invite", "s3", "--at", p3).ok(t, "invite s3").stdout)
 	join := func(name, token string) *workspace {
 		root := filepath.Join(dir, name)
 		(&runner{t: t, root: root}).run("join", token, "--dir", root).ok(t, "join "+name)
@@ -47,17 +33,16 @@ func setupThreeSites(t *testing.T) *threeSites {
 	}
 	w2 := join("w2", token2)
 	w3 := join("w3", token3)
-	for _, w := range []*workspace{w1, w2, w3} {
-		runGit(t, w.root, "fetch", "-q", "origin")
-		runGit(t, w.root, "merge", "-q", "--ff-only", "origin/main")
+	wireSites(t, []*workspace{w1, w2, w3}, []string{p1, p2, p3})
+	for _, w := range []*workspace{w2, w3} {
+		runGit(t, w1.root, "clone", "--bare", w1.path("repos", "code.git"), w.path("repos", "code.git"))
 	}
-	ports := connectSites(t, []*workspace{w1, w2, w3})
 	for round := 0; round < 2; round++ {
 		for _, w := range []*workspace{w1, w2, w3} {
 			w.r().run("sync").ok(t, "sync")
 		}
 	}
-	return &threeSites{t: t, w1: w1, w2: w2, w3: w3, line: line, ledger: ledger, p1: ports[0], p2: ports[1], p3: ports[2]}
+	return &threeSites{t: t, w1: w1, w2: w2, w3: w3, p1: p1, p2: p2, p3: p3}
 }
 
 // TestThreeSiteClaim settles one name claimed on all three sites, in the order the
@@ -213,10 +198,7 @@ func TestOrderIndependence(t *testing.T) {
 func TestTwoSitesClaimOneSiteName(t *testing.T) {
 	ts := setupTwoSites(t)
 	invite := func(w *workspace) {
-		w.r().run("site", "invite", "s3", "--at", "127.0.0.1:0",
-			"--line", ts.origin, "--ledger", ts.ledger,
-			"--store", ts.w1.path("repos", "store.git"),
-			"--code", "code="+ts.w1.path("repos", "code.git")).ok(t, "invite s3")
+		w.r().run("site", "invite", "s3", "--at", "127.0.0.1:0").ok(t, "invite s3")
 	}
 	invite(ts.w1)
 	time.Sleep(1100 * time.Millisecond)
@@ -280,23 +262,13 @@ func TestTwoSitesOpenOneJob(t *testing.T) {
 func TestInvitationFromANonCreator(t *testing.T) {
 	ts := setupTwoSites(t)
 	p3 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	token := strings.TrimSpace(ts.w2.r().run("site", "invite", "s3", "--at", p3,
-		"--line", ts.origin, "--ledger", ts.ledger,
-		"--store", ts.w1.path("repos", "store.git"),
-		"--code", "code="+ts.w1.path("repos", "code.git")).ok(t, "invite").stdout)
-	// The join's bootstrap is the hub; the invitation has to be there.
-	runGit(t, ts.w2.root, "push", "-q", "origin", "main")
-	ts.w2.r().run("site", "reach", "s3", "--at", p3).ok(t, "w2 reaches s3")
-	ts.w1.r().run("site", "reach", "s3", "--at", p3).ok(t, "w1 reaches s3")
-
+	token := strings.TrimSpace(ts.w2.r().run("site", "invite", "s3", "--at", p3).ok(t, "invite").stdout)
 	root := filepath.Join(t.TempDir(), "w3")
 	(&runner{t: t, root: root}).run("join", token, "--dir", root).ok(t, "join")
 	w3 := &workspace{t: t, root: root}
-	// The join's key went to the hub; the two established sites take it from there.
-	for _, w := range []*workspace{ts.w1, ts.w2} {
-		runGit(t, w.root, "fetch", "-q", "origin")
-		runGit(t, w.root, "merge", "-q", "--ff-only", "origin/main")
-	}
+
+	ts.w1.r().run("site", "reach", "s3", "--at", p3).ok(t, "w1 reaches s3")
+	ts.w2.r().run("site", "reach", "s3", "--at", p3).ok(t, "w2 reaches s3")
 	w3.r().run("site", "reach", "s1", "--at", ts.p1).ok(t, "w3 reaches s1")
 	w3.r().run("site", "reach", "s2", "--at", ts.p2).ok(t, "w3 reaches s2")
 	w3.r().run("site", "reach", "s3", "--at", p3).ok(t, "w3 reaches itself")

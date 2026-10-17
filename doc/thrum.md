@@ -232,18 +232,19 @@ it.
 
 ## Joining
 
-1. **Invite**, from a site already in the workspace: one event writing the new roster entry,
-   and a one-time token that names the workspace and the inviting site.
-2. **Join**, on the new machine: prove the token, present a key, take the roster and the
-   repositories from the token's URLs, and register the key in the roster as a second event.
-   The daemon is started by the machine's own init, not by the join; `site transport` then
-   points each repository at a peer's daemon, and every later exchange goes through the
-   fabric.
-3. **Introduce**: the inviting site tells the peers it can reach that the new site exists and
-   where it listens. A peer accepts an introduction only for a site the roster declares.
+1. **Invite**, from a site already in the workspace: one event writing the new roster entry
+   (with the address the new site will listen on), and a one-time token that names the
+   workspace, the inviting site and its daemon address and public key.
+2. **Join**, on the new machine: prove the token to the inviting site's daemon, take the line,
+   the ledger and the store through that daemon, present a key, and register it in the roster
+   as a second event. Starting a daemon is the machine's own init, not the join; the join
+   writes this site's files (the invitation already recorded its address), and leaves no
+   repository with a thrum remote.
+3. **Introduce**: the peers accept the new site once the line that carries its key reaches
+   them; the next sync is the introduction.
 
-The token is the only secret that has to move by hand. If the two machines can run `ssh`, that
-is the easiest channel for it; nothing depends on that.
+The token is the only secret that has to move by hand. It names no repository and no URL: the
+joining site needs only the inviting daemon's address, its public key, and the nonce.
 
 ## The wire
 

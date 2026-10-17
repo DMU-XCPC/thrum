@@ -151,26 +151,22 @@ type workspace struct {
 	src  string
 }
 
-// connectSites gives every site the addresses of every other site and starts a
-// daemon for each. From here on sync is a daemon operation; the repositories have
-// no remote at all.
-func connectSites(t *testing.T, sites []*workspace) []string {
+// firstSite gives site one its own address and starts its daemon, so it can invite.
+func firstSite(t *testing.T, w *workspace) string {
+	t.Helper()
+	p := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	w.r().run("site", "reach", "s1", "--at", p).ok(t, "reach s1")
+	startDaemon(t, w, p)
+	return p
+}
+
+// wireSites gives every site the addresses of every other site and starts a daemon
+// for each that is not running yet.
+func wireSites(t *testing.T, sites []*workspace, ports []string) {
 	t.Helper()
 	names := make([]string, len(sites))
 	for i, w := range sites {
 		names[i] = strings.TrimSpace(w.file("var/site"))
-	}
-	ports := make([]string, len(sites))
-	used := map[string]bool{}
-	for i := range ports {
-		for {
-			p := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-			if !used[p] {
-				used[p] = true
-				ports[i] = p
-				break
-			}
-		}
 	}
 	for _, w := range sites {
 		for j := range sites {
@@ -178,9 +174,11 @@ func connectSites(t *testing.T, sites []*workspace) []string {
 		}
 	}
 	for i, w := range sites {
+		if w.r().run("daemon", "status").code == 0 {
+			continue
+		}
 		startDaemon(t, w, ports[i])
 	}
-	return ports
 }
 
 func newWorkspace(t *testing.T) *workspace {

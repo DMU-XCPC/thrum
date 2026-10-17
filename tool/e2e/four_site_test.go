@@ -19,24 +19,15 @@ func setupFourSites(t *testing.T) *fourSites {
 	t.Helper()
 	dir := t.TempDir()
 	w1 := newWorkspace(t)
-	line := filepath.Join(dir, "line.git")
-	ledger := filepath.Join(dir, "ledger.git")
-	runGit(t, w1.root, "init", "--bare", line)
-	runGit(t, w1.root, "remote", "add", "origin", line)
-	runGit(t, w1.root, "push", "-q", "-u", "origin", "main")
-	runGit(t, w1.root, "init", "--bare", ledger)
-	runGit(t, w1.path("handoff"), "remote", "add", "origin", ledger)
-	runGit(t, w1.path("handoff"), "push", "-q", "-u", "origin", "main")
-
-	invite := func(name string) string {
-		return strings.TrimSpace(w1.r().run("site", "invite", name, "--at", "127.0.0.1:0",
-			"--line", line, "--ledger", ledger,
-			"--store", w1.path("repos", "store.git"),
-			"--code", "code="+w1.path("repos", "code.git")).ok(t, "invite "+name).stdout)
+	p1 := firstSite(t, w1)
+	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	p3 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	p4 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	tokens := []string{
+		strings.TrimSpace(w1.r().run("site", "invite", "s2", "--at", p2).ok(t, "invite s2").stdout),
+		strings.TrimSpace(w1.r().run("site", "invite", "s3", "--at", p3).ok(t, "invite s3").stdout),
+		strings.TrimSpace(w1.r().run("site", "invite", "s4", "--at", p4).ok(t, "invite s4").stdout),
 	}
-	tokens := []string{invite("s2"), invite("s3"), invite("s4")}
-	runGit(t, w1.root, "push", "-q", "origin", "main")
-
 	join := func(name, token string) *workspace {
 		root := filepath.Join(dir, name)
 		(&runner{t: t, root: root}).run("join", token, "--dir", root).ok(t, "join "+name)
@@ -46,17 +37,16 @@ func setupFourSites(t *testing.T) *fourSites {
 	w3 := join("w3", tokens[1])
 	w4 := join("w4", tokens[2])
 	sites := []*workspace{w1, w2, w3, w4}
-	for _, w := range sites {
-		runGit(t, w.root, "fetch", "-q", "origin")
-		runGit(t, w.root, "merge", "-q", "--ff-only", "origin/main")
+	wireSites(t, sites, []string{p1, p2, p3, p4})
+	for _, w := range []*workspace{w2, w3, w4} {
+		runGit(t, w1.root, "clone", "--bare", w1.path("repos", "code.git"), w.path("repos", "code.git"))
 	}
-	ports := connectSites(t, sites)
 	for round := 0; round < 2; round++ {
 		for _, w := range sites {
 			w.r().run("sync").ok(t, "sync")
 		}
 	}
-	return &fourSites{t: t, w1: w1, w2: w2, w3: w3, w4: w4, line: line, ledger: ledger, p1: ports[0], p2: ports[1], p3: ports[2], p4: ports[3]}
+	return &fourSites{t: t, w1: w1, w2: w2, w3: w3, w4: w4, p1: p1, p2: p2, p3: p3, p4: p4}
 }
 
 // TestFourSitesScale: four sites write 200 repository declarations, then the mesh

@@ -26,10 +26,10 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/exchange"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
+	"github.com/multiagentworkspace/thrum/tool/internal/join"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 	"github.com/multiagentworkspace/thrum/tool/internal/messages"
 	"github.com/multiagentworkspace/thrum/tool/internal/records"
-	"github.com/multiagentworkspace/thrum/tool/internal/repos"
 	"github.com/multiagentworkspace/thrum/tool/internal/workspace"
 )
 
@@ -54,6 +54,7 @@ type greeting struct {
 	Site      string `json:"site"`
 	Version   string `json:"version"`
 	Nonce     string `json:"nonce"`
+	Join      bool   `json:"join,omitempty"`
 	Key       string `json:"key,omitempty"`
 	Previous  string `json:"previous,omitempty"`
 	Proof     string `json:"proof,omitempty"`
@@ -194,36 +195,73 @@ func (s *server) accept(ln net.Listener, remote bool) {
 			_ = conn.SetDeadline(time.Now().Add(10 * time.Minute))
 			br := bufio.NewReader(conn)
 			caller := s.site
+			joining := false
 			if remote {
-				site, err := s.auth(conn, br)
+				site, join, err := s.auth(conn, br)
 				if err != nil {
 					return
 				}
 				caller = site
+				joining = join
 			}
-			s.serve(conn, br, remote, caller)
+			s.serve(conn, br, remote, caller, joining)
 		}()
 	}
 }
 
-func (s *server) auth(conn net.Conn, br *bufio.Reader) (string, error) {
+func (s *server) auth(conn net.Conn, br *bufio.Reader) (string, bool, error) {
 	dec := json.NewDecoder(br)
 	enc := json.NewEncoder(conn)
-	refuse := func(format string, args ...any) (string, error) {
+	refuse := func(format string, args ...any) (string, bool, error) {
 		msg := fmt.Sprintf(format, args...)
 		_ = enc.Encode(greeting{Error: msg})
-		return "", fmt.Errorf("%s", msg)
+		return "", false, fmt.Errorf("%s", msg)
 	}
 
 	var hello greeting
 	if err := dec.Decode(&hello); err != nil {
-		return "", err
+		return "", false, err
 	}
 	if hello.Workspace != s.workspace {
 		return refuse("that site is in a different workspace")
 	}
 	if hello.Version != protocolVersion {
 		return refuse("that site speaks protocol %q, this site speaks %q", hello.Version, protocolVersion)
+	}
+	if hello.Join {
+		// The joiner has no roster entry with a key yet; the one-time nonce is what
+		// authorizes the first pull and the key push.
+		peer, ok := rosterOf(s.l)[hello.Site]
+		if !ok {
+			return refuse("site %q is not declared", hello.Site)
+		}
+		if peer.Invite == "" || peer.Invite != join.InviteHash(hello.Nonce) {
+			return refuse("that invitation has been used, or it names another site")
+		}
+		key, err := loadKey(s.l)
+		if err != nil {
+			return refuse("this site has no usable key")
+		}
+		serverNonce := nonce()
+		reply := greeting{
+			Workspace: s.workspace, Site: s.site, Version: protocolVersion,
+			Nonce: serverNonce, Signature: sign(key, hello.Nonce),
+			Key: workspace.PublicKey(key.Public().(ed25519.PublicKey)),
+		}
+		if err := enc.Encode(reply); err != nil {
+			return "", false, err
+		}
+		var ack greeting
+		if err := dec.Decode(&ack); err != nil {
+			return "", false, err
+		}
+		if ack.Error != "" {
+			return "", false, fmt.Errorf("%s", ack.Error)
+		}
+		if err := enc.Encode(greeting{}); err != nil {
+			return "", false, err
+		}
+		return hello.Site, true, nil
 	}
 	// Read the roster for each handshake: a rotation, a revocation or a forget must
 	// take effect without restarting the daemon.
@@ -263,22 +301,22 @@ func (s *server) auth(conn net.Conn, br *bufio.Reader) (string, error) {
 		reply.Key, reply.Previous, reply.Proof = cur, old, sign(prev, cur)
 	}
 	if err := enc.Encode(reply); err != nil {
-		return "", err
+		return "", false, err
 	}
 	var proof greeting
 	if err := dec.Decode(&proof); err != nil {
-		return "", err
+		return "", false, err
 	}
 	if !verify(callerKey, serverNonce, proof.Signature) {
 		return refuse("site %q did not prove its key", hello.Site)
 	}
 	if err := enc.Encode(greeting{}); err != nil {
-		return "", err
+		return "", false, err
 	}
-	return hello.Site, nil
+	return hello.Site, false, nil
 }
 
-func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool, caller string) {
+func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool, caller string, joining bool) {
 	dec := json.NewDecoder(br)
 	enc := json.NewEncoder(conn)
 	for {
@@ -287,8 +325,12 @@ func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool, caller stri
 			return
 		}
 		if req.Verb == "git.serve" {
-			s.gitServe(conn, br, enc, req)
+			s.gitServe(conn, br, enc, req, joining)
 			return
+		}
+		if joining {
+			_ = enc.Encode(fail(errors.New("a join connection carries repositories only")))
+			continue
 		}
 		_ = enc.Encode(s.dispatch(req, remote, caller))
 	}
@@ -319,6 +361,9 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 		}
 		if strings.ContainsAny(s.l.Root, " \t\n") {
 			return fail(errors.New("the workspace path contains a space; the daemon transport cannot carry it"))
+		}
+		if exe, err := os.Executable(); err != nil || strings.ContainsAny(exe, " \t\n") {
+			return fail(errors.New("the thrum binary path contains a space; the daemon transport cannot carry it"))
 		}
 		settled, err := exchange.RunVia(s.l, s.historyLinks())
 		if err != nil {
@@ -460,13 +505,21 @@ func (s *server) broadcastPlace(actor actorArgs) {
 // gitServe hands the connection to a git service after one acknowledgement. The
 // client waits for one byte before piping, so its JSON decoder cannot swallow the
 // advertisement the service writes as soon as it starts.
-func (s *server) gitServe(conn net.Conn, br *bufio.Reader, enc *json.Encoder, req Request) {
+func (s *server) gitServe(conn net.Conn, br *bufio.Reader, enc *json.Encoder, req Request, joining bool) {
 	var args struct {
 		Repo    string `json:"repo"`
 		Service string `json:"service"`
 	}
 	if err := json.Unmarshal(req.Args, &args); err != nil {
 		_ = enc.Encode(fail(err))
+		return
+	}
+	if joining && args.Repo != "line" && args.Repo != "ledger" && args.Repo != "store" {
+		_ = enc.Encode(fail(errors.New("a join carries the line, the ledger and the store only")))
+		return
+	}
+	if joining && args.Service == "receive-pack" && args.Repo != "line" {
+		_ = enc.Encode(fail(errors.New("only the line may be written during a join")))
 		return
 	}
 	if args.Service != "upload-pack" && args.Service != "receive-pack" {
@@ -559,12 +612,21 @@ func (s *server) repoDir(name string) (string, error) {
 	case "store":
 		return s.l.Store(), nil
 	}
-	if _, ok, err := repos.Find(s.l, name); err != nil {
+	return "", fmt.Errorf("no repository named %q", name)
+}
+
+// Reach is where a site's daemon listens, from this machine's view.
+func Reach(l layout.Layout, site string) string {
+	return reachFor(l, site, rosterOf(l))
+}
+
+// PublicKey is this site's current public key.
+func PublicKey(l layout.Layout) (string, error) {
+	key, err := loadKey(l)
+	if err != nil {
 		return "", err
-	} else if !ok {
-		return "", fmt.Errorf("no repository named %q", name)
 	}
-	return s.l.CodeRepo(name), nil
+	return workspace.PublicKey(key.Public().(ed25519.PublicKey)), nil
 }
 
 func payload(v any) Response {

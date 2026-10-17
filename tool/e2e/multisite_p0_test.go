@@ -1,88 +1,45 @@
 package e2e
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
+	"github.com/multiagentworkspace/thrum/tool/internal/join"
+	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 )
 
-// inviteToken is the wire shape of an invitation, mirrored here so a test can
-// forge or inspect one without importing the tool.
-type inviteToken struct {
-	Workspace string            `json:"workspace"`
-	Site      string            `json:"site"`
-	Line      string            `json:"line"`
-	Ledger    string            `json:"ledger"`
-	Store     string            `json:"store"`
-	Repos     map[string]string `json:"repos"`
-	Nonce     string            `json:"nonce"`
-}
-
-func decodeInvite(t *testing.T, s string) inviteToken {
+// inviteS2 invites s2 on w and returns the token, which now names no repository.
+func inviteS2(t *testing.T, w *workspace, at string) join.Token {
 	t.Helper()
-	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(s))
+	out := strings.TrimSpace(w.r().run("site", "invite", "s2", "--at", at).ok(t, "invite").stdout)
+	tok, err := join.Decode(out)
 	if err != nil {
-		t.Fatalf("decoding the invitation: %v", err)
-	}
-	var tok inviteToken
-	if err := json.Unmarshal(raw, &tok); err != nil {
-		t.Fatalf("decoding the invitation: %v", err)
+		t.Fatal(err)
 	}
 	return tok
 }
 
-func encodeInvite(t *testing.T, tok inviteToken) string {
+func encodeToken(t *testing.T, tok join.Token) string {
 	t.Helper()
-	raw, err := json.Marshal(tok)
+	out, err := join.Encode(tok)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return base64.RawURLEncoding.EncodeToString(raw)
-}
-
-// origins gives a site a bare origin for each shared history and publishes.
-func origins(t *testing.T, w *workspace) (line, ledger string) {
-	t.Helper()
-	dir := t.TempDir()
-	line = filepath.Join(dir, "line.git")
-	ledger = filepath.Join(dir, "ledger.git")
-	runGit(t, w.root, "init", "--bare", line)
-	runGit(t, w.root, "remote", "add", "origin", line)
-	runGit(t, w.root, "push", "-q", "-u", "origin", "main")
-	runGit(t, w.root, "init", "--bare", ledger)
-	runGit(t, w.path("handoff"), "remote", "add", "origin", ledger)
-	runGit(t, w.path("handoff"), "push", "-q", "-u", "origin", "main")
-	return line, ledger
-}
-
-func inviteS2(t *testing.T, w *workspace, line, ledger, at string) string {
-	t.Helper()
-	out := w.r().run("site", "invite", "s2", "--at", at,
-		"--line", line, "--ledger", ledger,
-		"--store", w.path("repos", "store.git"),
-		"--code", "code="+w.path("repos", "code.git")).ok(t, "invite").stdout
-	return strings.TrimSpace(out)
+	return out
 }
 
 func TestJoinRefusesAnotherWorkspace(t *testing.T) {
 	w1 := newWorkspace(t)
-	line1, ledger1 := origins(t, w1)
-	token := inviteS2(t, w1, line1, ledger1, "127.0.0.1:0")
-	runGit(t, w1.root, "push", "-q", "origin", "main")
-
-	w2 := newWorkspace(t)
-	line2, ledger2 := origins(t, w2)
-	tok := decodeInvite(t, token)
-	tok.Line, tok.Ledger = line2, ledger2
-	tok.Store = w2.path("repos", "store.git")
-	tok.Repos = map[string]string{"code": w2.path("repos", "code.git")}
+	firstSite(t, w1)
+	tok := inviteS2(t, w1, "127.0.0.1:0")
+	tok.Workspace = strings.Repeat("0", 40)
 
 	dir := filepath.Join(t.TempDir(), "joined")
 	r := &runner{t: t, root: dir}
-	r.run("join", encodeInvite(t, tok), "--dir", dir).
+	r.run("join", encodeToken(t, tok), "--dir", dir).
 		fails(t, "join another workspace", "different workspace")
 	if _, err := os.Stat(dir); err == nil {
 		t.Fatalf("join left a half-joined workspace at %s", dir)
@@ -91,20 +48,27 @@ func TestJoinRefusesAnotherWorkspace(t *testing.T) {
 
 func TestJoinNeedsAnInvitation(t *testing.T) {
 	w := newWorkspace(t)
-	line, ledger := origins(t, w)
-	tok := inviteToken{
-		Workspace: strings.TrimSpace(runGit(t, w.root, "rev-list", "--max-parents=0", "HEAD")),
-		Site:      "s2",
-		Line:      line,
-		Ledger:    ledger,
-		Store:     w.path("repos", "store.git"),
-		Repos:     map[string]string{"code": w.path("repos", "code.git")},
-		Nonce:     "not-invited",
+	p := firstSite(t, w)
+	ws, err := join.WorkspaceID(w.root)
+	if err != nil {
+		t.Fatal(err)
 	}
+	key, err := daemon.PublicKey(layout.New(w.root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := join.Encode(join.Token{
+		Workspace: ws, Site: "s2", Peer: "s1", Reach: p,
+		PeerKey: key, Nonce: "not-invited",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	dir := filepath.Join(t.TempDir(), "joined")
 	r := &runner{t: t, root: dir}
-	r.run("join", encodeInvite(t, tok), "--dir", dir).
-		fails(t, "join without an invitation", "roster does not declare")
+	r.run("join", token, "--dir", dir).
+		fails(t, "join without an invitation", "not declared")
 	if _, err := os.Stat(dir); err == nil {
 		t.Fatalf("join left a half-joined workspace at %s", dir)
 	}
@@ -112,16 +76,15 @@ func TestJoinNeedsAnInvitation(t *testing.T) {
 
 func TestInvitationIsOneTime(t *testing.T) {
 	w1 := newWorkspace(t)
-	line, ledger := origins(t, w1)
-	token := inviteS2(t, w1, line, ledger, "127.0.0.1:0")
-	runGit(t, w1.root, "push", "-q", "origin", "main")
+	firstSite(t, w1)
+	tok := inviteS2(t, w1, "127.0.0.1:0")
 
 	first := filepath.Join(t.TempDir(), "first")
-	(&runner{t: t, root: first}).run("join", token, "--dir", first).ok(t, "the first join")
+	(&runner{t: t, root: first}).run("join", encodeToken(t, tok), "--dir", first).ok(t, "the first join")
 
 	second := filepath.Join(t.TempDir(), "second")
 	r2 := &runner{t: t, root: second}
-	r2.run("join", token, "--dir", second).
+	r2.run("join", encodeToken(t, tok), "--dir", second).
 		fails(t, "reuse the invitation", "has been used")
 	if _, err := os.Stat(second); err == nil {
 		t.Fatalf("the refused join left a workspace at %s", second)

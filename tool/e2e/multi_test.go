@@ -12,8 +12,6 @@ import (
 type twoSites struct {
 	t      *testing.T
 	w1, w2 *workspace
-	origin string
-	ledger string
 	p1, p2 string
 }
 
@@ -23,42 +21,22 @@ func setupTwoSites(t *testing.T) *twoSites {
 	t.Helper()
 	dir := t.TempDir()
 	w1 := newWorkspace(t)
-	origin := filepath.Join(dir, "origin.git")
-	ledger := filepath.Join(dir, "ledger.git")
-	runGit(t, w1.root, "init", "--bare", origin)
-	runGit(t, w1.root, "remote", "add", "origin", origin)
-	runGit(t, w1.root, "push", "-q", "-u", "origin", "main")
-	runGit(t, w1.root, "init", "--bare", ledger)
-	runGit(t, w1.path("handoff"), "remote", "add", "origin", ledger)
-	runGit(t, w1.path("handoff"), "push", "-q", "-u", "origin", "main")
-
 	w1.r().run("actor", "declare", "a1", "--kind", "agent").ok(t, "declare a1")
-	token := strings.TrimSpace(w1.r().run("site", "invite", "s2",
-		"--at", "127.0.0.1:0",
-		"--line", origin, "--ledger", ledger,
-		"--store", w1.path("repos", "store.git"),
-		"--code", "code="+w1.path("repos", "code.git")).ok(t, "invite").stdout)
-	// The token's line is the join's bootstrap; the invitation has to be there.
-	runGit(t, w1.root, "push", "-q", "origin", "main")
-
+	p1 := firstSite(t, w1)
+	p2 := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	token := strings.TrimSpace(w1.r().run("site", "invite", "s2", "--at", p2).ok(t, "invite").stdout)
 	root2 := filepath.Join(dir, "w2")
-	r2 := &runner{t: t, root: root2}
-	r2.run("join", token, "--dir", root2).ok(t, "join")
+	(&runner{t: t, root: root2}).run("join", token, "--dir", root2).ok(t, "join")
 	w2 := &workspace{t: t, root: root2}
 	w2.r().run("verify").ok(t, "verify the joined site")
-
-	// The hub is the join's bootstrap: each side takes the keys the joins pushed.
-	for _, w := range []*workspace{w1, w2} {
-		runGit(t, w.root, "fetch", "-q", "origin")
-		runGit(t, w.root, "merge", "-q", "--ff-only", "origin/main")
-	}
-
-	ports := connectSites(t, []*workspace{w1, w2})
+	wireSites(t, []*workspace{w1, w2}, []string{p1, p2})
+	// The code is the project's: every site materialises it with its own git.
+	runGit(t, w1.root, "clone", "--bare", w1.path("repos", "code.git"), w2.path("repos", "code.git"))
 	for round := 0; round < 2; round++ {
 		w1.r().run("sync").ok(t, "w1 sync")
 		w2.r().run("sync").ok(t, "w2 sync")
 	}
-	return &twoSites{t: t, w1: w1, w2: w2, origin: origin, ledger: ledger, p1: ports[0], p2: ports[1]}
+	return &twoSites{t: t, w1: w1, w2: w2, p1: p1, p2: p2}
 }
 
 func TestTwoSitesJoinSync(t *testing.T) {

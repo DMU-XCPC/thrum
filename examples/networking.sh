@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # A two-site thrum network, end to end, on one machine.
 #
-# The joining site takes its first line and ledger from the inviting site's live
-# workspace (a URL it can reach, here a local path). The join pushes its key back
-# into that line, and create has already set receive.denyCurrentBranch=updateInstead
-# so the inviting site's worktree follows. After `site transport` the histories move
-# through the daemons; nothing external is left.
+# Site one starts its daemon and invites site two with only the address the new
+# site will listen on. Site two joins through that daemon: it takes the line, the
+# ledger and the store over the authenticated channel and registers its key
+# there. No repository, no URL and no transport is named by hand.
 #
 # Usage: examples/networking.sh [work-directory]
 set -euo pipefail
@@ -38,38 +37,34 @@ echo demo > "$CODE/README"
 run git -C "$CODE" add -A
 run git -C "$CODE" -c user.name=t -c user.email=t@t commit -qm "init"
 
-# One site creates the workspace.
+# Site one: create, place an actor, say where it listens, start the daemon.
 run "$BIN" create "$S1" --site s1 --code "code=$CODE"
 at "$S1" actor declare alice --kind human
-
-# Invite and join: the token points at site one's live workspace, which site two
-# can reach. In a real network that is an ssh:// URL; here it is the local path.
-say "$BIN --root $S1 site invite s2 --at 127.0.0.1:$P2 --line $S1 --ledger $S1/handoff --store $S1/repos/store.git --code code=$S1/repos/code.git"
-TOKEN=$("$BIN" --root "$S1" site invite s2 --at "127.0.0.1:$P2" \
-  --line "$S1" --ledger "$S1/handoff" \
-  --store "$S1/repos/store.git" --code "code=$S1/repos/code.git")
-printf 'token: %s...\n' "${TOKEN:0:48}"
-say "$BIN join <token> --dir $S2"
-"$BIN" join "$TOKEN" --dir "$S2"
-
-# Where each site listens, and where it reaches the other.
-at "$S1" site reach s2 --at "127.0.0.1:$P2"
-at "$S2" site reach s1 --at "127.0.0.1:$P1"
 at "$S1" site reach s1 --at "127.0.0.1:$P1"
-
-# Move every repository onto the other site's daemon.
-at "$S1" site transport s2
-at "$S2" site transport s1
-
-# Start the two daemons (in a real deployment this is systemd, not a shell).
 say "$BIN --root $S1 daemon run &"
 "$BIN" --root "$S1" daemon run > "$BASE/s1-daemon.log" 2>&1 &
+for _ in $(seq 1 50); do
+  if "$BIN" --root "$S1" daemon status >/dev/null 2>&1; then break; fi
+  sleep 0.1
+done
+
+# Invite; the token names no repository.
+say "$BIN --root $S1 site invite s2 --at 127.0.0.1:$P2"
+TOKEN=$("$BIN" --root "$S1" site invite s2 --at "127.0.0.1:$P2")
+printf 'token: %s...\n' "${TOKEN:0:48}"
+
+# Site two joins through site one's daemon.
+say "$BIN join <token> --dir $S2"
+"$BIN" join "$TOKEN" --dir "$S2"
+at "$S2" site reach s1 --at "127.0.0.1:$P1"
+at "$S2" site reach s2 --at "127.0.0.1:$P2"
+at "$S1" site reach s2 --at "127.0.0.1:$P2"
+
+# Site two's daemon.
 say "$BIN --root $S2 daemon run &"
 "$BIN" --root "$S2" daemon run > "$BASE/s2-daemon.log" 2>&1 &
 for _ in $(seq 1 50); do
-  if "$BIN" --root "$S1" daemon status >/dev/null 2>&1 && "$BIN" --root "$S2" daemon status >/dev/null 2>&1; then
-    break
-  fi
+  if "$BIN" --root "$S2" daemon status >/dev/null 2>&1; then break; fi
   sleep 0.1
 done
 at "$S1" daemon status

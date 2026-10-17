@@ -57,7 +57,8 @@ func TestSiteCommands(t *testing.T) {
 
 func TestJoinRefusals(t *testing.T) {
 	w := newWorkspace(t)
-	token := strings.TrimSpace(w.r().run("site", "invite", "s2").ok(t, "invite").stdout)
+	w.r().run("site", "reach", "s1", "--at", "127.0.0.1:0").ok(t, "reach")
+	token := strings.TrimSpace(w.r().run("site", "invite", "s2", "--at", "127.0.0.1:0").ok(t, "invite").stdout)
 
 	nonempty := t.TempDir()
 	if err := os.WriteFile(filepath.Join(nonempty, "x"), []byte("x"), 0o644); err != nil {
