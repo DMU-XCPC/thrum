@@ -12,7 +12,8 @@ a record you are reading is well formed.
 ## Common to every record in the workspace
 
 - **Front-matter is delimited by `---` and must be valid YAML; the body is Markdown.** A pure-YAML
-  file — a site's declaration, an actor's, a worktree's — has neither: its top level is the record.
+  file — a site's declaration, an actor's, a repository's, a worktree's — has neither: its top
+  level is the record.
 - **Field names are lower snake case**, and every `status` is a closed enumeration of lower-case
   values. There is no free-form status.
 - **A field that names a path says which root it is relative to**, and a path is never absolute.
@@ -20,7 +21,7 @@ a record you are reading is well formed.
 - **Git already records who committed and when, so neither is duplicated** — with two exceptions:
   where the meaning depends on the time, as in a handoff's start and end or a retirement notice; and
   where it depends on which actor rather than which committer, as with a handoff's `agent`.
-- **No secrets**, in `doc/`, in `handoff/`, or in the code repository: all three are permanent.
+- **No secrets**, in `doc/`, in `handoff/`, or in any code repository: all three are permanent.
 - **Every document that can be retired has exactly one H1 title**, on its first line after any
   front-matter — that is what gives a retirement notice a defined position. Conventions, topics and
   manifests can be retired and therefore have one; briefs and handoffs cannot, and their identity
@@ -35,6 +36,7 @@ authority on what is well formed; run it rather than reasoning about it.
 ---
 job: add-retry-to-uploader
 status: active                   # active | done | abandoned; being blocked is derived
+repo: code                       # the code repository this job works in
 branch: job/add-retry-to-uploader
 touches: ["src/upload/**", "tests/upload/**"]
 owner: agent-3f9c                # optional; absent means unowned
@@ -47,8 +49,9 @@ keep: false                      # optional; true protects this job's payload
 | --- | --- | --- |
 | `job` | always | must equal the containing directory name |
 | `status` | always | `active` while it is still meant to happen, then `done` or `abandoned` |
-| `branch` | always | the branch in the code repository that implements it |
-| `touches` | optional | paths this job expects to touch, relative to the code repository root — **a description for the next reader, never a lock, a claim or a mechanism** |
+| `repo` | always | the code repository the job works in; must be a declared repository |
+| `branch` | always | the branch in that repository that implements it |
+| `touches` | optional | paths this job expects to touch, relative to the job's repository root — **a description for the next reader, never a lock, a claim or a mechanism** |
 | `owner` | optional | who is responsible; absent means nobody is |
 | `depends_on` | optional | job ids that must reach `done` before this work proceeds |
 | `keep` | optional, default false | true keeps this job's payload out of collection |
@@ -95,6 +98,7 @@ The file name is the **start** of the stretch in UTC, with `:` replaced by `-`
 ```yaml
 ---
 job: add-retry-to-uploader
+repo: code
 agent: agent-3f9c
 branch: job/add-retry-to-uploader
 base: 4f2a1c9d8e3b7f01c2a4e6b8d0f2a4c6e8b0d2f4
@@ -117,9 +121,10 @@ assets: [uploader-baseline@2026-10-09]
 | Field | Required | Value |
 | --- | --- | --- |
 | `job` | always | must equal the containing directory name |
+| `repo` | always | the repository its commits are in; must equal the brief's |
 | `agent` | always | the actor that wrote it |
-| `branch` | always | must equal `job/` + the job id |
-| `base` | always | the commit the work started from; must resolve in the code repository |
+| `branch` | always | must equal `job/` + the job id, in that repository |
+| `base` | always | the commit the work started from; must resolve in that repository |
 | `head` | always | the commit at handoff time, equal to `base` if nothing was committed |
 | `status` | always | `done` \| `partial` \| `blocked` \| `aborted` |
 | `started` | always | RFC 3339 UTC, matching the file name |
@@ -189,7 +194,7 @@ There is no board to maintain. **The task board** is each brief's `status` with 
 newest file in its `handoff/` directory: the brief says whether the job is still meant to happen,
 the last handoff says whether the last stretch got anywhere. **Performance history** is the `metrics`
 fields aggregated across handoffs. **Provenance** runs from `artifacts` into `job/` and from `assets`
-into `store/`. `thrum status` prints all of it.
+into the store. `thrum status` prints all of it.
 
 **What the board's word for a job means.** For a job that has closed it is the brief's `status`. For
 one still open it is what the **newest handoff** said — `done`, `partial`, `blocked`, `aborted` — or
@@ -235,6 +240,7 @@ One commit describes one coordination event, and its subject names the event:
 | `init` | omitted | `init: created from the template` |
 | `actor` | actor name | `actor dana: declared as a human` |
 | `site` | site name | `site build-02: joined, key registered` |
+| `repo` | repository name | `repo code: declared the uploader service` |
 | `worktree` | label | `worktree uploader: declared for uploader reliability` |
 | `brief` | job id | `brief add-retry: scope narrowed to the uploader only` |
 | `handoff` | job id | `handoff add-retry: the flaky timeout remains` |

@@ -42,7 +42,7 @@ said hello — and pushes the message there.
 - **It cannot be retracted or edited**, because it may already have started something. A correction
   is another message with `reply_to` set.
 - **Attachments are bytes and nothing more.** They are not assets: no content addressing, no tag,
-  no manifest, never `store/`. Anything that has to survive is published and referred to by name —
+  no manifest, never the store. Anything that has to survive is published and referred to by name —
   `assets.md`.
 - **It is never in a handoff.** A handoff is evidence and it is permanent; a message is process
   information and it is not. Look at your mail before you hand off, because whoever continues will

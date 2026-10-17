@@ -1,6 +1,7 @@
 ---
 job: <job-id>                    # must equal the containing directory's name
 status: active                   # active | done | abandoned; being blocked is derived
+repo: <name>                     # the code repository this job works in
 branch: job/<job-id>
 touches: []                      # optional; paths this job expects to touch, never a lock
 owner: <actor>                   # optional; absent means unowned, and claimable by whoever takes it up

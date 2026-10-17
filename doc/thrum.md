@@ -206,9 +206,13 @@ imply:
 | --- | --- | --- |
 | the line (`doc/`) | the line ref | one writer per path; merged, never rewritten |
 | the ledger (`handoff/`) | the ledger ref | append-only; merged by union, never rewritten |
-| code | `job/<id>` | one writer: the site holding that job |
-| code | the integration refs | one writer: the site the project declares |
-| assets | tags | created once, never moved, deleted only by withdrawal |
+| each code repository (`repos/<name>.git`) | `job/<id>` | one writer: the site holding that job |
+| each code repository | the integration refs | one writer: the site the project declares |
+| the store (`repos/store.git`) | tags | created once, never moved, deleted only by withdrawal |
+
+Every bare repository lives under `repos/`; the line and the ledger keep their git directory
+with their checkout, because they have one, and a code repository is checked out under
+`worktree/` only while a job holds it.
 
 A ref has one writer, and a writer is replaced by a decision rather than by a push. Where a
 project wants an integration to be exact, thrum performs it as one operation at the declared

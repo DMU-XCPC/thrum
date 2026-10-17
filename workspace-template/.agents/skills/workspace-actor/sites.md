@@ -54,8 +54,8 @@ acts, and all three are needed:
 
 1. **The records travel by the shared histories.** The brief is in the line and the handoffs are in
    the ledger; both are already shared.
-2. **The branch travels through the fabric.** `job/<job-id>` lives in the code repository, and the
-   receiving site fetches it from the site holding the job.
+2. **The branch travels through the fabric.** `job/<job-id>` lives in the job's repository —
+   `repo` in the brief — and the receiving site fetches it from the site holding the job.
 3. **The payload travels as a bundle**, because git cannot carry it.
 
 **A move does not by itself change who owns the job.** The receiving actor may work it under the
@@ -93,7 +93,7 @@ thrum bundle import <bundle> [--replace]
 - **Export runs after a handoff and never during work** — the bundle says which handoff it belongs
   to. It is written outside the workspace, and never inside `job/<job-id>/` itself.
 - **Import refuses unless the records are already local**: the named handoff must be present, and the
-  commit it names must resolve in the code repository. That single check replaces every merge rule
+  commit it names must resolve in the job's repository. That single check replaces every merge rule
   the workspace would otherwise need.
 - **Import refuses when `job/<job-id>/` is already present** and says so. Only `--replace` proceeds,
   discarding what is there and reporting every path it discarded.
@@ -121,7 +121,8 @@ Adding a machine is two commands and one token.
    at `doc/site/<name>.yaml` and prints a token that names the workspace and the inviting site. It
    expires, and it is the only secret that has to move by hand.
 2. **Join**, on the new machine: `thrum join <token>` proves the token, presents a key, takes the
-   roster and the repositories, starts this site's daemon, and registers the key in the roster.
+   roster and every declared repository, starts this site's daemon, and registers the key in the
+   roster.
 3. **Introduce**: the inviting site tells the peers it can reach that the new site exists and where
    it listens. A peer accepts an introduction only for a site the roster already declares.
 

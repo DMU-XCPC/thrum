@@ -41,20 +41,22 @@ workspace/
     doc/
         actor/<name>.yaml            # who exists, and what kind
         site/<name>.yaml             # which machines exist, their keys and their reach
+        repo/<name>.yaml             # which code repositories the project has
         convention/<nn>-<slug>.md    # rules every actor reads, in number order
         topic/<topic>/               # knowledge shared across jobs
         task/<job-id>/brief.md       # one job, in flight
-        worktree/<label>.yaml        # a named area of work, and whether it is one-off
+        worktree/<label>.yaml        # a named area of work, its repository, and whether it is one-off
         archive/                     # retired documents, and closed jobs
         template/                    # copy-me files for the records an actor writes
     handoff/                         # the ledger repository: append-only evidence
         .git/
         <job-id>/<started>.md        # one file per stretch; never edited, never deleted
 
-    .bare/                           # the code repository, bare, checked out into worktree/
-    store/                           # published data, bare, never checked out
+    repos/                           # bare repositories: no permanent checkout
+        <name>.git/                  # one per declared code repository
+        store.git/                   # published data, never checked out
     job/<job-id>/                    # a job's payload: log, tmp, cache, data, state, ckpt, out
-    worktree/<label>/                # a labelled working directory, passed between jobs
+    worktree/<label>/                # a checkout of one repository, passed between jobs
     var/                             # this site's runtime; it carries no decision
 ```
 
@@ -64,7 +66,7 @@ Three planes, each with its own rule for staying alive:
 | --- | --- | --- | --- |
 | the line | `doc/` — the decisions | job id, name, topic | pushed to the other sites |
 | the ledger | `handoff/` — the evidence | job id and stamp | pushed to the other sites |
-| the work | `.bare/` and `store/` | branch, asset tag | an external mirror; the code most of all |
+| the work | `repos/` | repository and branch, asset tag | an external mirror; the code most of all |
 | the runtime | `var/`, `job/`, `worktree/` | this machine | nothing; it is rebuilt |
 
 ## Records
@@ -77,6 +79,7 @@ is a file in the ledger. Nothing the fabric holds is a record.
 | --- | --- | --- |
 | actor | `doc/actor/<name>.yaml` | thrum, when a name is declared |
 | site | `doc/site/<name>.yaml` | thrum, at invite and join |
+| repo | `doc/repo/<name>.yaml` | thrum, when a code repository is added |
 | brief | `doc/task/<job-id>/brief.md` | the actor on the job |
 | handoff | `handoff/<job-id>/<started>.md` | the actor finishing a stretch |
 | topic | `doc/topic/<topic>/` | an actor, when knowledge stops being job-specific |
@@ -98,6 +101,7 @@ history shows when the scope moved.
 ---
 job: add-retry-to-uploader
 status: active                       # active | done | abandoned
+repo: code                           # the code repository this job works in
 branch: job/add-retry-to-uploader
 owner: agent-3f9c                    # optional; absent means nobody is accountable
 touches: ["src/upload/**"]           # optional, descriptive: what this job expects to touch
@@ -128,6 +132,7 @@ deleted.
 ```yaml
 ---
 job: add-retry-to-uploader
+repo: code
 agent: agent-3f9c
 branch: job/add-retry-to-uploader
 base: 4f2a1c9d8e3b7f01c2a4e6b8d0f2a4c6e8b0d2f4
@@ -163,6 +168,26 @@ two repositories, and the design does not pretend otherwise. Handoff first is th
 direction: a crash between them leaves the job open with its final evidence already written,
 which is the version somebody can act on.
 
+### Worktree — `doc/worktree/<label>.yaml`
+
+A label names an area of work and the repository it belongs to. It is written by thrum at the
+first `worktree add` of the label, so that the label means the same thing to every job that uses
+it.
+
+```yaml
+label: uploader
+repo: code
+purpose: Uploader reliability work
+ephemeral: false
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `label` | always | must equal the file name; the directory under `worktree/` |
+| `repo` | always | the code repository whose branch is checked out there |
+| `purpose` | always | what the area is for, in a person's words |
+| `ephemeral` | optional, default false | the directory may be destroyed on release |
+
 ## Ownership, and who is on a job
 
 - **`owner` is durable accountability**, in the brief: who the work was promised to, and who to
@@ -181,8 +206,8 @@ which is the version somebody can act on.
 
 Two repositories hold everything durable, and they hold different things.
 
-**The line** (`doc/`) is the decisions: actor, site and worktree declarations, conventions,
-topics, briefs, asset manifests. Several sites write it at once, and it merges rather than
+**The line** (`doc/`) is the decisions: actor, site, repository and worktree declarations,
+conventions, topics, briefs, asset manifests. Several sites write it at once, and it merges rather than
 conflicting because no two sites write one file — a brief has the one site working its job, a
 declaration has the site that made it, and a name claimed twice is settled by a deterministic
 order rather than merged. Nothing that has been seen is ever rewritten.
@@ -203,14 +228,22 @@ mechanism.
 exists, live or archived. That is the one check that reads across the two, and `verify` is where
 it lives.
 
-The code repository is a different history with a different rule: **one branch per job, and one
-writer per branch** — the site holding that job. Integration is the project's business;
-`job/<id>` is never merged by the workspace, and a closed job is a hand-off to whoever
+The code repositories are a different history with a different rule: **one branch per job, and
+one writer per branch** — the site holding that job. A job names its repository in its brief
+(`repo`), and a worktree label names the one it checks out. Integration is the project's
+business; `job/<id>` is never merged by the workspace, and a closed job is a hand-off to whoever
 integrates, not an integration itself.
 
-Assets are published as tags, created once and never moved. A version that turns out to be
-wrong is **withdrawn**: its manifest is retired with a notice, and the tag is deleted, so the
-bytes become collectible and the version number stays taken.
+`repos/` holds every bare repository: one per declared code repository, and `store.git`. It is the
+one directory that never has a permanent checkout — the line and the ledger keep theirs, and a
+code repository is checked out under `worktree/` only while a job holds it. A site materialises
+the repositories it works with; a declared repository that is not here is not an error, and
+`status` says so.
+
+Assets live in the store (`repos/store.git`) and are published as tags, created once and never
+moved. A version that turns out to be wrong is **withdrawn**: its manifest is retired with a
+notice, and the tag is deleted, so the bytes become collectible and the version number stays
+taken.
 
 ## Moving a job to another site
 
@@ -218,7 +251,8 @@ A job belongs to the workspace, not to a machine. Moving one is three acts:
 
 1. **The records travel by the shared histories.** The brief is in the line and the handoffs are
    in the ledger; both are already shared.
-2. **The branch travels through the fabric.** The receiving site fetches `job/<id>`.
+2. **The branch travels through the fabric.** The receiving site fetches `job/<id>` from the
+   job's repository — `repo` in the brief.
 3. **The payload travels as a bundle**, because git cannot carry it. Export runs after a
    handoff and never during work; it releases nothing, because stopping already released
    whatever the job held.
@@ -234,7 +268,7 @@ authority, or the owner may give the job up first and let the receiver claim it.
 
 `job/<job-id>/` is everything a job produces on disk: `log/`, `tmp/`, `cache/`, `data/`,
 `state/`, `ckpt/`, `out/`. Nothing in it is irreplaceable — whatever must survive is published
-to `store/` and referenced from a handoff, or reproduced.
+to the store and referenced from a handoff, or reproduced.
 
 A payload becomes collectible once its brief says `done` or `abandoned`, unless `keep` is true.
 `tmp/`, `cache/` and `ckpt/` go at the close; the rest after a retention window measured from
@@ -246,12 +280,12 @@ same one, and a collected artifact is a *detectable* absence because the handoff
 Placement is a procedure, not a list, because a list is overtaken by the next kind of data.
 
 ```text
-1. Source code, or a document that must change atomically with it?  → the code repository
+1. Source code, or a document that must change atomically with it?  → a code repository
 2. A record of what a job did?                                      → handoff/
 3. A secret?                                                        → never in git
 4. Regenerable?   shared → var/cache/   one job → job/<id>/cache/   → var/env/<label>/
 5. Text a person reads in place?                                    → doc/
-6. Binary, or too large to read?                                    → store/, with a manifest
+6. Binary, or too large to read?                                    → the store, with a manifest
 7. State of the machine right now?                                  → var/
 8. Larger, or externally governed?                                  → outside, with a locator
 ```
@@ -273,6 +307,7 @@ stamp := YYYY "-" MM "-" DD "T" HH "-" MM "-" SS "Z"      # UTC, colons as hyphe
 | Name | Form | Example |
 | --- | --- | --- |
 | job id | `slug` | `add-retry-to-uploader` |
+| repository | `slug` | `code`, `web` |
 | branch | `job/` + job id | `job/add-retry-to-uploader` |
 | worktree label | `slug`, reused by design | `uploader` |
 | actor, site, topic, asset | `slug` | `agent-3f9c` |
@@ -280,10 +315,10 @@ stamp := YYYY "-" MM "-" DD "T" HH "-" MM "-" SS "Z"      # UTC, colons as hyphe
 | handoff file | `stamp` + `.md` | `2026-10-09T02-10-00Z.md` |
 | convention file | two digits + `-` + `slug` + `.md` | `01-placement.md` |
 
-Job ids, asset versions, and convention numbers are taken forever: once used, never reused. A
-worktree label is reused deliberately, so its meaning must stay fixed. Names are reversible —
-`job/` + id, file name ↔ timestamp, label ↔ directory — so a record can be checked against the
-path it lives at.
+Job ids, repository names, actor and site names, asset versions, and convention numbers are taken
+forever: once used, never reused. A worktree label is reused deliberately, so its meaning must
+stay fixed. Names are reversible — `job/` + id, file name ↔ timestamp, label ↔ directory — so a
+record can be checked against the path it lives at.
 
 ## What is out of this version
 
@@ -292,6 +327,8 @@ Deliberately absent, rather than forgotten:
 - **leases and resources.** Nothing arbitrates a scarce shared thing yet.
 - **path exclusion.** `touches` is a description; a conflict is the project's to see at
   integration.
+- **a job spanning repositories.** A job works in one repository; work that spans them is two
+  jobs, with `depends_on` between them.
 - **more than one workspace per site.** One site, one workspace, for now.
 - **discovery.** A site is declared and introduced; nothing finds one by itself.
 - **deferred delivery.** A sender never queues, so nothing waits for an actor to appear. Making

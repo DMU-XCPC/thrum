@@ -7,7 +7,7 @@ what it is, and the same procedure answers every case, including the ones this f
 
 ```text
 1. Source code, dependency locks, or a document that must change atomically with code?
-       → the code repository: next to the code, or the project's own doc/ inside a worktree
+       → a code repository: next to the code, or the project's own doc/ inside a worktree
 2. A record of what a job did?
        → handoff/<job-id>/
 3. A secret?
@@ -20,7 +20,7 @@ what it is, and the same procedure answers every case, including the ones this f
        per worktree             → var/env/<label>/
 6. Not regenerable?
        text a person reads in place   → doc/
-       binary, or too large to read   → store/, anchored by a manifest in doc/asset/
+       binary, or too large to read   → the store, anchored by a manifest in doc/asset/
 7. True only of this machine, and not a decision?
        → var/, or job/<job-id>/ when it belongs to one job
 8. Larger, or externally governed?
@@ -32,10 +32,12 @@ convenience, and "I needed it nearby" is not one of the questions.
 
 ## The worktree holds source, and nothing else
 
-**A working directory is made by thrum, under a declared label.** `thrum work <job-id> --label
-<label>` takes a job up and is the ordinary way, `thrum job open <job-id> --label <label>` opens one
-for somebody else, and `thrum worktree add <label>` materialises a label on its own, detached, for
-comparison. The declaration at `doc/worktree/<label>.yaml` is what says the label exists at all.
+**A working directory is made by thrum, under a declared label.** `thrum work <job-id> --repo <name>
+--label <label>` takes a job up and is the ordinary way, `thrum job open <job-id> --repo <name>
+--label <label>` opens one for somebody else, and `thrum worktree add <label> --repo <name>`
+materialises a label on its own, detached, for comparison. The declaration at
+`doc/worktree/<label>.yaml` is what says the label exists at all, and it names the repository the
+label belongs to.
 
 Checking a branch out by hand anywhere else, into `var/` or `job/` or your home directory, registers
 a carrier thrum cannot see: `thrum status` and `verify` do not report it, `thrum clean` will not
@@ -97,7 +99,7 @@ Nothing here is irreplaceable. `tmp/`, `cache/` and `ckpt/` are collected when t
 protects its payload from collection entirely.
 
 **`out/` is a place to work, not a delivery mechanism.** A result that has to survive the job is
-published to `store/` (see `assets.md`) and named in the handoff under `assets`. A handoff keeps the
+published to the store (see `assets.md`) and named in the handoff under `assets`. A handoff keeps the
 raw `sha256` of every artifact it names, so a collected artifact is a detectable absence rather than
 a silent one — but a hash cannot give the bytes back.
 
@@ -107,7 +109,7 @@ a silent one — but a hash cannot give the bytes back.
 | --- | --- | --- | --- |
 | The line — `doc/` | decisions | yes, in the line | yes |
 | The ledger — `handoff/` | evidence, append-only | yes, in the ledger | yes |
-| Assets — `store/` | durable bytes, content-addressed | yes, as tags | yes, as tags |
+| Assets — the store (`repos/store.git`) | durable bytes, content-addressed | yes, as tags | yes, as tags |
 | Runtime — `var/`, `job/`, `worktree/` | working state | no | no |
 
 **Nothing under `var/` is written by hand, and that includes making a directory there.** `var/` is
@@ -115,6 +117,6 @@ thrum's, and *What you may touch* in `AGENTS.md` is the rule. It matters here be
 how the mistake happens: working state you put under `var/` is state no actor after you finds, which
 is the same failure as work outside the root.
 
-`.bare/`, `store/`, `var/`, `job/` and `worktree/` are ignored in `.gitignore` and
-`.git/info/exclude`. Never run a bare `git clean` at the workspace root: `-x` would delete `.bare/`
-and the entire source history with it. `thrum clean` is the guarded version.
+`repos/`, `handoff/`, `var/`, `job/` and `worktree/` are ignored in `.gitignore` and
+`.git/info/exclude`. Never run a bare `git clean` at the workspace root: `-x` would delete `repos/`,
+the ledger and every history with them. `thrum clean` is the guarded version.

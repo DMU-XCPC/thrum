@@ -1,6 +1,6 @@
 # The design
 
-Two documents, read in this order:
+Three documents, read in this order:
 
 1. [`workspace.md`](workspace.md) — what a workspace is: the jobs that isolate work, the
    records that say what happened, and where everything goes.
@@ -8,9 +8,8 @@ Two documents, read in this order:
    messages, and keeping the shared histories converging.
 3. [`commands.md`](commands.md) — the operations and every command, and what each refuses.
 
-They are two halves of one design, not two designs. The workspace says what has to be true;
-thrum says which parts of that a distributed program makes true. Where they meet — a name, a
-site, the line — each states its own half once and points at the other.
+They are parts of one design, not separate designs. The first two are its two halves; the third is
+how you ask for either.
 
 ## What this replaces
 
@@ -43,5 +42,10 @@ stale and are rebuilt from these documents.
 - **A job is the only isolation unit.** `touches` is a description, not a claim; the previous
   reading of `owned_paths` as exclusion is withdrawn. Leases and resources are out of this
   version entirely.
+- **Bare repositories live under `repos/`, and there may be more than one.** The code is one or
+  more repositories, each declared in the line and materialised at `repos/<name>.git`; a job names
+  the one it works in, and a worktree label names the one it checks out. The store is
+  `repos/store.git`. The line and the ledger keep their git directory with their checkout, because
+  they have one.
 - **The design names thrum.** The older documents said "the tooling" because the design came
   first and the tool second. That distance is not worth keeping.

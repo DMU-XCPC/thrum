@@ -28,12 +28,12 @@ changes.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum create <dir> --site <name> [--code <repo>]` | Instantiates a workspace from the template thrum carries: the four repositories — the line, the ledger, the code and the store — the runtime directories, the entry point and skill an actor is handed, this site's declaration, and the first event. | Never a plain file copy: bare repositories have to be initialised, and a repository cannot carry an empty directory. |
+| `thrum create <dir> --site <name> [--code <name>=<path>]…` | Instantiates a workspace from the template thrum carries: the line, the ledger, one repository per `--code`, and the store — the runtime directories, the entry point and skill an actor is handed, this site's declaration, and the first event. | Never a plain file copy: bare repositories have to be initialised, and a repository cannot carry an empty directory. |
 | `thrum join <token>` | Makes this machine another site: proves the token, presents a key, takes the roster and the repositories, starts the daemon, and registers the key. | A site the roster does not declare is refused rather than half-joined. |
 | `thrum update` | Brings the unversioned skeleton up to date: the ignore rules, the empty directories, the entry point and the skill. Reports differing copy-me files and writes them only when asked. | Never touches a versioned file on its own initiative, and never removes a directory. |
-| `thrum verify` | Runs every mechanical check, including the one that reads across the two histories — a handoff's `job` must name a brief in the line — and reads the values the conventions declare. | Reports; it never repairs. A wrong repair costs more than a stale record. |
+| `thrum verify` | Runs every mechanical check, including the two that read across boundaries — a handoff's `job` must name a brief in the line, and its `repo` must equal the brief's — and reads the values the conventions declare. | Reports; it never repairs. A wrong repair costs more than a stale record. |
 | `thrum status` | The picture: the board, the sites, the payloads, and this actor's mail. | Reads only. |
-| `thrum clean` | Removes what the shared histories do not track and do not ignore. | Never `git clean -x` or `-d`: the first would delete the code repository, the ledger and their histories, the second the workspace's own empty directories. |
+| `thrum clean` | Removes what the shared histories do not track and do not ignore. | Never `git clean -x` or `-d`: the first would delete `repos/`, the ledger and their histories, the second the workspace's own empty directories. |
 
 ## Sites
 
@@ -45,6 +45,19 @@ changes.
 | `thrum site doctor` | For each peer: declared, addressed, key known, last answered, protocol understood. | Reads only, and useful precisely when something is unreachable. |
 | `thrum site key rotate`, `thrum site key revoke` | Replaces a site's key, or withdraws it. | One event. A revoked key is refused by every peer. |
 | `thrum site forget <name>` | Removes a site from the roster. | Refused while it is the last site, or while a job is materialised there; reports what it cannot clean up. |
+
+## Repositories
+
+The code is one or more bare repositories under `repos/`, each declared in the line. A job names
+the one it works in, and every label names the one it checks out.
+
+| Command | Does | Refuses, or guarantees |
+| --- | --- | --- |
+| `thrum repo add <name> [--about <text>] [--from <url\|path>]` | Declares a code repository in the line and materialises it at `repos/<name>.git`, from the given source or as an empty bare repository. | One event. Refuses a name that is taken or is not a slug. |
+| `thrum repo list`, `thrum repo show <name>` | The declared repositories, and which this site has materialised. | Reads only. A declared repository that is not here is not an error. |
+| `thrum repo remove <name>` | Retires the declaration. | Refused while a live brief names it or a label is bound to it. The name stays taken. |
+
+`repos/` also holds `store.git`, the asset store. It is not declared: every workspace has one.
 
 ## Actors
 
@@ -73,19 +86,19 @@ decision and nothing else should make one as a side effect.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum job open <id> --purpose <text> --label <label> [--goal <text>] [--scope <text>] [--criteria <text>] [--owner <actor>] [--touches <paths>] [--depends-on <ids>] [--keep] [--ephemeral]` | Writes the brief, creates `job/<id>`, and materialises a working directory under the label. `--purpose` is the label's own; `--goal`, `--scope` and `--criteria` are the brief's. | Refuses an id that has been used before — against `doc/task/` and `doc/archive/` both — before anything is written. One event, or none; declaring a label that does not exist yet is a second event of its own. |
+| `thrum job open <id> --repo <name> --purpose <text> --label <label> [--goal <text>] [--scope <text>] [--criteria <text>] [--owner <actor>] [--touches <paths>] [--depends-on <ids>] [--keep] [--ephemeral]` | Writes the brief, creates `job/<id>`, and materialises a working directory under the label, in the named repository. `--purpose` is the label's own; `--goal`, `--scope` and `--criteria` are the brief's. | Refuses an id that has been used before — against `doc/task/` and `doc/archive/` both — and a repository that is not declared, before anything is written. One event, or none; declaring a label that does not exist yet is a second event of its own. |
 | `thrum job list`, `thrum job show <id>` | The board, and one job in full. | Reads only. |
 | `thrum job claim <id>` | Sets `owner` on a job that has none. | Refuses a job that already has an owner: taking ownership from somebody is not a claim. |
 | `thrum job reassign <id> --to <actor>`, `thrum job relinquish <id>` | Changes or clears the owner. | Refused to anyone but the owner, or a person acting for an owner who is unreachable. |
 | `thrum job handoff <id> --status <s> [--body <file>\|-] [--next <text>] [--artifact <path>] [--worktree <label>] [--supersedes <file>] [--blocked-by <id>]` | Writes `handoff/<id>/<started>.md` into the ledger — a new file every time. | Refuses an existing file name, a brief that is not `active`, and a `next` that disagrees with the status: `none` belongs to `done`, and every other stretch leaves a baton. Write it before the close that ends the job; the two are separate events in separate repositories. |
 | `thrum job close <id> --status done\|abandoned` | Sets the final status, moves the brief to the archive, and releases the working directory. | Refuses a job that has already closed, before anything is written. It is the second of two events when it ends a stretch — the handoff comes first — and it merges nothing. |
-| `thrum work <id> --label <label> [--purpose <text>] [--ephemeral] [--goal <text>] [--owner <actor>]` | Open, claim and enter in one act, for the ordinary case of being handed work. `--purpose` is the label's own; `--goal` is the brief's. | As the operations it composes: a job that already has an owner is worked under that owner, not claimed. |
+| `thrum work <id> --repo <name> --label <label> [--purpose <text>] [--ephemeral] [--goal <text>] [--owner <actor>]` | Open, claim and enter in one act, for the ordinary case of being handed work. `--purpose` is the label's own; `--goal` is the brief's. | As the operations it composes: a job that already has an owner is worked under that owner, not claimed. |
 
 ## Worktrees
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum worktree add <label> [--job <id>] [--purpose <text>] [--ephemeral]` | Declares the label if it is new, and checks a job's branch — or a detached head, for comparison — into it. | Refuses a label that already holds another job's branch. A label at rest is clean and detached. |
+| `thrum worktree add <label> --repo <name> [--job <id>] [--purpose <text>] [--ephemeral]` | Declares the label if it is new, and checks a job's branch — or a detached head, for comparison — into it. | Refuses a label that already holds another job's branch, and a `--repo` that disagrees with the job's brief. A label at rest is clean and detached. |
 | `thrum worktree release <label>` | Leaves the directory clean and detached, and destroys it when it is one-off. | |
 | `thrum worktree list`, `thrum worktree remove <label>` | What exists, and retiring a label. | Removing a label whose directory is materialised is refused. |
 
@@ -149,8 +162,8 @@ oversight: a workspace has to stay readable and editable without a helper.
 
 ## The refusals that hold everywhere
 
-- **A name is used once.** Job ids, actor names, site names, asset versions and convention
-  numbers are never reused, and `retire` does not free one.
+- **A name is used once.** Job ids, repository names, actor names, site names, asset versions and
+  convention numbers are never reused, and `retire` does not free one.
 - **One writer per file in the line; the ledger is append-only.** A file in the line has exactly
   one site allowed to write it, and the ledger takes new files and nothing else; a write outside
   those rules is refused rather than merged.

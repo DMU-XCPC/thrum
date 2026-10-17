@@ -1,10 +1,10 @@
-# Assets — `store/` and `doc/asset/`
+# Assets — the store and `doc/asset/`
 
-How do durable bytes live, and how does a version become permanent? `store/` is where bytes that
-must survive a job go. It is a **bare git repository**, and that is the whole design: git already
-provides content addressing, immutability, deduplication, delta compression between similar
-versions, integrity checking, transport and backup. A hand-rolled object directory would
-reimplement all of it and lose the delta compression that makes comparing a dataset against a
+How do durable bytes live, and how does a version become permanent? The store — `repos/store.git` —
+is where bytes that must survive a job go. It is a **bare git repository**, and that is the whole
+design: git already provides content addressing, immutability, deduplication, delta compression
+between similar versions, integrity checking, transport and backup. A hand-rolled object directory
+would reimplement all of it and lose the delta compression that makes comparing a dataset against a
 future version cheap.
 
 
@@ -13,7 +13,7 @@ own transient directory:
 
 ```sh
 thrum asset materialise uploader-baseline 2026-10-09 --job add-retry
-# git -C store archive <ref> | tar -x -C job/<job-id>/data
+# git --git-dir=repos/store.git archive <ref> | tar -x -C job/<job-id>/data
 ```
 
 Everything under `job/` is disposable, so the materialised copy inherits the retention policy of
@@ -33,8 +33,8 @@ publishing atomic. `thrum asset publish` writes the tag and the manifest togethe
 
 ## The manifest — `doc/asset/<asset-name>/<version>.md`
 
-The manifest is the only part of an asset that is versioned. The bytes live in `store/` or
-outside the workspace; the claim about them lives here.
+The manifest is the only part of an asset that is versioned. The bytes live in the store or outside
+the workspace; the claim about them lives here.
 
 ```yaml
 ---
@@ -86,7 +86,7 @@ published. Correcting a descriptive field — the description, the license — i
 
 When a version turns out to be wrong, or must not be used, it is **retired like any other
 document**, in one `retire` commit: the manifest moves to
-`doc/archive/asset/<name>/<version>.md` with a notice, and the tag in `store/` is deleted, which
+`doc/archive/asset/<name>/<version>.md` with a notice, and the tag in the store is deleted, which
 makes the bytes collectible.
 
 Withdrawal is a retirement rather than a deletion, so a handoff that names the version keeps a
@@ -96,7 +96,7 @@ resolvable reference and the reason is on record. **The version number stays tak
 
 > The workspace is a coordination plane, not a data lake.
 
-`store/` is for durable bytes a job produced or needs, of a size and shape that git handles well.
+The store is for durable bytes a job produced or needs, of a size and shape that git handles well.
 It is not for:
 
 | Not an asset here | Where it goes |
@@ -104,7 +104,7 @@ It is not for:
 | Container images, model weights, terabyte-scale corpora | a registry or an object store, with an immutable locator in the manifest |
 | Externally governed or licensed data | the system that governs it, with a locator and a `license` |
 | Anything that must be deleted object by object | an external system; the workspace keeps a reference |
-| Secrets | never — not in `doc/`, not in `store/`, not in any git repository |
+| Secrets | never — not in `doc/`, not in the store, not in any git repository |
 
 Anything outside the workspace must be anchored by a locator inside it. That is the same rule as
 "everything unversioned must be anchored by something versioned", extended past the boundary.

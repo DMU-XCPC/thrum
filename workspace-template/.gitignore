@@ -5,13 +5,12 @@
 # It lists itself, because an untracked file that shows up in git status is an
 # untracked file somebody eventually commits by accident.
 #
-# /handoff/ is here because the ledger is its own repository: the line tracks
-# doc/ and nothing else.
+# /handoff/ and /repos/ are here because they are repositories of their own: the
+# line tracks doc/ and nothing else.
 
 .gitignore
 
-/.bare/
-/store/
+/repos/
 /handoff/
 /var/
 /job/

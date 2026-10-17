@@ -1,7 +1,7 @@
 ---
 name: workspace-actor
 description: Work one job in a thrum workspace as an actor — the workspace's own rules, the loop that ends in a handoff, and where each answer lives.
-whenToUse: You are in a thrum workspace (a directory holding .bare/, store/, var/, job/ and worktree/), or you have been given a workspace root and a job id.
+whenToUse: You are in a thrum workspace (a directory holding repos/, handoff/, var/, job/ and worktree/), or you have been given a workspace root and a job id.
 ---
 
 # Working a job
@@ -32,9 +32,9 @@ Read these once. Nearly every rule below follows from them, which is why a situa
 not name still has a right answer.
 
 1. **Three planes, three lifecycles.** `doc/` and `handoff/` are decisions and evidence, versioned
-   and shared. `store/` is durable bytes, content-addressed and never checked out. `var/`, `job/`
-   and `worktree/` are working state: unversioned, machine-local, disposable. Getting a thing into
-   the wrong plane is the most common way to lose it.
+   and shared. The store (`repos/store.git`) is durable bytes, content-addressed and never checked
+   out. `var/`, `job/` and `worktree/` are working state: unversioned, machine-local, disposable.
+   Getting a thing into the wrong plane is the most common way to lose it.
 2. **A job holds the runtime, and an actor does not.** A job owns a branch, a working directory and
    a payload. An actor is a name that picks one up or hands it over. That is why a name is never a
    permission, and why nothing is assigned to you.
@@ -48,9 +48,9 @@ not name still has a right answer.
    (`handoff/`) holds the evidence and is append-only, so it merges by the union of new files — a
    handoff is a new file every time. Nothing that has been seen is ever rewritten — `sites.md` has
    the rest.
-5. **A name is a permanent identifier.** It never encodes state that can change, and job ids, actor
-   names, site names, asset versions and convention numbers are never reused. So *used once* is
-   enforceable rather than promised.
+5. **A name is a permanent identifier.** It never encodes state that can change, and job ids,
+   repository names, actor names, site names, asset versions and convention numbers are never
+   reused. So *used once* is enforceable rather than promised.
 6. **Everything you write is inside the workspace, or it is a mistake.** `var/` belongs to thrum,
    `job/<job-id>/` is the payload, and the only place code is edited is the directory thrum names —
    *What you may touch* in `AGENTS.md` is the whole of it.
@@ -102,7 +102,7 @@ the failure it prevents is silent. In one line each: the directory thrum names; 
 4. **Check your mail.** `thrum message list`, and `thrum message read <id>` for one. A message is
    process information and is never in a handoff, so this is the only place it arrives — and it is
    often why the last actor stopped. `messages.md` has sending and reading.
-5. **Take it up.** `thrum work <job-id> --label <label>` opens the job when it is not open yet,
+5. **Take it up.** `thrum work <job-id> --repo <name> --label <label>` opens the job when it is not open yet,
    claims it when it has no owner, and materialises a working directory when this site has none; it
    ends by printing the directory and the environment line to run. There is no claim to take and
    none to vacate: whether an actor is working cannot be observed, and `actors.md` says what stands
@@ -126,8 +126,8 @@ the failure it prevents is silent. In one line each: the directory thrum names; 
 9. **Close, or leave the baton.** `thrum job close <job-id> --status done` only when the acceptance
    criteria hold, and `--status abandoned` when they will not. It is a second event, in the line:
    the handoff that ends the stretch comes first, in the ledger, and a crash between them leaves
-   the job open with its final evidence written. Closing merges nothing: the branch stays in the
-   code repository for whoever integrates. Before closing, look for something to promote — a fact
+   the job open with its final evidence written. Closing merges nothing: the branch stays in its
+   repository for whoever integrates. Before closing, look for something to promote — a fact
    that outlives the job and does not depend on how it was solved — to `doc/topic/`.
 
 ## If you are opening the job rather than taking it up
@@ -139,7 +139,7 @@ who will work it; `thrum job open` is the same act without taking it up, which i
 for somebody else looks like.
 
 ```sh
-thrum job open add-retry-to-uploader --label uploader \
+thrum job open add-retry-to-uploader --repo code --label uploader \
     --purpose 'uploader reliability' \
     --goal 'retry the uploader instead of failing it' \
     --scope 'the uploader only' \
@@ -179,7 +179,7 @@ never repairs, so it is always safe to run when you are unsure whether the works
 | send, read, reply to or purge a message | `messages.md` |
 | put a file somewhere, or wonder if it belongs in the worktree | `placement.md` |
 | write or edit a brief or a handoff, or judge one you are reading | `records.md` |
-| name anything — a job, a label, a site, an actor, a convention, an asset version | `names.md` |
+| name anything — a job, a repository, a label, a site, an actor, a convention, an asset version | `names.md` |
 | write a convention, start or promote a topic, retire a document | `knowledge.md` |
 | keep a result that has to outlive the job | `assets.md` |
 | touch another site, carry a payload, or meet a refusal | `sites.md` |

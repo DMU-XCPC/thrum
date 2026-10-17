@@ -17,6 +17,7 @@ stamp := YYYY "-" MM "-" DD "T" HH "-" MM "-" SS "Z"    # UTC, colons replaced b
 | Name | Form | Example |
 | --- | --- | --- |
 | Job id | `slug` | `add-retry-to-uploader` |
+| Repository | `slug`, declared once | `code`, `web` |
 | Branch | `job/` + job id | `job/add-retry-to-uploader` |
 | Worktree label | `slug`, chosen for the **area of work** | `uploader` |
 | Actor | `slug`, declared once and never reused | `dana`, `agent-3f9c` |
@@ -34,10 +35,10 @@ stamp := YYYY "-" MM "-" DD "T" HH "-" MM "-" SS "Z"    # UTC, colons replaced b
 1. **One character set**: lowercase ASCII letters, digits and hyphens. No spaces, no uppercase, no
    underscores, and no dots outside file extensions.
 2. **Short and shell-safe**, because people type them.
-3. **Job ids, actor names, site names, asset versions and convention numbers are taken forever** —
-   within the workspace. Once used, none is reused, even after the job closes, the actor is retired,
-   the asset is withdrawn or the convention is retired. A job id's uniqueness is checked against
-   both `doc/task/` and `doc/archive/`.
+3. **Job ids, repository names, actor names, site names, asset versions and convention numbers are
+   taken forever** — within the workspace. Once used, none is reused, even after the job closes, the
+   repository or the actor is retired, the asset is withdrawn or the convention is retired. A job
+   id's uniqueness is checked against both `doc/task/` and `doc/archive/`.
 4. **One thing sits deliberately outside that rule.** A **worktree label** is reused by design, so
    its meaning must stay fixed and it is never repurposed for a different area of work. A **topic
    name** is not a register at all: topics are a knowledge tree, added, retired and revived as
@@ -58,6 +59,9 @@ stamp := YYYY "-" MM "-" DD "T" HH "-" MM "-" SS "Z"    # UTC, colons replaced b
 **A job id** is a slug for the work, and nothing else: `add-retry-to-uploader`, not
 `2026-10-09-add-retry`. If the id is taken — in `doc/task/` or `doc/archive/` — choose another; you
 never reuse one, and you never append a number to sneak past the check.
+
+**A repository name** is the slug a brief's `repo` names and the directory `repos/<name>.git`
+materialises: `code`, `web`. It is declared once, at `doc/repo/<name>.yaml`, and never reused.
 
 **A worktree label** names an **area** of work, never the job occupying it: `uploader`, not
 `add-retry-worktree`. It is declared once, at `doc/worktree/<label>.yaml`, reused by every job that

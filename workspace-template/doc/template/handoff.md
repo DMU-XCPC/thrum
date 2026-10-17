@@ -1,5 +1,6 @@
 ---
 job: <job-id>
+repo: <name>                     # the repository its commits are in; must equal the brief's
 agent: <actor>                   # the actor that wrote this
 branch: job/<job-id>
 base: <commit id>
