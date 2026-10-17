@@ -168,3 +168,13 @@ func printJSON(cmd *cobra.Command, v any) error {
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
+
+// printJSONLine writes one compact value on one line, which is what a stream is.
+func printJSONLine(cmd *cobra.Command, v any) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	return err
+}

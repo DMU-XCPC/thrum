@@ -182,9 +182,15 @@ func (c *checker) reposDecl() {
 			continue
 		}
 		name := strings.TrimSuffix(e.Name(), ".git")
-		if _, ok := c.repos[name]; !ok {
-			c.add(filepath.Join(c.l.Repos(), e.Name()), "no declaration for this repository")
+		if _, ok := c.repos[name]; ok {
+			continue
 		}
+		// A retired repository keeps its declaration in the archive and its bytes
+		// here; that is not an undeclared repository.
+		if _, err := os.Stat(c.l.ArchivedRepo(name)); err == nil {
+			continue
+		}
+		c.add(filepath.Join(c.l.Repos(), e.Name()), "no declaration for this repository")
 	}
 }
 

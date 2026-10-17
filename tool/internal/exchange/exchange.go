@@ -5,11 +5,13 @@ package exchange
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
+	"github.com/multiagentworkspace/thrum/tool/internal/repos"
 )
 
 // Resolution is one name claimed twice, and how it was settled.
@@ -20,7 +22,8 @@ type Resolution struct {
 	LoserSide string `json:"loser_side"`
 }
 
-// Run exchanges both shared histories.
+// Run exchanges both shared histories, then fetches the code repositories. The code
+// is fetched, never pushed: publishing a branch is the project's business.
 func Run(l layout.Layout) ([]Resolution, error) {
 	var settled []Resolution
 	for _, h := range []struct{ name, dir string }{
@@ -32,6 +35,26 @@ func Run(l layout.Layout) ([]Resolution, error) {
 			return settled, fmt.Errorf("%s: %w", h.name, err)
 		}
 		settled = append(settled, got...)
+	}
+	decls, err := repos.List(l)
+	if err != nil {
+		return settled, err
+	}
+	for _, d := range decls {
+		dir := l.CodeRepo(d.Repo)
+		if _, err := os.Stat(dir); err != nil {
+			continue
+		}
+		remotes, err := gitx.Run(dir, "remote")
+		if err != nil {
+			return settled, err
+		}
+		if strings.TrimSpace(remotes) == "" {
+			continue
+		}
+		if err := gitx.OK(dir, "fetch", "--all", "--prune"); err != nil {
+			return settled, fmt.Errorf("the repository %s: %w", d.Repo, err)
+		}
 	}
 	return settled, nil
 }

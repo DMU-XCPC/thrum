@@ -64,7 +64,7 @@ func newMessageCmd() *cobra.Command {
 			}
 			if jsonFlag {
 				for _, m := range msgs {
-					if err := printJSON(cmd, m); err != nil {
+					if err := printJSONLine(cmd, m); err != nil {
 						return err
 					}
 				}

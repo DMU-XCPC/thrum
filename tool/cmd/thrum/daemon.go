@@ -84,7 +84,7 @@ func newEventsCmd() *cobra.Command {
 						continue
 					}
 					seen[m.ID] = true
-					if err := printJSON(cmd, map[string]any{
+					if err := printJSONLine(cmd, map[string]any{
 						"kind": "message.delivered", "message": m,
 					}); err != nil {
 						return err
