@@ -4,3 +4,6 @@
 
 # A harness is tested with its packages linked in place, and those are never committed.
 harness/*/node_modules/
+
+# The build writes .gocache/thrum; a copy under tool/ is a stray artifact.
+/tool/thrum
