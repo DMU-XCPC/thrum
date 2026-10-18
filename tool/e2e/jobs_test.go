@@ -3,6 +3,7 @@ package e2e
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -160,4 +161,69 @@ func TestBriefBody(t *testing.T) {
 		t.Fatalf("work did not use the brief body file:\n%s", out)
 	}
 	w.r().run("verify").ok(t, "verify")
+}
+
+// TestWorkUnderAnOwner: the design says a job with an owner is worked under that
+// owner, not claimed. The owner does not change.
+func TestWorkUnderAnOwner(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+	r.run("job", "open", "j1", "--repo", "code", "--label", "up", "--goal", "g", "--owner", "a1").ok(t, "open")
+	r.as("a2").run("work", "j1", "--repo", "code", "--label", "up2").ok(t, "work under the owner")
+	if show := r.run("job", "show", "j1").ok(t, "show"); !strings.Contains(show.stdout, "a1") {
+		t.Fatalf("working under the owner changed the owner: %s", show.stdout)
+	}
+}
+
+// TestHandoffSameSecond: two handoffs in one second still write two files. The
+// name carries the start, and a handoff is never rewritten.
+func TestHandoffSameSecond(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("job", "open", "j1", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "open")
+	r.run("job", "handoff", "j1", "--status", "partial", "--next", "one").ok(t, "first")
+	r.run("job", "handoff", "j1", "--status", "partial", "--next", "two").ok(t, "second")
+	paths, err := filepath.Glob(w.path("handoff", "j1", "*.md"))
+	if err != nil || len(paths) != 2 {
+		t.Fatalf("handoff files: %v %v", paths, err)
+	}
+	r.run("verify").ok(t, "verify")
+}
+
+// TestHandoffBase: the first handoff starts at the branch point, not at its own
+// head; base equals head only when nothing was committed.
+func TestHandoffBase(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("job", "open", "j1", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "open")
+	dir := strings.TrimSpace(strings.Split(r.run("work", "j1", "--repo", "code", "--label", "up").ok(t, "work").stdout, "\n")[0])
+	if err := os.WriteFile(filepath.Join(dir, "x.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "work")
+	r.run("job", "handoff", "j1", "--status", "partial", "--next", "x").ok(t, "handoff")
+	paths, err := filepath.Glob(w.path("handoff", "j1", "*.md"))
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("handoff files: %v %v", paths, err)
+	}
+	data, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := regexp.MustCompile(`(?m)^base: (.+)$`).FindStringSubmatch(string(data))
+	head := regexp.MustCompile(`(?m)^head: (.+)$`).FindStringSubmatch(string(data))
+	if base == nil || head == nil {
+		t.Fatalf("handoff has no base/head:\n%s", data)
+	}
+	if base[1] != head[1] {
+		return
+	}
+	// base == head is only right when nothing was committed; the open commits the
+	// branch from the default, so here they must differ.
+	t.Fatalf("first handoff base equals head: %s", base[1])
 }

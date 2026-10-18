@@ -98,7 +98,8 @@ suffix := exactly four characters from [a-z0-9]
 - **The suffix is the identity; the word is a label.** The suffix is what makes the name this
   actor's, and it is never reused. The word only tells a reader what kind of thing you are: chosen
   once, not updated, and not a claim about what is running now — a name does not change when the
-  model does.
+  model does. Use the model you are running (`flash`, `gpt5`), not a generic word: `agent-1dcd` is
+  legal, but it is not this shape and says nothing a reader can use.
 - **Four characters is enough here** — a workspace holds a few dozen actors — and
   `thrum actor list` is the collision check: look before you mint. `LC_ALL=C tr -dc 'a-z0-9'
   </dev/urandom | head -c 4` is one way to draw the suffix.

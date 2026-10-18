@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/multiagentworkspace/thrum/tool/internal/actors"
 	"github.com/multiagentworkspace/thrum/tool/internal/jobs"
 	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
 )
@@ -48,12 +51,17 @@ func newWorkCmd() *cobra.Command {
 				return nil
 			}
 
-			if b.Owner != "" && b.Owner != actorName() {
-				return fmt.Errorf("job %q is owned by %s; reassign it before working here", id, b.Owner)
-			}
 			if b.Owner == "" {
 				if err := jobs.Claim(l, id, actorName()); err != nil {
 					return err
+				}
+			} else if b.Owner != actorName() {
+				// The owner's authority lets a colleague work the job at the same
+				// site; a job owned at another site is worked there, not here.
+				if a, ok, err := actors.Find(l, b.Owner); err == nil && ok && a.Home != "" {
+					if here, err := os.ReadFile(l.SiteFile()); err == nil && strings.TrimSpace(string(here)) != a.Home {
+						return fmt.Errorf("job %q is owned by %s at %s; work it there", id, b.Owner, a.Home)
+					}
 				}
 			}
 			path, ok, err := jobs.Where(l, id)

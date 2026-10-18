@@ -166,15 +166,29 @@ func Handoff(l layout.Layout, o HandoffOptions, agent string, now time.Time) err
 		if t, err := format.ParseUTC(prev.Ended); err == nil {
 			started = t
 		}
-	} else if t, err := commitTime(gitdir, head); err == nil {
-		started = t
+		// The file name carries the start. A stretch beginning in the second the
+		// previous one began would reuse its name, and a handoff is never rewritten.
+		if t, err := format.ParseUTC(prev.Started); err == nil && !started.After(t) {
+			started = t.Add(time.Second)
+		}
+	} else {
+		if t, err := commitTime(gitdir, head); err == nil {
+			started = t
+		}
+		if point, err := mergeBase(gitdir, b.Branch); err == nil {
+			base = point
+		}
 	}
 
+	end := now
+	if end.Before(started) {
+		end = started
+	}
 	h := records.Handoff{
 		Job: o.Job, Repo: b.Repo, Agent: agent, Branch: b.Branch,
 		Base: base, Head: head, Status: o.Status,
 		Started: started.UTC().Format(format.RFC3339UTC),
-		Ended:   now.UTC().Format(format.RFC3339UTC),
+		Ended:   end.UTC().Format(format.RFC3339UTC),
 		Next:    o.Next, Worktrees: o.Worktrees, Supersedes: o.Supersedes,
 		BlockedBy: o.BlockedBy, Metrics: o.Metrics,
 	}
@@ -400,6 +414,14 @@ func used(l layout.Layout, jobID string) (bool, error) {
 	}
 	_, _, ok, err := readBriefAt(l.ArchivedBrief(jobID))
 	return ok, err
+}
+
+func mergeBase(gitdir, branch string) (string, error) {
+	out, err := gitx.Run("", "--git-dir", gitdir, "merge-base", "refs/heads/"+branch, "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
 }
 
 func revParse(gitdir, rev string) (string, error) {

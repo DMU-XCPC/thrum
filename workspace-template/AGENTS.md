@@ -15,8 +15,9 @@ A name is lowercase letters, digits and hyphens. If you were given one, that is 
 that fits everybody names nobody**: `agent-novaphy` names the project, and a harness's or a model's
 name is shared by every session running it. Your name has to pick **this actor** out of all of
 them; if none was given, look at `thrum actor list` first and give yours something only this actor
-has. An agent's is usually its model in one short word and four random characters — `flash-9c2e` —
-never the bare model, which every session running it would share; `names.md` has the shape.
+has. An agent's is **the model you are running, in one short word, then exactly four random
+characters** — `deepseek-flash` gives `flash-9c2e`; not the bare model (every session would share
+it), and not a generic `agent` (it says nothing). `names.md` has the shape.
 
 **A name is declared once, and then it exists.** If the name has never been declared, the first
 command that writes anything refuses and says to declare it. Do that once:

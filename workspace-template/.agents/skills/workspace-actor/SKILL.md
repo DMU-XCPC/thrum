@@ -83,8 +83,8 @@ export THRUM_ACTOR=flash-9c2e     # or --actor <name> on every command
 - **A name must be declared before it can write anything:**
   `thrum actor declare <name> --kind agent|human`, once. `thrum actor hello` then says where your
   mail is now. There is no session and nothing to end — `actors.md` has both. If nobody named you,
-  mint one in the shape `names.md` gives — the model in a short word and four random characters,
-  `flash-9c2e` — after `thrum actor list`.
+  mint one as **your model in one short word plus exactly four random characters** — `flash-9c2e` —
+  after `thrum actor list`; not the bare model and not a generic `agent-` prefix.
 - **If your harness can wake you, bind the name to this session.** One call to the harness's own
   tool records which session this actor is — the tool is in your harness's tool list, and the
   workspace does not name it — and it is the one startup step thrum cannot do for you, because only
