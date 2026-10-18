@@ -18,11 +18,16 @@ test('the nudge names the messages and their ids, and not their bodies', () => {
   assert.match(one, /m-1/)
   assert.match(one, /thrum message read <id>/)
 
-  const two = nudgeText([message('m-1'), message('m-2')])
+  const two = nudgeText([message('m-1'), message('m-2')], { actor: 'alice' })
   assert.match(two, /2 messages\./)
   assert.match(two, /m-2/)
   // The body is what a session log is a bad place for, and the mailbox is where it is.
   assert.ok(!two.includes('body'))
+  // A batch suggests context isolation; one message does not pay for a subagent.
+  assert.match(two, /read-only subagent triage/)
+  assert.match(two, /--actor alice/)
+  assert.match(two, /must not\s+reply, send, purge, or claim work/)
+  assert.doesNotMatch(one, /subagent/)
 })
 
 function harness({ resolved, flushed = true } = {}) {

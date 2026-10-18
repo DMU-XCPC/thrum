@@ -110,7 +110,7 @@ export function install(ctx, config, deps) {
     batch.flushing = true
     let ok = false
     try {
-      ok = await wake(batch.sessionId, fresh)
+      ok = await wake(batch.sessionId, fresh, batch.actor)
     } catch (error) {
       batch.flushing = false
       fail(k, error.message)

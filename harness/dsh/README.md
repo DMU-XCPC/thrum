@@ -73,6 +73,11 @@ routing, and `sessionController` refuses to resolve it for a follow-up; both too
 call at bind with that reason instead of promising a wake it cannot deliver. The actor must
 already be declared: the tool says hello, and hello refuses an undeclared name.
 
+For a batch (more than one message) the nudge also suggests a one-shot, read-only subagent
+triage: it reads with `--actor <name>`, returns only a digest, and must not reply, send, purge,
+or claim work. One message is read directly; the plugin never spawns the helper itself, and the
+main session keeps the decision and the reply.
+
 ## What it does when something goes wrong
 
 **Nothing here may lose a message, and nothing here may stop work.** The mailbox is the

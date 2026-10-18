@@ -78,6 +78,13 @@ every workspace.
 - **Without the tool** nothing about delivery changes: the mailbox is the truth, and
   `thrum message list` finds what arrived while nobody was listening. You are only slower to hear.
 
+If your harness can run a subagent and the mail is more than a quick read — a batch, a long
+thread, attachments — a one-shot, read-only triage subagent is a good way to keep this session's
+context clean. It reads with the same actor name (`--actor <name>`), returns a digest of each
+message's id, sender, subject, request, deadline, and whether a reply is needed, and does not
+reply, send, purge, or claim work. You remain the actor who decides and answers; the mailbox and
+the name do not move to the helper.
+
 ## When to send one
 
 - To ask a job's owner about their job, when the brief or the intent is unclear.

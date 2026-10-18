@@ -185,7 +185,9 @@ the original sender, so a relay can read what it carries.
 - **The plugin wakes an agent; thrum does not.** Waking is a fact about a harness — a session's
   turn, a terminal, a bell — and this design deliberately knows none of them. The fabric
   promises a live event stream and a message that arrives whole; the plugin decides what a wake
-  is.
+  is. A wake is the harness's; what the actor does with its mail is the actor's. A harness may
+  offer a helper session to read and triage, but delegation moves neither the mailbox nor the
+  name: the actor remains the one who decides and answers.
 
 **Binding is the agent's step, and the harness's tool.** A session that wants its mail as turns
 tells its harness which actor it is, once, at the start; the plugin records the binding and may say
