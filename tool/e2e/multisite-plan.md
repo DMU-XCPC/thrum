@@ -4,14 +4,14 @@ Status: proposal. The single-site suite (`tool/e2e`, 24 tests) and one Docker ha
 This plan is what has to be added to make the claims in `doc/thrum.md` true *under distance,
 concurrency and failure*, not just when everything is up.
 
-Executed 2026-10-17. The default suite (`tool/e2e`, 78 tests including Docker) covers every P0
+Executed 2026-10-17. The default suite (`tool/e2e`, 80 tests including Docker) covers every P0
 and P1 and the feasible P2s: 300 ms latency, a six-second soak, four sites and 200 events, 1,000
 events, 10 MB attachments, 100 connections, the daemon transport (`history.exchange`;
 the Docker test joins through the inviting daemon and stops the code hub after the join), and
 the partial graph: A—B—C histories and routed messages through B, the relay going away, the
 loop/hop refusals, a join and sync through the LAN hint, and a declared address changed as a
 line event; the daemon starts on demand and its command group is hidden; a site can leave and return
-without losing its copy. The
+without losing its copy; a brief can carry a full body, and attachments carry their metadata and are bounded per message. The
 full-scale P2s are long runs done by hand
 (there is no CI budget): 10,000 commits, a 24-hour soak, and packet loss. A 100 MB attachment is not promised (the transport is base64 in
 the JSON protocol; 10 MB is tested), and the transport is an external git remote in this

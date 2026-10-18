@@ -3,9 +3,11 @@ package messages
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -65,7 +67,12 @@ func Send(l layout.Layout, msg records.Message, body []byte, files map[string][]
 		sort.Strings(names)
 		msg.Attachments = nil
 		for _, name := range names {
-			msg.Attachments = append(msg.Attachments, records.Attachment{Name: name, Size: int64(len(files[name]))})
+			sum := sha256.Sum256(files[name])
+			msg.Attachments = append(msg.Attachments, records.Attachment{
+				Name: name, Size: int64(len(files[name])),
+				SHA256: hex.EncodeToString(sum[:]),
+				MIME:   http.DetectContentType(files[name]),
+			})
 		}
 	}
 

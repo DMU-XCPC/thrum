@@ -134,3 +134,30 @@ func TestWhereEnv(t *testing.T) {
 		}
 	}
 }
+
+// TestBriefBody: the brief's body can come from stdin or a file, for job open and
+// for work's open path.
+func TestBriefBody(t *testing.T) {
+	w := newWorkspace(t)
+	w.r().run("actor", "declare", "a1", "--kind", "agent").ok(t, "declare a1")
+	w.r().withStdin("## Goal\n\nfrom stdin\n\n## Scope\n\nnone\n\n## Acceptance criteria\n\ngreen\n",
+		"job", "open", "body-1", "--repo", "code", "--label", "body",
+		"--body", "-").ok(t, "open with stdin")
+	if out := w.file("doc/task/body-1/brief.md"); !strings.Contains(out, "from stdin") {
+		t.Fatalf("the brief body did not come from stdin:\n%s", out)
+	}
+	if out := w.r().run("job", "show", "body-1").ok(t, "show").stdout; !strings.Contains(out, "from stdin") {
+		t.Fatalf("job show does not print the body: %s", out)
+	}
+
+	brief := w.path("brief.md")
+	if err := os.WriteFile(brief, []byte("## Goal\n\nfrom a file\n\n## Scope\n\nnone\n\n## Acceptance criteria\n\ngreen\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.r().run("work", "body-2", "--repo", "code", "--label", "body2",
+		"--body", brief).ok(t, "work with a body file")
+	if out := w.file("doc/task/body-2/brief.md"); !strings.Contains(out, "from a file") {
+		t.Fatalf("work did not use the brief body file:\n%s", out)
+	}
+	w.r().run("verify").ok(t, "verify")
+}

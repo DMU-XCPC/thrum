@@ -35,7 +35,8 @@ it you lose only the nudge: `thrum message list` still has your mail. `.agents/s
 has the contract.
 
 **If nobody gave you a job id**, there are two lawful ways in: ask for one, or open the job
-yourself — `thrum work <new-id> --repo <name> --label <label> --goal '<what it is for>'`. Work that
+yourself — `thrum work <new-id> --repo <name> --label <label> --goal '<what it is for>'`
+(or `--body <file|->` for the brief's whole body, sections included). Work that
 begins as "read this and find out" is still a job: a stretch nobody can find is a stretch nobody
 can continue.
 

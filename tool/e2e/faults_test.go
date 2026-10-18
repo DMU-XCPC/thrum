@@ -77,7 +77,9 @@ func TestKilledDaemonLeavesNoPartialMessage(t *testing.T) {
 	ts.w1.r().run("daemon", "stop").ok(t, "stop site one")
 	d := startDaemon(t, ts.w1, p1)
 
-	big := make([]byte, 20<<20)
+	// Ten megabytes is the message bound; the kill has to land mid-transfer, and
+	// the resend has to be accepted.
+	big := make([]byte, 10<<20)
 	for i := range big {
 		big[i] = byte(i % 251)
 	}

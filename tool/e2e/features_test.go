@@ -511,3 +511,68 @@ func TestLargeAttachment(t *testing.T) {
 		t.Fatal("the attachment's bytes changed")
 	}
 }
+
+// TestAttachmentHardening: duplicate names, src:name, the 10 MB bound, metadata,
+// and --out refusing to overwrite without --force.
+func TestAttachmentHardening(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.as("a1").run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.as("a2").run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+
+	dir := t.TempDir()
+	one := filepath.Join(dir, "one.txt")
+	if err := os.WriteFile(one, []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	two := filepath.Join(sub, "one.txt")
+	if err := os.WriteFile(two, []byte("two\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r.as("a1").run("message", "send", "a2", "--subject", "dup",
+		"--attach", one, "--attach", two).fails(t, "duplicate names", "given twice")
+
+	id := strings.TrimSpace(r.as("a1").run("message", "send", "a2", "--subject", "named",
+		"--attach", one+":renamed.txt").ok(t, "send").stdout)
+	out := r.as("a2").run("message", "read", id).ok(t, "read").stdout
+	if !strings.Contains(out, "renamed.txt") {
+		t.Fatalf("the attachment was not renamed: %s", out)
+	}
+	if !strings.Contains(out, "text/plain") {
+		t.Fatalf("the MIME type is missing: %s", out)
+	}
+	list := r.as("a2").run("message", "list", "--json").ok(t, "list").stdout
+	for _, want := range []string{`"sha256"`, `"mime"`} {
+		if !strings.Contains(list, want) {
+			t.Fatalf("the metadata %s is missing: %s", want, list)
+		}
+	}
+
+	outDir := filepath.Join(dir, "out")
+	if err := os.MkdirAll(outDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r.as("a2").run("message", "read", id, "--out", outDir).ok(t, "first out")
+	r.as("a2").run("message", "read", id, "--out", outDir).fails(t, "existing out", "exists")
+	r.as("a2").run("message", "read", id, "--out", outDir, "--force").ok(t, "forced out")
+	if got, err := os.ReadFile(filepath.Join(outDir, "renamed.txt")); err != nil || string(got) != "one\n" {
+		t.Fatalf("the attachment bytes: %q, %v", got, err)
+	}
+
+	big := filepath.Join(dir, "big.bin")
+	f, err := os.Create(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(int64((10 << 20) + 1)); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	r.as("a1").run("message", "send", "a2", "--subject", "big",
+		"--attach", big).fails(t, "over the bound", "at most")
+}

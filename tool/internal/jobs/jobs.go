@@ -37,6 +37,7 @@ type OpenOptions struct {
 	DependsOn []string
 	Keep      bool
 	Ephemeral bool
+	BodyFile  string
 }
 
 // HandoffOptions is what writing a handoff needs.
@@ -87,6 +88,14 @@ func Open(l layout.Layout, o OpenOptions, now time.Time) (string, error) {
 		}
 	}
 
+	body := briefBody(o.Goal, o.Scope, o.Criteria)
+	if o.BodyFile != "" {
+		b, err := bodyFrom(o.BodyFile)
+		if err != nil {
+			return "", err
+		}
+		body = b
+	}
 	if _, err := worktrees.Declare(l, o.Label, o.Repo, o.Purpose, o.Ephemeral); err != nil {
 		return "", err
 	}
@@ -99,7 +108,7 @@ func Open(l layout.Layout, o OpenOptions, now time.Time) (string, error) {
 		Job: o.Job, Status: "active", Repo: o.Repo, Branch: "job/" + o.Job,
 		Owner: o.Owner, Touches: o.Touches, DependsOn: o.DependsOn, Keep: o.Keep,
 	}
-	if err := writeBrief(l, brief, briefBody(o.Goal, o.Scope, o.Criteria)); err != nil {
+	if err := writeBrief(l, brief, body); err != nil {
 		worktrees.Discard(l, o.Label, o.Repo, o.Job)
 		return "", err
 	}
@@ -349,6 +358,14 @@ func writeBriefAt(path string, b records.Brief, body []byte) error {
 		return err
 	}
 	return format.SaveDocument(path, front, body)
+}
+
+// bodyFrom reads a brief body from a file, or stdin for "-".
+func bodyFrom(file string) ([]byte, error) {
+	if file == "-" {
+		return io.ReadAll(os.Stdin)
+	}
+	return os.ReadFile(file)
 }
 
 func briefBody(goal, scope, criteria string) []byte {

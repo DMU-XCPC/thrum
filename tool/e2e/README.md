@@ -47,7 +47,10 @@ left commands refusing), the return, and the job-worktree refusal. `TestDaemonSt
 covers the daemon being an implementation detail: sync, hello, a message and a
 join start it, the help does not list it, and `site discover on|off` is the
 local toggle. `TestDaemonIdlesWhenAlone` covers the daemon stopping itself when
-no neighbour answers and the next command starting it again.
+no neighbour answers and the next command starting it again. `TestBriefBody`
+covers the brief's body from stdin and a file, and `TestAttachmentHardening`
+covers duplicate names, `src:name`, the ten-megabyte bound, the metadata and
+`--out` refusing to overwrite without `--force`.
 
 The daemon transport — `history.exchange`, `git.serve`, `thrum git-proxy` — is
 covered by `TestDaemonServesGit`, `TestSyncThroughTheDaemon` and the Docker

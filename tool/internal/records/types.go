@@ -110,8 +110,10 @@ type Places struct {
 
 // Attachment is one file carried beside a message.
 type Attachment struct {
-	Name string `yaml:"name" json:"name"`
-	Size int64  `yaml:"size" json:"size"`
+	Name   string `yaml:"name" json:"name"`
+	Size   int64  `yaml:"size" json:"size"`
+	SHA256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
+	MIME   string `yaml:"mime,omitempty" json:"mime,omitempty"`
 }
 
 // Message is temporary work state: not a record, and never committed.

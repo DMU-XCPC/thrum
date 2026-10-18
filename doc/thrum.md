@@ -348,8 +348,11 @@ A withdrawal deletes the publisher's tag and the remote's, and a peer never push
 not publish. A peer that already fetched the tag keeps its local copy — it still materialises —
 and the version number stays taken.
 
-An attachment travels base64 inside the JSON protocol. Ten megabytes is the tested bound; a
-hundred is not promised. `site invite` has no capacity in this version.
+A message carries its attachments as base64 inside the JSON protocol. The message's attachments
+total ten megabytes (the tested bound; a hundred is not promised), each with its name, size,
+sha256 and MIME. A duplicate name is refused rather than silently overwriting, and a larger
+payload belongs in the store (`asset`), not in a message. `site invite` has no capacity in this
+version.
 
 The daemon is internal: the CLI starts it on demand and restarts it on the next command after a
 crash or an address change; the user-facing commands never ask for it. It stops itself after

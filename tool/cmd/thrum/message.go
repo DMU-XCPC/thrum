@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,10 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/messages"
 	"github.com/multiagentworkspace/thrum/tool/internal/records"
 )
+
+// maxAttachmentBytes is the tested bound for one message's attachments. Larger
+// payloads belong in the store, where a tag names them durably.
+const maxAttachmentBytes = 10 << 20
 
 func newMessageCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "message", Short: "Send another actor a message, and read your own"}
@@ -36,12 +41,39 @@ func newMessageCmd() *cobra.Command {
 				return err
 			}
 			files := map[string][]byte{}
-			for _, p := range attach {
-				data, err := os.ReadFile(p)
+			var total int64
+			for _, spec := range attach {
+				src, name := spec, ""
+				if i := strings.LastIndexByte(spec, ':'); i >= 0 {
+					src, name = spec[:i], spec[i+1:]
+				}
+				st, err := os.Stat(src)
 				if err != nil {
 					return err
 				}
-				files[filepath.Base(p)] = data
+				if st.IsDir() {
+					return fmt.Errorf("%q is a directory; tar it first", src)
+				}
+				total += st.Size()
+				if total > maxAttachmentBytes {
+					return fmt.Errorf("the attachments total %d bytes; a message carries at most %d; put the larger ones in the store (`thrum asset ingest`, `thrum asset publish`)", total, maxAttachmentBytes)
+				}
+				data, err := os.ReadFile(src)
+				if err != nil {
+					return err
+				}
+				if name == "" {
+					name = filepath.Base(src)
+				} else {
+					name = filepath.Base(name)
+				}
+				if name == "" || name == "." || name == ".." || name == string(filepath.Separator) {
+					return fmt.Errorf("%q is not a file name", name)
+				}
+				if _, dup := files[name]; dup {
+					return fmt.Errorf("attachment %q is given twice; name one with <src>:<name>", name)
+				}
+				files[name] = data
 			}
 			id, err := sendMessage(workspaceRoot(), args[0], subject, body, files, job, replyTo, idFlag, wait)
 			if err != nil {
@@ -84,6 +116,7 @@ func newMessageCmd() *cobra.Command {
 	}
 
 	var outDir string
+	var force bool
 	read := &cobra.Command{
 		Use:   "read <id>",
 		Short: "Read one message, and take any files it carried",
@@ -106,10 +139,15 @@ func newMessageCmd() *cobra.Command {
 			for _, a := range msg.Attachments {
 				src := filepath.Join(messages.AttachmentDir(l, actorName(), msg.ID), a.Name)
 				if outDir == "" {
-					fmt.Fprintf(out, "\nattachment %s (%d bytes) at %s\n", a.Name, a.Size, src)
+					fmt.Fprintf(out, "\nattachment %s (%s, %d bytes) at %s\n", a.Name, mimeOf(a), a.Size, src)
 					continue
 				}
 				dst := filepath.Join(outDir, a.Name)
+				if !force {
+					if _, err := os.Stat(dst); err == nil {
+						return fmt.Errorf("%s exists; pass --force to overwrite", dst)
+					}
+				}
 				if err := copyFile(src, dst); err != nil {
 					return err
 				}
@@ -119,6 +157,7 @@ func newMessageCmd() *cobra.Command {
 		},
 	}
 	read.Flags().StringVar(&outDir, "out", "", "write the attachments into this directory")
+	read.Flags().BoolVar(&force, "force", false, "overwrite attachments that already exist in --out")
 
 	var replySubject, replyBody string
 	reply := &cobra.Command{
@@ -309,6 +348,13 @@ func readBody(file string) ([]byte, error) {
 	default:
 		return os.ReadFile(file)
 	}
+}
+
+func mimeOf(a records.Attachment) string {
+	if a.MIME != "" {
+		return a.MIME
+	}
+	return "application/octet-stream"
 }
 
 func copyFile(src, dst string) error {

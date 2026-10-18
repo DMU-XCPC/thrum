@@ -11,7 +11,7 @@ import (
 )
 
 func newWorkCmd() *cobra.Command {
-	var repo, label, purpose, goal, owner, touches, depends string
+	var repo, label, purpose, goal, owner, touches, depends, bodyFile string
 	var keep, ephemeral bool
 
 	cmd := &cobra.Command{
@@ -34,7 +34,7 @@ func newWorkCmd() *cobra.Command {
 				o := jobs.OpenOptions{
 					Job: id, Repo: repo, Label: label, Purpose: purpose, Goal: goal,
 					Owner: owner, Touches: splitList(touches), DependsOn: splitList(depends),
-					Keep: keep, Ephemeral: ephemeral,
+					Keep: keep, Ephemeral: ephemeral, BodyFile: bodyFile,
 				}
 				if o.Owner == "" {
 					o.Owner = actorName()
@@ -81,6 +81,7 @@ func newWorkCmd() *cobra.Command {
 	cmd.Flags().StringVar(&label, "label", "", "the area of work")
 	cmd.Flags().StringVar(&purpose, "purpose", "", "what the area is for")
 	cmd.Flags().StringVar(&goal, "goal", "", "what the job is for, when opening it")
+	cmd.Flags().StringVar(&bodyFile, "body", "", "the brief's body, from a file or - for stdin, when opening")
 	cmd.Flags().StringVar(&owner, "owner", "", "who the work is promised to")
 	cmd.Flags().StringVar(&touches, "touches", "", "paths the job expects to touch, comma-separated")
 	cmd.Flags().StringVar(&depends, "depends-on", "", "job ids that must be done first, comma-separated")

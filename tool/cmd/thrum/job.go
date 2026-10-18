@@ -15,6 +15,7 @@ func newJobCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "job", Short: "Open a job, write its handoff, close it"}
 
 	var repo, label, purpose, goal, scope, criteria, owner, touches, depends string
+	var briefBodyFile string
 	var keep, ephemeral bool
 
 	open := &cobra.Command{
@@ -29,7 +30,7 @@ func newJobCmd() *cobra.Command {
 				Job: args[0], Repo: repo, Label: label, Purpose: purpose,
 				Goal: goal, Scope: scope, Criteria: criteria, Owner: owner,
 				Touches: splitList(touches), DependsOn: splitList(depends),
-				Keep: keep, Ephemeral: ephemeral,
+				Keep: keep, Ephemeral: ephemeral, BodyFile: briefBodyFile,
 			}, time.Now())
 			if err != nil {
 				return err
@@ -44,6 +45,7 @@ func newJobCmd() *cobra.Command {
 	open.Flags().StringVar(&goal, "goal", "", "what the job is for")
 	open.Flags().StringVar(&scope, "scope", "", "what is out of scope")
 	open.Flags().StringVar(&criteria, "criteria", "", "how it will be judged")
+	open.Flags().StringVar(&briefBodyFile, "body", "", "the brief's body, from a file or - for stdin")
 	open.Flags().StringVar(&owner, "owner", "", "who the work is promised to")
 	open.Flags().StringVar(&touches, "touches", "", "paths the job expects to touch, comma-separated")
 	open.Flags().StringVar(&depends, "depends-on", "", "job ids that must be done first, comma-separated")
