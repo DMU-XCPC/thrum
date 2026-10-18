@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -130,6 +131,56 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 	invite.Flags().StringVar(&inviteAt, "at", "", "the host:port the new site will listen on; omit to find it on the LAN")
+
+	var announceAt string
+	var announceClear bool
+	announce := &cobra.Command{
+		Use:   "announce [--at <host:port>] [--clear]",
+		Short: "Declare this site's address in the roster",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := workspaceRoot()
+			self := readSiteName(l)
+			if self == "" {
+				return fmt.Errorf("this machine does not name its site")
+			}
+			if announceClear && announceAt != "" {
+				return fmt.Errorf("give --at <host:port> or --clear, not both")
+			}
+			if !announceClear && announceAt == "" {
+				return fmt.Errorf("give --at <host:port> or --clear")
+			}
+			if announceAt != "" {
+				host, port, err := net.SplitHostPort(announceAt)
+				if err != nil || host == "" || port == "" {
+					return fmt.Errorf("%q is not host:port", announceAt)
+				}
+			}
+			var s records.Site
+			ok, err := records.Read(l.Site(self), &s)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("site %q is not declared in the roster", self)
+			}
+			s.Reach = announceAt
+			if err := records.Write(l.Site(self), s); err != nil {
+				return err
+			}
+			message := fmt.Sprintf("site %s: address %s", self, announceAt)
+			if announceAt == "" {
+				message = fmt.Sprintf("site %s: address cleared", self)
+			}
+			if err := line.Commit(l.Root, []string{l.Site(self)}, message); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "announced %s at %s\n", self, orNone(announceAt))
+			return nil
+		},
+	}
+	announce.Flags().StringVar(&announceAt, "at", "", "the host:port this site is now reached at")
+	announce.Flags().BoolVar(&announceClear, "clear", false, "remove the declared address instead")
 
 	var at string
 	reach := &cobra.Command{
@@ -283,7 +334,7 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(reach, list, show, routes, doctor, invite, newSiteKeyCmd(), newSiteForgetCmd())
+	cmd.AddCommand(reach, list, show, routes, doctor, invite, announce, newSiteKeyCmd(), newSiteForgetCmd())
 	return cmd
 }
 

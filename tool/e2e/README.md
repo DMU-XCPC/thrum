@@ -40,6 +40,8 @@ The partial graph — A—B—C with no A—C edge — is covered by
 going away), `TestForwardLoopAndHopLimit` (the loop and hop refusals) and
 `TestDiscoveryJoinsAndFinds` (a join through the LAN query, the announced
 addresses, the local view beating a fresh hint, and the stale hint expiring).
+`TestSiteAnnounce` covers a committed address change, its line event, the peer
+learning it on sync, and the local view still winning.
 
 The daemon transport — `history.exchange`, `git.serve`, `thrum git-proxy` — is
 covered by `TestDaemonServesGit`, `TestSyncThroughTheDaemon` and the Docker

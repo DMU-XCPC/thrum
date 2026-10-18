@@ -41,8 +41,9 @@ site that is declared but unreachable is a site that is down, not a site that do
 **An address is a hint; only a declaration writes the roster.** This machine resolves a peer in
 this order: its own `var/config` (written by `site reach`, or by the join for the inviter), the
 roster's declared `reach`, and the last LAN announcement in `var/discovered/<site>.yaml`. The
-discovery writes only the last; `create --at`, `site invite --at` and a future `site announce`
-are what write the shared roster. A site with no declared address is still reachable when the
+discovery writes only the last; `create --at`, `site invite --at` and `site announce` are what
+write the shared roster. A declared address can change: `site announce` writes this site's own
+roster entry, or clears it, and commits it as one line event. A site with no declared address is still reachable when the
 LAN has found it.
 
 **The LAN hint is plain UDP multicast.** A daemon announces `{workspace, site, reach}` on a

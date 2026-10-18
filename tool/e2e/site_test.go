@@ -126,3 +126,40 @@ func TestCreateRecordsTheSitesAddress(t *testing.T) {
 		t.Fatalf("site show does not report the address: %s", show.stdout)
 	}
 }
+
+// TestSiteAnnounce: the declared address can change, as one line event, and a
+// peer's own local view still wins over it.
+func TestSiteAnnounce(t *testing.T) {
+	ts := setupTwoSites(t)
+	twoSiteDaemons(t, ts)
+	w1, w2 := ts.w1, ts.w2
+
+	w1.r().run("site", "announce", "--at", "127.0.0.1:9911").ok(t, "announce")
+	if show := w1.r().run("site", "show", "s1").ok(t, "show").stdout; !strings.Contains(show, "127.0.0.1:9911") {
+		t.Fatalf("announce did not take: %s", show)
+	}
+	if log := w1.git("log", "-1", "--format=%s"); !strings.Contains(log, "site s1: address 127.0.0.1:9911") {
+		t.Fatalf("the announcement is not a line event: %s", log)
+	}
+
+	w1.r().run("sync").ok(t, "w1 sync")
+	w2.r().run("sync").ok(t, "w2 sync")
+	if show := w2.r().run("site", "show", "s1").ok(t, "show").stdout; !strings.Contains(show, "127.0.0.1:9911") {
+		t.Fatalf("the peer did not learn the declared address: %s", show)
+	}
+	// The peer's own view is the real address, so its sync still reaches the site.
+	if out := w2.r().run("sync").ok(t, "w2 sync still works").stdout; !strings.Contains(out, "exchanged") {
+		t.Fatalf("the local view did not keep the peer reachable: %s", out)
+	}
+
+	w1.r().run("site", "announce", "--clear").ok(t, "clear")
+	w1.r().run("sync").ok(t, "w1 sync clear")
+	w2.r().run("sync").ok(t, "w2 sync clear")
+	if show := w2.r().run("site", "show", "s1").ok(t, "show").stdout; !strings.Contains(show, "reach  none") {
+		t.Fatalf("the declaration was not cleared: %s", show)
+	}
+
+	w1.r().run("site", "announce").fails(t, "announce nothing", "give")
+	w1.r().run("site", "announce", "--at", "nonsense").fails(t, "bad address", "host:port")
+	w1.r().run("site", "announce", "--at", "127.0.0.1:9911", "--clear").fails(t, "both", "not both")
+}

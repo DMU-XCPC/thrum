@@ -141,7 +141,7 @@ trust boundary. The site keys establish identity, not a defense against a hostil
 - `site show`/`site list` report, per site: the declared address, the local view, the
   discovered address and the next hop.
 - `site reach` remains the explicit local override. Changing the declared address durably
-  would be a line event (`site announce`), which can come after discovery works.
+  is a line event: `site announce` writes it, or clears it.
 
 ## 10. Failure modes
 
@@ -191,10 +191,11 @@ trust boundary. The site keys establish identity, not a defense against a hostil
 - **Discovery:** plain UDP multicast, unsigned; a hint that is cached and expires.
 - **The store:** offers the line's live asset tags.
 - **Routes:** a direct edge first, then the fewest hops; ties by the site name.
-- **Addresses:** the shared roster's `reach` is written only by an explicit declaration;
-  discovery, join and `site reach` write site-local files only.
+- **Addresses:** the shared roster's `reach` is written only by an explicit declaration —
+  `create --at`, `site invite --at`, `site announce`; discovery, join and `site reach` write
+  site-local files only.
 - **Joining:** direct or discovered to the inviter; no join through a third site in this
   design.
 - **The relay:** bounded to the caller's `--wait`; no durable queue.
-- **Later:** mDNS as a discovery front end; `site announce` for a committed address change;
-  a relayed join if an operator ever needs one.
+- **Later:** mDNS as an optional discovery front end; a relayed join if an operator ever needs
+  one. `site announce` for a committed address change is implemented.
