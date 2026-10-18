@@ -48,7 +48,7 @@ thrum message purge <id>
 - **Attachments stay small**: a message carries at most ten megabytes of exact bytes; the larger
   payload belongs in the store, and `messages.md` has the details.
 - **A wake is not thrum's.** The plugin reaches delivery through the extension interfaces
-  (`doc/extension.md`); an actor reads their mailbox. Nothing is woken by the fabric, and a missed
+  (the design's `doc/extension.md`); an actor reads their mailbox. Nothing is woken by the fabric, and a missed
   event is never a lost message.
 
 ## Moving a job to another site

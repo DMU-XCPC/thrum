@@ -25,18 +25,17 @@ turn to run".
 ```text
         thrum                            the plugin                      DSH
   ┌──────────────────┐            ┌────────────────────────┐     ┌──────────────────┐
-  │ thrum events     │            │  feed: reads the stream│     │ agent.followup() │
+  │ thrum messages   │            │  feed: reads the stream│     │ agent.followup() │
   │  --json (JSONL)  │──stream───▶│  registry: actor→session│────▶│ session/flush    │
   └──────────────────┘            └────────────────────────┘     └──────────────────┘
                                               ▲
                                     tool call: thrum_watch(actor)
 ```
 
-**The feed** is `thrum events --json`, one event per line. A `message.delivered` names the id and
-the subject, never the body, so the nudge says what arrived and `thrum message read` is where the
-body is. The stream is a hint — a missed event is never a lost message — so on start the plugin also
-reads `thrum message list` once, which is the only chance to see what arrived while nobody was
-watching.
+**The feed** is `thrum message list --watch --json`, one message per line, the backlog first. A
+message names the id, the sender and the subject, never the body, so the nudge says what arrived and
+`thrum message read` is where the body is. The stream is a hint — a missed event is never a lost
+message — and the backlog a starting stream prints is what arrived while nobody was watching.
 
 **The binding** is the hard half, and it is why there is a tool. A watcher's callback runs
 outside any agent's asynchronous chain (DSH's initiator scope covers only the driver's own
@@ -61,7 +60,7 @@ thrum_watch(actor, root?)  →  { watching, root, mailbox }
   session's own working directory, because the workspace root is where an actor starts.
 
 Calling it says hello for the actor (`thrum actor hello`), so the fabric knows where to push, and
-subscribes to `thrum events` for that name. Calling it twice rebinds, which is what a session that
+subscribes to `thrum message list --watch --json` for that name. Calling it twice rebinds, which is what a session that
 switched jobs wants.
 
 ## What it does when something goes wrong

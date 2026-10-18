@@ -71,7 +71,7 @@ call it once at the start of the stretch. The workspace does not name it and no 
 it: only the harness knows what it installed, and a tool named after one harness is not true of
 every workspace.
 
-- **The plugin** watches delivery (through the extension interfaces in `doc/extension.md` — an
+- **The plugin** watches delivery (through the extension interfaces in the design's `doc/extension.md` — an
   actor never needs them) and nudges the session. It is an optimization over delivery, never the
   delivery path.
 - **A human** runs `thrum message list`, or their shell does.
