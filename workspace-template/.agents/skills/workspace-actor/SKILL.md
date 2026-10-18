@@ -24,7 +24,12 @@ either disagrees with the brief about this job, the brief wins.
 **The files beside this one are these rules in detail**, one question each, and they are not
 optional reading when their question comes up: `actors.md`, `messages.md`, `names.md`,
 `placement.md`, `records.md`, `knowledge.md`, `assets.md`, `sites.md`. The loop below names the file
-at each step that reaches one.
+at each step that reaches one, and *What to read, and when* maps the rest.
+
+**Reading this file alone is not reading the skill.** This file is the loop and the shape of a
+stretch; every rule it names is stated in full in one of those files, and a summary is not the rule.
+**Read the file the step names, before you act on it** — a workspace expects the files a stretch
+touches to have been opened, and they are short, one question each.
 
 ## Seven things that explain the rest
 
@@ -167,8 +172,8 @@ thrum job open add-retry-to-uploader --repo code --label uploader \
   who does it. Leaving it out makes the job unowned, and therefore claimable by whoever takes it up.
 - **`--depends-on` is checked before work starts**, not after it fails.
 - **`--keep` protects this job's payload** from collection after it closes.
-- `--touches` and `--depends-on` are comma-separated. `--brief <file>` (or `-`) reads the body from
-  a file when the three flags are not enough.
+- `--touches` and `--depends-on` are comma-separated. `--body <file>` (or `-`) reads the whole body
+  from a file when the three flags are not enough; the three sections must still be in it.
 
 The brief's body belongs to whoever is working the job; the `owner` field is the owner's to change.
 
@@ -181,6 +186,10 @@ this actor's mail. Also: `thrum job show <job-id>` for one job, `thrum actor lis
 never repairs, so it is always safe to run when you are unsure whether the workspace is coherent.
 
 ## What to read, and when
+
+The table is an index, not a substitute: every row is a file to open when its moment comes, and a
+question the loop raises that the table does not list still belongs to one of the eight — read the
+one whose question it is.
 
 | When you are about to | Read |
 | --- | --- |
