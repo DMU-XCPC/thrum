@@ -119,4 +119,7 @@ is the same failure as work outside the root.
 
 `repos/`, `handoff/`, `var/`, `job/` and `worktree/` are ignored in `.gitignore` and
 `.git/info/exclude`. Never run a bare `git clean` at the workspace root: `-x` would delete `repos/`,
-the ledger and every history with them. `thrum clean` is the guarded version.
+the ledger and every history with them. `thrum clean` is the guarded version, and
+`thrum clean --payloads` collects the payloads the retention window has released.
+`thrum status` prints each payload's state (`in use`, `waiting`, `collectible`,
+`kept`, `orphan`).

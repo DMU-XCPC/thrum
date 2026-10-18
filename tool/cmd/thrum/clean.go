@@ -10,12 +10,13 @@ import (
 )
 
 func newCleanCmd() *cobra.Command {
-	return &cobra.Command{
+	var payloads bool
+	cmd := &cobra.Command{
 		Use:   "clean",
 		Short: "Remove what the shared histories do not track and do not ignore",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			removed, err := clean.Run(workspaceRoot())
+			removed, err := clean.Run(workspaceRoot(), payloads)
 			if err != nil {
 				return err
 			}
@@ -28,6 +29,9 @@ func newCleanCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&payloads, "payloads", false,
+		"also collect payloads past collect.window whose brief is done or abandoned and not keep")
+	return cmd
 }
 
 func newUpdateCmd() *cobra.Command {

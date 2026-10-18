@@ -48,7 +48,7 @@ func newStatusCmd() *cobra.Command {
 		Short: "The board, the working directories, and the repositories here",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := status.Build(workspaceRoot())
+			r, err := status.Build(workspaceRoot(), actorName())
 			if err != nil {
 				return err
 			}
@@ -68,6 +68,17 @@ func newStatusCmd() *cobra.Command {
 				}
 				fmt.Fprintf(out, "  %-16s %-8s %-12s %s\n", w.Label, w.Repo, state, w.Branch)
 			}
+			fmt.Fprintln(out, "\npayloads")
+			if len(r.Payloads) == 0 {
+				fmt.Fprintln(out, "  none")
+			}
+			for _, p := range r.Payloads {
+				at := ""
+				if p.CollectibleAt != "" {
+					at = "  collectible at " + p.CollectibleAt
+				}
+				fmt.Fprintf(out, "  %-24s %-12s %8d bytes%s\n", p.Job, p.State, p.Bytes, at)
+			}
 			fmt.Fprintln(out, "\nrepos")
 			for _, rp := range r.Repos {
 				state := "not here"
@@ -75,6 +86,13 @@ func newStatusCmd() *cobra.Command {
 					state = "here"
 				}
 				fmt.Fprintf(out, "  %-16s %s\n", rp.Name, state)
+			}
+			fmt.Fprintln(out, "\nmail")
+			if len(r.Mail) == 0 {
+				fmt.Fprintln(out, "  none")
+			}
+			for _, m := range r.Mail {
+				fmt.Fprintf(out, "  %-24s %-14s %s\n", m.ID, m.From, m.Subject)
 			}
 			return nil
 		},

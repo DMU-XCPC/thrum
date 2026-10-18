@@ -43,7 +43,10 @@ addresses, the local view beating a fresh hint, and the stale hint expiring).
 `TestSiteAnnounce` covers a committed address change, its line event, the peer
 learning it on sync, and the local view still winning. `TestSiteLeaveAndStay`
 covers a site leaving (the departure as a line event, the peer learning it, the
-left commands refusing), the return, and the job-worktree refusal. `TestDaemonStartsOnDemand`
+left commands refusing), the return, and the job-worktree refusal.
+`TestPayloadCollection`, `TestPayloadKeep`, `TestPayloadDefaultWindow` and
+`TestInvalidCollectWindow` cover the close's `tmp/cache/ckpt` collection, the
+`collect.window` retention, `keep`, the status states and `clean --payloads`. `TestDaemonStartsOnDemand`
 covers the daemon being an implementation detail: sync, hello, a message and a
 join start it, the help does not list it, and `site discover on|off` is the
 local toggle. `TestDaemonIdlesWhenAlone` covers the daemon stopping itself when

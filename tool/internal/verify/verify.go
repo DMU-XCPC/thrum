@@ -32,9 +32,10 @@ func (p Problem) String() string {
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type checker struct {
-	l     layout.Layout
-	ps    []Problem
-	repos map[string]records.Repo
+	l          layout.Layout
+	ps         []Problem
+	repos      map[string]records.Repo
+	valueOwner map[string]string
 }
 
 func (c *checker) add(path, msg string, args ...any) {
@@ -43,7 +44,7 @@ func (c *checker) add(path, msg string, args ...any) {
 
 // Verify runs every check and returns what failed.
 func Verify(l layout.Layout) []Problem {
-	c := &checker{l: l, repos: map[string]records.Repo{}}
+	c := &checker{l: l, repos: map[string]records.Repo{}, valueOwner: map[string]string{}}
 	c.tree()
 	c.sites()
 	c.actors()
@@ -406,6 +407,39 @@ func (c *checker) briefOf(job string) (records.Brief, bool) {
 	return b, ok
 }
 
+// values checks a convention's one values block: dotted keys, scalars, one
+// convention per key, and a collect.window thrum can parse.
+func (c *checker) values(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		c.add(path, "%v", err)
+		return
+	}
+	vals, ok, err := format.Values(string(data))
+	if err != nil {
+		c.add(path, "%v", err)
+		return
+	}
+	if !ok {
+		return
+	}
+	for k, v := range vals {
+		if !strings.Contains(k, ".") {
+			c.add(path, "value %q is not dotted", k)
+		}
+		if prev, ok := c.valueOwner[k]; ok {
+			c.add(path, "value %q is also declared by %s", k, prev)
+			continue
+		}
+		c.valueOwner[k] = path
+		if k == "collect.window" {
+			if _, err := format.ParseWindow(v); err != nil {
+				c.add(path, "%v", err)
+			}
+		}
+	}
+}
+
 func (c *checker) conventions() {
 	seen := map[int]string{}
 	entries, err := os.ReadDir(c.l.Conventions())
@@ -427,6 +461,7 @@ func (c *checker) conventions() {
 		}
 		seen[n] = e.Name()
 		c.oneTitle(path)
+		c.values(path)
 	}
 }
 
@@ -503,6 +538,7 @@ func (c *checker) manifests() {
 				c.add(path, "no ## Description section")
 			}
 			c.oneTitle(path)
+			c.values(path)
 		}
 	}
 }

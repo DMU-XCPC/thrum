@@ -18,6 +18,7 @@ import (
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 	"github.com/multiagentworkspace/thrum/tool/internal/line"
+	"github.com/multiagentworkspace/thrum/tool/internal/payload"
 	"github.com/multiagentworkspace/thrum/tool/internal/records"
 	"github.com/multiagentworkspace/thrum/tool/internal/repos"
 	"github.com/multiagentworkspace/thrum/tool/internal/worktrees"
@@ -252,6 +253,11 @@ func Close(l layout.Layout, jobID, status string, now time.Time) error {
 		}
 	}
 
+	// The scratch goes at the close; the rest follows the retention window. A brief
+	// with keep protects the whole payload.
+	if err := payload.AtClose(l, jobID, b.Keep); err != nil {
+		return err
+	}
 	b.Status = status
 	archived := l.ArchivedTaskDir(jobID)
 	if err := os.MkdirAll(filepath.Dir(archived), 0o755); err != nil {

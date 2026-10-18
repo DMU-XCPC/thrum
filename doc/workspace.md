@@ -275,6 +275,13 @@ A payload becomes collectible once its brief says `done` or `abandoned`, unless 
 it. The window is policy, so it is stated once where a tool can read it and everyone sees the
 same one, and a collected artifact is a *detectable* absence because the handoff kept its hash.
 
+The value lives in a convention's one `values` block: `collect.window`, as `14d`, `36h` or a Go
+duration. The default is 14 days. `thrum verify` checks the block (one per convention, dotted
+keys, scalar values, one convention per key, and a window it can parse); `thrum status` reports
+each payload as `in use`, `waiting` (with its collectible date), `collectible`, `kept` or
+`orphan`; and `thrum clean --payloads` collects the collectible ones. A `keep` brief is never
+collected, and a payload whose brief is still live is never touched.
+
 ## Where a thing goes
 
 Placement is a procedure, not a list, because a list is overtaken by the next kind of data.
