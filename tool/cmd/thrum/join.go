@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
+	"github.com/multiagentworkspace/thrum/tool/internal/discovery"
 	"github.com/multiagentworkspace/thrum/tool/internal/exchange"
 	"github.com/multiagentworkspace/thrum/tool/internal/join"
 )
@@ -22,6 +24,13 @@ func newJoinCmd() *cobra.Command {
 			token, err := join.Decode(args[0])
 			if err != nil {
 				return err
+			}
+			if token.Reach == "" {
+				reach, err := discovery.Query(token.Workspace, token.Peer, 3*time.Second)
+				if err != nil {
+					return fmt.Errorf("the inviter did not answer on the LAN: %w", err)
+				}
+				token.Reach = reach
 			}
 			root := dir
 			if root == "" {

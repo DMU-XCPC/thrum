@@ -1,10 +1,14 @@
 # Partial connectivity and local discovery
 
-Status: Phases 1–2 are implemented. Phase 1: the per-peer best-effort sync, the store's
-live-tag offer, the A—B—C history test. Phase 2: `site.routes`, the site-local route table
-(direct edge, then fewest hops, expiry), `msg.forward` with the seen-site set and the hop
-bound, routed placement, `site routes`, and the A—B—C message and relay-down tests. Phases 3–4
-remain.
+Status: Phases 1–3 are implemented and folded into `thrum.md` and `commands.md`. Phase 1: the
+per-peer best-effort sync, the store's live-tag offer, the A—B—C history test. Phase 2:
+`site.routes`, the site-local route table (direct edge, then fewest hops, expiry),
+`msg.forward` with the seen-site set and the hop bound, routed placement, `site routes`, and
+the A—B—C message and relay-down tests. Phase 3: plain UDP multicast announce and join query,
+`var/discovered` with an expiry, the local > declared > discovered precedence, the optional
+`--at` on `create` and `site invite`, the join through discovery, and the `site show`/`list`
+discovered address. Phase 4 remains: mDNS as an optional front end, `site announce` for a
+committed address change, and a relayed join only if an operator ever needs one.
 
 ## 1. Requirements
 

@@ -23,6 +23,7 @@ import (
 
 	"github.com/multiagentworkspace/thrum/tool/internal/actors"
 	"github.com/multiagentworkspace/thrum/tool/internal/assets"
+	"github.com/multiagentworkspace/thrum/tool/internal/discovery"
 	"github.com/multiagentworkspace/thrum/tool/internal/exchange"
 	"github.com/multiagentworkspace/thrum/tool/internal/format"
 	"github.com/multiagentworkspace/thrum/tool/internal/gitx"
@@ -63,27 +64,40 @@ type greeting struct {
 }
 
 type server struct {
-	l          layout.Layout
-	site       string
-	roster     map[string]records.Site
-	workspace  string
-	stop       chan struct{}
-	once       sync.Once
-	routes     map[string]route
-	routesMu   sync.RWMutex
-	routeEvery time.Duration
+	l             layout.Layout
+	site          string
+	roster        map[string]records.Site
+	workspace     string
+	stop          chan struct{}
+	once          sync.Once
+	routes        map[string]route
+	routesMu      sync.RWMutex
+	routeEvery    time.Duration
+	discoverEvery time.Duration
+	listen        string
 }
 
 // Run listens until it is stopped. The TCP listener serves peers; the unix socket
 // serves this machine's commands.
-func Run(l layout.Layout, listen string, routeEvery time.Duration) error {
+func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool, discoverEvery time.Duration) error {
 	s, err := newServer(l)
 	if err != nil {
 		return err
 	}
+	s.listen = listen
 	s.routeEvery = routeEvery
 	if s.routeEvery <= 0 {
 		s.routeEvery = 5 * time.Second
+	}
+	s.discoverEvery = discoverEvery
+	if s.discoverEvery <= 0 {
+		s.discoverEvery = 5 * time.Second
+	}
+	if discover {
+		if conn, err := discovery.Listen(); err == nil {
+			defer conn.Close()
+			go s.discoverLoop(conn)
+		}
 	}
 	if err := os.MkdirAll(l.Var(), 0o755); err != nil {
 		return err
@@ -871,10 +885,10 @@ func reachFor(l layout.Layout, site string, roster map[string]records.Site) stri
 			return cfg.Reach
 		}
 	}
-	if s, ok := roster[site]; ok {
+	if s, ok := roster[site]; ok && s.Reach != "" {
 		return s.Reach
 	}
-	return ""
+	return discoveredReach(l, site, discoveredFor)
 }
 
 func readLock(path string) (int, error) {

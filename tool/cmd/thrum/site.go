@@ -18,17 +18,35 @@ import (
 )
 
 type siteView struct {
-	Site    string `json:"site"`
-	Key     string `json:"key"`
-	Reach   string `json:"reach,omitempty"`
-	Local   string `json:"local_reach,omitempty"`
-	NextHop string `json:"next_hop,omitempty"`
-	Hops    int    `json:"hops,omitempty"`
+	Site       string `json:"site"`
+	Key        string `json:"key"`
+	Reach      string `json:"reach,omitempty"`
+	Local      string `json:"local_reach,omitempty"`
+	Discovered string `json:"discovered,omitempty"`
+	NextHop    string `json:"next_hop,omitempty"`
+	Hops       int    `json:"hops,omitempty"`
 }
 
 type routeView struct {
 	NextHop string `json:"next_hop" yaml:"next_hop"`
 	Hops    int    `json:"hops" yaml:"hops"`
+}
+
+// discoveredAddress is the last address a peer announced on the LAN. It is only a
+// hint; the roster's declared address and this machine's local view come first.
+func discoveredAddress(l layout.Layout, name string) string {
+	data, err := os.ReadFile(filepath.Join(l.Var(), "discovered", name+".yaml"))
+	if err != nil {
+		return ""
+	}
+	var d struct {
+		Reach string `yaml:"reach"`
+		Seen  string `yaml:"seen"`
+	}
+	if format.DecodeWhole(data, &d) != nil {
+		return ""
+	}
+	return d.Reach
 }
 
 // readRoutes reads the daemon's learned table; it is a hint, not state that syncs.
@@ -67,13 +85,10 @@ func newSiteCmd() *cobra.Command {
 			if _, err := os.Stat(l.Site(name)); err == nil {
 				return fmt.Errorf("site %q is already declared", name)
 			}
-			if inviteAt == "" {
-				return fmt.Errorf("--at is required: where the new site will listen")
-			}
+			// The new site's address is optional: omit it and the new machine is
+			// found on the LAN. So is the inviter's: the token carries it when it is
+			// declared, and the joiner asks the LAN when it is not.
 			reach := daemon.Reach(l, self)
-			if reach == "" {
-				return fmt.Errorf("this site declares no reach: set one with `thrum site reach %s --at <host:port>`", self)
-			}
 			var me records.Site
 			if _, err := records.Read(l.Site(self), &me); err != nil {
 				return err
@@ -114,7 +129,7 @@ func newSiteCmd() *cobra.Command {
 			return nil
 		},
 	}
-	invite.Flags().StringVar(&inviteAt, "at", "", "the host:port the new site will listen on")
+	invite.Flags().StringVar(&inviteAt, "at", "", "the host:port the new site will listen on; omit to find it on the LAN")
 
 	var at string
 	reach := &cobra.Command{
@@ -164,6 +179,9 @@ func newSiteCmd() *cobra.Command {
 					addr = v.Reach
 				}
 				if addr == "" {
+					addr = v.Discovered
+				}
+				if addr == "" {
 					addr = "no reach"
 				}
 				via := ""
@@ -190,15 +208,15 @@ func newSiteCmd() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("no site named %q", args[0])
 			}
-			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site)}
+			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site)}
 			if r, ok := readRoutes(l)[s.Site]; ok {
 				v.NextHop, v.Hops = r.NextHop, r.Hops
 			}
 			if jsonFlag {
 				return printJSON(cmd, v)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "site   %s\nkey    %s\nreach  %s\nlocal  %s\n",
-				v.Site, v.Key, orNone(v.Reach), orNone(v.Local))
+			fmt.Fprintf(cmd.OutOrStdout(), "site   %s\nkey    %s\nreach  %s\nlocal  %s\ndisc.  %s\n",
+				v.Site, v.Key, orNone(v.Reach), orNone(v.Local), orNone(v.Discovered))
 			if v.NextHop != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "next   %s (%d hop(s))\n", v.NextHop, v.Hops)
 			}
@@ -289,7 +307,7 @@ func siteViews(l layout.Layout) ([]siteView, error) {
 			return nil, err
 		}
 		if ok {
-			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site)}
+			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site)}
 			if r, ok := routes[s.Site]; ok {
 				v.NextHop, v.Hops = r.NextHop, r.Hops
 			}

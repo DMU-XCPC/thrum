@@ -53,7 +53,9 @@ func Decode(s string) (Token, error) {
 	if err := json.Unmarshal(raw, &t); err != nil {
 		return Token{}, fmt.Errorf("that is not an invitation token: %w", err)
 	}
-	if t.Site == "" || t.Peer == "" || t.Reach == "" || t.PeerKey == "" || t.Nonce == "" {
+	// The address may be absent: the joiner then asks the LAN. Identity, peer and
+	// nonce are not optional.
+	if t.Site == "" || t.Peer == "" || t.PeerKey == "" || t.Nonce == "" {
 		return Token{}, fmt.Errorf("the invitation is incomplete")
 	}
 	return t, nil
@@ -63,6 +65,9 @@ func Decode(s string) (Token, error) {
 // the line, the ledger and the store through the inviting site's daemon, registers
 // its key there, and leaves no repository with a thrum remote.
 func Join(root string, t Token) error {
+	if t.Reach == "" {
+		return fmt.Errorf("the invitation names no address and the LAN did not answer")
+	}
 	existed := false
 	if _, err := os.Stat(root); err == nil {
 		existed = true

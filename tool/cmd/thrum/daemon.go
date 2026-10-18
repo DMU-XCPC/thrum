@@ -16,16 +16,20 @@ func newDaemonCmd() *cobra.Command {
 
 	var listen string
 	var routeEvery time.Duration
+	var discover bool
+	var discoverEvery time.Duration
 	run := &cobra.Command{
 		Use:   "run",
 		Short: "Run this site's daemon in the foreground",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return daemon.Run(workspaceRoot(), listen, routeEvery)
+			return daemon.Run(workspaceRoot(), listen, routeEvery, discover, discoverEvery)
 		},
 	}
 	run.Flags().StringVar(&listen, "listen", "", "listen here instead of the site's declared reach")
 	run.Flags().DurationVar(&routeEvery, "route-interval", 5*time.Second, "how often to learn routes from the reachable peers")
+	run.Flags().BoolVar(&discover, "discover", true, "announce this site on the LAN and learn peers' addresses")
+	run.Flags().DurationVar(&discoverEvery, "discover-interval", 5*time.Second, "how often to announce on the LAN")
 
 	status := &cobra.Command{
 		Use:   "status",

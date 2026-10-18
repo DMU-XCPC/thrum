@@ -33,10 +33,23 @@ reach: build-01.internal:7700
 | --- | --- |
 | `site` | the name; unique in the workspace |
 | `key` | this site's public key. The daemon authenticates peers with it, and with nothing else |
-| `reach` | where the daemon listens. Omitted means this site accepts no peers |
+| `reach` | where the daemon can be reached, when the operator declares it. Omitted means no address is declared, not that the site is unreachable |
 
 The declaration travels by git, like every other durable fact, and needs no quorum to read. A
 site that is declared but unreachable is a site that is down, not a site that does not exist.
+
+**An address is a hint; only a declaration writes the roster.** This machine resolves a peer in
+this order: its own `var/config` (written by `site reach`, or by the join for the inviter), the
+roster's declared `reach`, and the last LAN announcement in `var/discovered/<site>.yaml`. The
+discovery writes only the last; `create --at`, `site invite --at` and a future `site announce`
+are what write the shared roster. A site with no declared address is still reachable when the
+LAN has found it.
+
+**The LAN hint is plain UDP multicast.** A daemon announces `{workspace, site, reach}` on a
+fixed group and port on an interval, and answers a join query for its own name. A peer keeps
+the last announcement, ignores one older than a few intervals, and never treats it as identity:
+the site key still authenticates every connection. The network is trusted, so the packet is not
+signed. Several daemons on one host hear each other through the loopback.
 
 **The daemon has its own port and its own protocol.** It listens on its own socket,
 authenticates a peer by the key the roster pins, and answers typed requests. It does not shell
@@ -251,11 +264,13 @@ it.
 
 ## Joining
 
-1. **Invite**, from a site already in the workspace: one event writing the new roster entry
-   (with the address the new site will listen on), and a one-time token that names the
-   workspace, the inviting site and its daemon address and public key.
-2. **Join**, on the new machine: prove the token to the inviting site's daemon, take the line,
-   the ledger and the store through that daemon, present a key, and register it in the roster
+1. **Invite**, from a site already in the workspace: one event writing the new roster entry,
+   and a one-time token that names the workspace, the inviting site, and, when they are known,
+   the inviting daemon's address and the new site's address. Either address may be omitted; the
+   LAN then supplies it.
+2. **Join**, on the new machine: if the token carries no address, ask the LAN for the inviting
+   site first; then prove the token to that daemon, take the line, the ledger and the store
+   through it, present a key, and register it in the roster
    as a second event. Starting a daemon is the machine's own init, not the join; the join
    writes this site's files (the invitation already recorded its address), and leaves no
    repository with a thrum remote.
@@ -291,6 +306,7 @@ that. `history.exchange` is local only: it is this machine asking its own daemon
 | --- | --- | --- |
 | a peer | messages to actors there, if no route leads another way; its direct history exchange | everything local, every other peer, and any route through a neighbour; its records reach the others through the remaining graph |
 | a relay | the routes through it, after the table expires | messages take another route or fail; the histories still gossip through the rest of the graph |
+| the LAN hint | finding a fresh address | the local view and the roster's declared address; a join then has to carry one |
 | the line's sequencer, if one is declared | recording durable events | reading, working, messages, and this site's own commits |
 | a daemon | messages, placement and `sync` at that site | its files, and the command line's local operations |
 
@@ -310,6 +326,10 @@ and the version number stays taken.
 
 An attachment travels base64 inside the JSON protocol. Ten megabytes is the tested bound; a
 hundred is not promised. `site invite` has no capacity in this version.
+
+A discovered address is a hint, not a promise: it expires after a few intervals and a stale one
+is ignored before a dial. The LAN packet is unsigned because the network is trusted; the site
+key, not the packet, decides who a peer is.
 
 A route is a hint. It is learned from neighbours and never committed; a stale route costs one
 failed send and a retry, never a wrong record. The sites and the network are trusted, so a

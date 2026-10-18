@@ -35,6 +35,12 @@ What it exercises over the network:
 `alpine/git` image has no `git-daemon`, and the test needs a transport, not an
 authentication scheme.
 
+The partial graph — A—B—C with no A—C edge — is covered by
+`TestPartialConnectivity` (histories and messages through the relay, and the relay
+going away), `TestForwardLoopAndHopLimit` (the loop and hop refusals) and
+`TestDiscoveryJoinsAndFinds` (a join through the LAN query, the announced
+addresses, the local view beating a fresh hint, and the stale hint expiring).
+
 The daemon transport — `history.exchange`, `git.serve`, `thrum git-proxy` — is
 covered by `TestDaemonServesGit`, `TestSyncThroughTheDaemon` and the Docker
 test, which joins through the inviting daemon and stops the code hub after the
