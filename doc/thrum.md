@@ -139,7 +139,7 @@ derived from it. It exists so that one actor can tell another something now.
 ```yaml
 # handed to the recipient's daemon
 id: 01J8ZB3WQ7K2
-from: agent-3f9c
+from: flash-9c2e
 to: dana
 sent: 2026-10-16T10:04:11Z
 subject: the retry branch is ready to look at

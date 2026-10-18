@@ -103,7 +103,7 @@ job: add-retry-to-uploader
 status: active                       # active | done | abandoned
 repo: code                           # the code repository this job works in
 branch: job/add-retry-to-uploader
-owner: agent-3f9c                    # optional; absent means nobody is accountable
+owner: flash-9c2e                    # optional; absent means nobody is accountable
 touches: ["src/upload/**"]           # optional, descriptive: what this job expects to touch
 depends_on: [fix-ci-timeouts]        # optional
 keep: false                          # optional: protect this job's payload from collection
@@ -133,7 +133,7 @@ deleted.
 ---
 job: add-retry-to-uploader
 repo: code
-agent: agent-3f9c
+agent: flash-9c2e
 branch: job/add-retry-to-uploader
 base: 4f2a1c9d8e3b7f01c2a4e6b8d0f2a4c6e8b0d2f4
 head: 9be77d05a1c3e5f7b9d1e3f5a7c9b1d3e5f7a9c1
@@ -310,7 +310,7 @@ stamp := YYYY "-" MM "-" DD "T" HH "-" MM "-" SS "Z"      # UTC, colons as hyphe
 | repository | `slug` | `code`, `web` |
 | branch | `job/` + job id | `job/add-retry-to-uploader` |
 | worktree label | `slug`, reused by design | `uploader` |
-| actor, site, topic, asset | `slug` | `agent-3f9c` |
+| actor, site, topic, asset | `slug` | `flash-9c2e` |
 | asset version | `YYYY-MM-DD`, then `-N` on the same day | `2026-10-09` |
 | handoff file | `stamp` + `.md` | `2026-10-09T02-10-00Z.md` |
 | convention file | two digits + `-` + `slug` + `.md` | `01-placement.md` |

@@ -23,6 +23,7 @@ registered: 2026-10-16T09:12:00Z
 
 ```sh
 thrum actor declare dana --kind human --about 'Works on the uploader'
+thrum actor declare flash-9c2e --kind agent    # an agent that names itself
 thrum actor hello                    # my mail is here now
 thrum actor list                     # every name that exists, and where each was last known
 thrum actor show dana

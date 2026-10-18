@@ -8,20 +8,21 @@ in this file is the authority for anything.
 job's `owner` — and one name holds for the whole of this stretch:
 
 ```sh
-export THRUM_ACTOR=agent-3f9c     # or --actor <name> on every command
+export THRUM_ACTOR=flash-9c2e     # or --actor <name> on every command
 ```
 
 A name is lowercase letters, digits and hyphens. If you were given one, that is your name. **A name
 that fits everybody names nobody**: `agent-novaphy` names the project, and a harness's or a model's
 name is shared by every session running it. Your name has to pick **this actor** out of all of
 them; if none was given, look at `thrum actor list` first and give yours something only this actor
-has.
+has. An agent's is usually its model in one short word and four random characters — `flash-9c2e` —
+never the bare model, which every session running it would share; `names.md` has the shape.
 
 **A name is declared once, and then it exists.** If the name has never been declared, the first
 command that writes anything refuses and says to declare it. Do that once:
 
 ```sh
-thrum actor declare agent-3f9c --kind agent    # or --kind human
+thrum actor declare flash-9c2e --kind agent    # or --kind human
 thrum actor hello                              # tell the fabric where your mail is
 ```
 

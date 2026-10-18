@@ -64,7 +64,7 @@ You are an actor, and the workspace records which actor did the work: a handoff'
 `owner`. Set your name before your first command:
 
 ```sh
-export THRUM_ACTOR=agent-3f9c     # or --actor <name> on every command
+export THRUM_ACTOR=flash-9c2e     # or --actor <name> on every command
 ```
 
 - A slug: lowercase letters, digits and hyphens, like every other name here.
@@ -73,11 +73,13 @@ export THRUM_ACTOR=agent-3f9c     # or --actor <name> on every command
   each one, with the same value.
 - Without `--actor` or `$THRUM_ACTOR`, thrum records `$USER`.
 - **It names this actor, and nothing that fits everybody.** A project's name, a task, an area of
-  work, a machine, the harness and the model are names any actor here could take, and records under
+  work, a machine, the bare harness and the bare model are names any actor here could take, and records under
   them read as one actor's — `names.md` has the rule and its reason.
 - **A name must be declared before it can write anything:**
   `thrum actor declare <name> --kind agent|human`, once. `thrum actor hello` then says where your
-  mail is now. There is no session and nothing to end — `actors.md` has both.
+  mail is now. There is no session and nothing to end — `actors.md` has both. If nobody named you,
+  mint one in the shape `names.md` gives — the model in a short word and four random characters,
+  `flash-9c2e` — after `thrum actor list`.
 - **If your harness can wake you, bind the name to this session.** One call to the harness's own
   tool records which session this actor is — the tool is in your harness's tool list, and the
   workspace does not name it — and it is the one startup step thrum cannot do for you, because only

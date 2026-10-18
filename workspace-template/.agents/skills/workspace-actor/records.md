@@ -39,7 +39,7 @@ status: active                   # active | done | abandoned; being blocked is d
 repo: code                       # the code repository this job works in
 branch: job/add-retry-to-uploader
 touches: ["src/upload/**", "tests/upload/**"]
-owner: agent-3f9c                # optional; absent means unowned
+owner: flash-9c2e                # optional; absent means unowned
 depends_on: [fix-ci-timeouts]    # optional
 keep: false                      # optional; true protects this job's payload
 ---
@@ -103,7 +103,7 @@ The file name is the **start** of the stretch in UTC, with `:` replaced by `-`
 ---
 job: add-retry-to-uploader
 repo: code
-agent: agent-3f9c
+agent: flash-9c2e
 branch: job/add-retry-to-uploader
 base: 4f2a1c9d8e3b7f01c2a4e6b8d0f2a4c6e8b0d2f4
 head: 9be77d05a1c3e5f7b9d1e3f5a7c9b1d3e5f7a9c1
