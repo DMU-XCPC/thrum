@@ -28,7 +28,7 @@ func newDaemonCmd() *cobra.Command {
 	}
 	run.Flags().StringVar(&listen, "listen", "", "listen here instead of the site's declared reach")
 	run.Flags().DurationVar(&routeEvery, "route-interval", 5*time.Second, "how often to learn routes from the reachable peers")
-	run.Flags().BoolVar(&discover, "discover", true, "announce this site on the LAN and learn peers' addresses")
+	run.Flags().BoolVar(&discover, "discover", false, "announce this site on the LAN and learn peers' addresses; off unless asked for")
 	run.Flags().DurationVar(&discoverEvery, "discover-interval", 5*time.Second, "how often to announce on the LAN")
 
 	status := &cobra.Command{

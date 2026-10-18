@@ -117,7 +117,7 @@ trust boundary. The site keys establish identity, not a defense against a hostil
 
 ## 8. LAN discovery
 
-- A daemon joins a fixed multicast group and port, and periodically announces
+- The discovery is off by default. A daemon with `--discover` joins a fixed multicast group and port, and periodically announces
   `{workspace, site, reach, version, sent}`. A peer accepts only its own workspace, ignores
   itself, and writes `var/discovered/<site>.yaml` with the address and the seen time. Entries
   expire after a few intervals.
@@ -188,7 +188,8 @@ trust boundary. The site keys establish identity, not a defense against a hostil
 
 - **Trust:** the network and the sites are trusted; the site keys are identity. A relay may
   read and forge; no end-to-end signature.
-- **Discovery:** plain UDP multicast, unsigned; a hint that is cached and expires.
+- **Discovery:** plain UDP multicast, unsigned, off by default; enabled per daemon with
+  `--discover`; a hint that is cached and expires.
 - **The store:** offers the line's live asset tags.
 - **Routes:** a direct edge first, then the fewest hops; ties by the site name.
 - **Addresses:** the shared roster's `reach` is written only by an explicit declaration —

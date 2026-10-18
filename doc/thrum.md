@@ -43,14 +43,16 @@ this order: its own `var/config` (written by `site reach`, or by the join for th
 roster's declared `reach`, and the last LAN announcement in `var/discovered/<site>.yaml`. The
 discovery writes only the last; `create --at`, `site invite --at` and `site announce` are what
 write the shared roster. A declared address can change: `site announce` writes this site's own
-roster entry, or clears it, and commits it as one line event. A site with no declared address is still reachable when the
-LAN has found it.
+roster entry, or clears it, and commits it as one line event. A site with no declared address is still reachable when discovery
+is on and the LAN has found it.
 
-**The LAN hint is plain UDP multicast.** A daemon announces `{workspace, site, reach}` on a
-fixed group and port on an interval, and answers a join query for its own name. A peer keeps
-the last announcement, ignores one older than a few intervals, and never treats it as identity:
-the site key still authenticates every connection. The network is trusted, so the packet is not
-signed. Several daemons on one host hear each other through the loopback.
+**The LAN hint is plain UDP multicast, off unless asked for.** With `--discover`, a daemon
+announces `{workspace, site, reach}` on a fixed group and port on an interval, and answers a
+join query for its own name. A peer keeps the last announcement, ignores one older than a few
+intervals, and never treats it as identity: the site key still authenticates every connection.
+The network is trusted, so the packet is not signed. Several daemons on one host hear each
+other through the loopback. Explicit addresses work without it; turn it on when the machines
+share a LAN and the operator wants them found automatically.
 
 **The daemon has its own port and its own protocol.** It listens on its own socket,
 authenticates a peer by the key the roster pins, and answers typed requests. It does not shell
@@ -267,8 +269,8 @@ it.
 
 1. **Invite**, from a site already in the workspace: one event writing the new roster entry,
    and a one-time token that names the workspace, the inviting site, and, when they are known,
-   the inviting daemon's address and the new site's address. Either address may be omitted; the
-   LAN then supplies it.
+   the inviting daemon's address and the new site's address. Either address may be omitted when the
+   daemons have the hint on; otherwise the token must carry the inviting daemon's address.
 2. **Join**, on the new machine: if the token carries no address, ask the LAN for the inviting
    site first; then prove the token to that daemon, take the line, the ledger and the store
    through it, present a key, and register it in the roster
