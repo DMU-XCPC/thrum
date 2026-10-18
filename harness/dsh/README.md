@@ -48,10 +48,11 @@ That call is the actor's initialization step. The workspace manual states the ob
 *Binding, waking, and reading* in `.agents/skills/workspace-actor/messages.md` — and the tool is
 the harness's: the session sees `thrum_watch` in its tool list, and the workspace does not name it.
 
-## The tool
+## The tools
 
 ```text
-thrum_watch(actor, root?)  →  { watching, root, mailbox }
+thrum_watch(actor, root?)    →  { watching, root, mailbox }
+thrum_unwatch(actor, root?)  →  { unwatched, root, actor }
 ```
 
 - `actor` — the name this session works as. Required, and explicit: the agent chose it, so
@@ -59,12 +60,16 @@ thrum_watch(actor, root?)  →  { watching, root, mailbox }
 - `root` — the workspace. Omitted, it is the plugin's configured root, and failing that the
   session's own working directory, because the workspace root is where an actor starts.
 
-Calling it says hello for the actor (`thrum actor hello`), so the fabric knows where to push, and
-subscribes to `thrum message list --watch --json` for that name. Calling it twice rebinds, which is what a session that
-switched jobs wants.
+Calling `thrum_watch` says hello for the actor (`thrum actor hello`), so the fabric knows where
+to push, and subscribes to `thrum message list --watch --json` for that name. Calling it twice
+rebinds, which is what a session that switched jobs wants.
+
+`thrum_unwatch` retires that binding and stops its watch. Only the bound session may retire it,
+and the mailbox is untouched: this ends the nudges, not the messages. A nudge already in the
+session's inbox is not recalled.
 
 The session must be an ordinary one. A subagent session's delivery belongs to DSH's subagent
-routing, and `sessionController` refuses to resolve it for a follow-up; the tool refuses the
+routing, and `sessionController` refuses to resolve it for a follow-up; both tools refuse the
 call at bind with that reason instead of promising a wake it cannot deliver. The actor must
 already be declared: the tool says hello, and hello refuses an undeclared name.
 
@@ -81,7 +86,10 @@ rather than a missing message.
   only pushed to the actor's last known site. An older `thrum` that exits 0 while printing
   `actor` help is reported as a hello that was not acknowledged, so the configured `thrum`
   must be the current CLI.
-- The bound session being gone, busy, or unwritable: log it. The message stays where it is.
+- The bound session being gone, busy, or unwritable: log it and retry the batch with a
+  backoff. The message stays where it is; an id is announced only after the session
+  acknowledged the flush. After the configured attempts a batch waits for new mail or the
+  next watch backlog rather than spinning.
 - A message that has already been announced is not announced again. The set of announced ids
   is kept next to the binding, capped, and pruned — a message id is unique forever, so the
   only cost of forgetting an old one is one repeated nudge.
@@ -94,13 +102,36 @@ One JSON file under the harness home (`$DSH_HOME`, else `~/.dsh`), holding the b
 the announced ids. **Not in the workspace**: the workspace is a shared thing whose `var/` is
 the tooling's, and a harness's bookkeeping has no business in it.
 
+## Configuring it
+
+The bundle carries a Config schema, so the Plugins page shows a **Configure** control on the
+`thrum-mailbox` row of the `thrum-mailbox-dsh` bundle. The page edits the profile override
+through the harness's settings form; every field is live (`volatile`), and a save applies
+through the normal Loader path.
+
+| Field | Default | What it changes |
+| --- | --- | --- |
+| `thrum` | `thrum` | the executable to run |
+| `root` | empty | the workspace when a session passes none; empty uses the session directory |
+| `dshHome` | empty | where bindings are kept; empty uses `$DSH_HOME`, then `~/.dsh` |
+| `sourceKind` | `thrum-mailbox` | the label on the nudge in the session log |
+| `coalesceMs` | `250` | how long messages are gathered into one nudge |
+| `helloTimeoutMs` | `10000` | how long `thrum actor hello` may take |
+| `wakeRetryMs` | `2000` | the first retry delay after a failed wake |
+| `maxWakeAttempts` | `5` | retries before a batch waits for new mail |
+
+The client half is registered through `package.json`'s `dsh.client` and exports `./client`;
+`plugins.row.config` is keyed `thrum-mailbox-dsh#thrum-mailbox`, which is how the Plugins page
+finds the row's form. A host that was started before the bundle grew its client half needs a
+restart (or an HMR rebuild) before the control appears.
+
 ## How the tool reaches the session
 
-The tool is part of the harness's surface. When this plugin is installed, the DSH session sees
-`thrum_watch` in its tool list, and the workspace does not name it: a tool named after one harness
-is not true of every workspace, and `doc/convention/` is the project's internal policy, not a
-registry of harness plugins. The workspace manual states the obligation — bind the name if your
-harness can wake you — and stops there; the harness supplies the answer.
+The tools are part of the harness's surface. When this plugin is installed, the DSH session sees
+`thrum_watch` and `thrum_unwatch` in its tool list, and the workspace does not name them: a tool
+named after one harness is not true of every workspace, and `doc/convention/` is the project's
+internal policy, not a registry of harness plugins. The workspace manual states the obligation —
+bind the name if your harness can wake you — and stops there; the harness supplies the answer.
 
 A project that runs DSH installs this plugin; another harness ships its own equivalent. Neither is
 a reason for the workspace format to change. `doc/extension.md` is the interface both sides use.

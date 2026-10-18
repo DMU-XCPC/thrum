@@ -54,6 +54,7 @@ function world() {
     spawned: [],
     agents: new Map(),
     registered: null,
+    tools: {},
     dispose: null,
     /** Make a session that can be woken, and remember what it was told. */
     session(sessionId, cwd = WS, header = {}) {
@@ -83,7 +84,8 @@ function world() {
     sessions: { async flush() { return true } },
     tools: {
       register(definition) {
-        w.registered = definition
+        w.tools[definition.name] = definition
+        if (definition.name === 'thrum_watch') w.registered = definition
         return () => {}
       },
     },
@@ -148,6 +150,66 @@ test('a hello that fails is logged and does not stop the watch', async () => {
   w.children[0].say({ id: 'm-1', from: 'bob', subject: 'local mail still wakes' })
   await settle()
   assert.equal(w.woken.length, 1, 'the mailbox is still the truth')
+})
+
+test('a failed wake is retried, and the message is announced only after it succeeds', async () => {
+  const w = mount({ wakeRetryMs: 20, maxWakeAttempts: 3, coalesceMs: 10 })
+  w.session('s-1')
+  await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
+
+  let flushes = 0
+  w.ctx.sessions.flush = async () => {
+    flushes += 1
+    return flushes > 1
+  }
+
+  w.children[0].say({ id: 'm-retry', from: 'bob', subject: 'retry me' })
+  await new Promise((resolve) => setTimeout(resolve, 250))
+
+  assert.ok(flushes >= 2, 'the wake should have been retried')
+  assert.equal(w.woken.length, 2, 'each attempt queues the nudge; the second succeeds')
+  assert.equal(Bindings.load(statePath(w.home)).announced(WS, 'alice', 'm-retry'), true)
+})
+
+test('a wake that keeps failing is logged and stays unannounced', async () => {
+  const w = mount({ wakeRetryMs: 10, maxWakeAttempts: 2, coalesceMs: 10 })
+  w.session('s-1')
+  await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
+
+  w.ctx.sessions.flush = async () => false
+  w.children[0].say({ id: 'm-stuck', from: 'bob', subject: 'stuck' })
+  await new Promise((resolve) => setTimeout(resolve, 200))
+
+  assert.match(w.logs.join('\n'), /could not wake .* after 2 attempts/)
+  assert.equal(Bindings.load(statePath(w.home)).announced(WS, 'alice', 'm-stuck'), false)
+})
+
+test('thrum_unwatch stops the watch and removes only this session\'s binding', async () => {
+  const w = mount()
+  w.session('s-1')
+  await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
+  let stopped = false
+  w.children[0].kill = () => { stopped = true }
+
+  const unwatch = w.tools.thrum_unwatch
+  assert.deepEqual(
+    await unwatch.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') }),
+    { unwatched: true, root: `${WS}`, actor: 'alice' },
+  )
+  assert.equal(stopped, true)
+  assert.equal(Bindings.load(statePath(w.home)).sessionFor(WS, 'alice'), undefined)
+
+  assert.deepEqual(
+    await unwatch.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') }),
+    { unwatched: false, root: `${WS}`, actor: 'alice' },
+  )
+
+  await w.registered.execute({ actor: 'bob' }, { agent: w.agents.get('s-1') })
+  w.session('s-2')
+  await assert.rejects(
+    () => unwatch.execute({ actor: 'bob' }, { agent: w.agents.get('s-2') }),
+    /bound to another session/,
+  )
 })
 
 test('a message wakes the session bound to that actor, naming the message', async () => {
@@ -269,6 +331,25 @@ test('a subagent session is refused before anything is bound or watched', async 
   assert.equal(w.hellos.length, 0)
   assert.equal(w.spawned.length, 0)
   assert.equal(Bindings.load(statePath(w.home)).sessionFor(WS, 'alice'), undefined)
+})
+
+test('unwatch retires a binding whose workspace is gone', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'thrum-mailbox-'))
+  const recorded = Bindings.load(statePath(home))
+  recorded.bind('/definitely/not/a/workspace', 'ghost', 's-3')
+  const w = mount({ dshHome: home })
+  w.session('s-3')
+
+  assert.deepEqual(
+    await w.tools.thrum_unwatch.execute({ actor: 'ghost', root: '/definitely/not/a/workspace' }, {
+      agent: w.agents.get('s-3'),
+    }),
+    { unwatched: true, root: '/definitely/not/a/workspace', actor: 'ghost' },
+  )
+  assert.equal(
+    Bindings.load(statePath(home)).sessionFor('/definitely/not/a/workspace', 'ghost'),
+    undefined,
+  )
 })
 
 test('unloading the plugin stops every watch', async () => {

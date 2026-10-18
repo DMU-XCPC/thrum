@@ -83,7 +83,9 @@ test('a real thrum says hello and wakes the bound session', { skip }, async () =
   install(ctx, { thrum, dshHome: stateHome }, { defineTool, createUserMessage, spawn })
 
   try {
-    const result = await registered[0].execute({ actor, root }, { agent })
+    const watch = registered.find((tool) => tool.name === 'thrum_watch')
+    assert.ok(watch, 'the watch tool should be registered')
+    const result = await watch.execute({ actor, root }, { agent })
     assert.deepEqual(result, { watching: actor, root, mailbox: `${root}/var/msg/${actor}` })
     assert.doesNotMatch(logs.join('\n'), /could not say hello/)
 

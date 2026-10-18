@@ -31,6 +31,9 @@ The tool binds a session the harness can wake. A child session whose delivery be
 harness's own subagent routing is not one: the harness owns that delivery, so the tool refuses
 it at bind rather than promising a wake it cannot deliver.
 
+A binding belongs to the session that made it, and that session may retire it; retiring a
+binding stops its watch and removes the binding, never a message.
+
 ## The wake
 
 The nudge names the messages and their ids; the body arrives through `message read`. DSH's
@@ -42,6 +45,8 @@ remembered, capped and pruned; a repeated nudge is the only cost of forgetting a
 - The stream can die; the plugin restarts it with a backoff and prints the backlog on start.
 - A failed `actor hello` is logged, not fatal: the mailbox is still the truth and the watch
   still starts. Until it succeeds, mail is only pushed to the actor's last known site.
+- A wake that cannot be resolved or flushed is retried with a backoff; its ids stay
+  unannounced, so the next attempt or the next backlog reports them again.
 - A missed event is never a lost message; the mailbox is the source.
 - The daemon stops itself when no neighbour answers and starts again on the next command; the
   stream's reconnect covers it.

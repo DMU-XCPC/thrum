@@ -34,8 +34,10 @@ test('the tool definition is one the real harness accepts', { skip }, () => {
       logger: { info: () => {} },
     }
     install(ctx, { dshHome: './home' }, { defineTool, createUserMessage: () => ({}), spawn: () => {} })
-    if (registered.length !== 1) throw new Error('the tool was not registered')
-    console.log(registered[0].name)
+    const watch = registered.find((tool) => tool.name === 'thrum_watch')
+    const unwatch = registered.find((tool) => tool.name === 'thrum_unwatch')
+    if (watch === undefined || unwatch === undefined) throw new Error('the tools were not registered')
+    console.log(watch.name)
   `
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: scratch,
