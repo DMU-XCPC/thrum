@@ -66,6 +66,10 @@ Body sections, in this order, all required, and `None.` is a legal answer to any
 
 Additional sections may follow. A plan, when one is needed, is one of them — never a separate file.
 
+The whole body can be written at the open with `job open --body <file|->` (or `work --body`), or
+generated from `--goal`, `--scope` and `--criteria`; the body is what `job show` prints and what
+`verify` reads the three sections from.
+
 ### Two states are not stored
 
 *Started or not* and *blocked or not* are derived, and `SKILL.md` says where from. The consequence

@@ -25,27 +25,28 @@ thrum actor declare agent-3f9c --kind agent    # or --kind human
 thrum actor hello                              # tell the fabric where your mail is
 ```
 
-`kind` changes what a reader expects and nothing about what you may do. `actor hello` is how mail
-finds you: it is an address, not a claim about working, and it does not expire.
+`kind` changes what a reader expects and nothing about what you may do. `thrum actor hello` is how
+mail finds you: it is an address, not a claim about working, and it does not expire.
 
-**If your harness can wake you, bind your name to this session once.** A plugin is what turns "a
-message arrived" into a new turn, and it has to be told which session is this actor. The tool is
-your harness's, and `doc/convention/` names it — call it once, at the start of the stretch. Without
-it you lose only the nudge: `thrum message list` still has your mail. `.agents/skills/workspace-actor/messages.md`
-has the contract.
+**If your harness can wake you, it will have given you a tool for it.** A thrum plugin, where the
+harness has one, exposes a tool that binds this session to your name and says hello — call it once,
+at the start of the stretch, if you see it in your tool list. The workspace deliberately does not
+name that tool and no file here lists it: a tool named after one harness is not true of every
+workspace, and only the harness knows what it installed. **Without it you lose only the nudge**:
+`thrum message list` still has your mail, and the mailbox is the truth either way.
 
 **If nobody gave you a job id**, there are two lawful ways in: ask for one, or open the job
-yourself — `thrum work <new-id> --repo <name> --label <label> --goal '<what it is for>'`
-(or `--body <file|->` for the brief's whole body, sections included). Work that
+yourself — `thrum work <new-id> --repo <name> --label <label> --goal '<what it is for>'`. Work that
 begins as "read this and find out" is still a job: a stretch nobody can find is a stretch nobody
 can continue.
 
 **Work you were given is a new job.** Opening it is the ordinary path, not the exception: `thrum
 work <new-id> --repo <name> --label <label> --goal '<what it is for>'` opens it, claims it and puts
-you in a working directory. **A job works in one repository**: `--repo` names it when the job is
-opened, the brief carries it afterwards, and `doc/repo/<name>.yaml` says which repositories exist.
-Continue an existing job only when you were pointed at it — or when it has no owner and you take it
-up — never because the board happens to hold something close to your task.
+you in a working directory; `--body <file|->` gives the brief its whole body instead of the three
+summary sections. **A job works in one repository**: `--repo` names it when the job is opened, the
+brief carries it afterwards, and `doc/repo/<name>.yaml` says which repositories exist. Continue an
+existing job only when you were pointed at it — or when it has no owner and you take it up — never
+because the board happens to hold something close to your task.
 
 **A human is an actor too.** Nothing here assumes a session, a plugin or a particular harness. A
 person at a keyboard sets the same name, declares it once, and follows the same loop.
@@ -53,7 +54,8 @@ person at a keyboard sets the same name, declares it once, and follows the same 
 **This file is the workspace's; the project's `AGENTS.md` inside the working directory is the
 project's** — versioned with the code, and read beside this one. They govern different things: this
 one says where work goes and how it is recorded, the project's says how the code is built and
-delivered.
+delivered. `doc/convention/` is the project's own internal policy, read in number order; it has
+nothing to do with how your harness wakes you.
 
 **thrum and this format are under development.** A refusal is still the design being enforced, so
 trust it first; but a command that fails unexpectedly, or a refusal that contradicts the records,
@@ -80,18 +82,28 @@ done in the wrong place is work the next actor will not find, and no command wil
 a commit you are comparing against: read it with whatever you have at hand. A working directory is
 made by thrum, under a declared label, and never by a `git worktree add` of your own.
 
+## The daemon is not your concern
+
+This site has a daemon — the endpoint other sites reach — and you never start, stop or watch it.
+`thrum sync`, a message and `thrum actor hello` start it when it is not running, and it stops
+itself when no neighbour answers for a few intervals. There is no service to manage and nothing to
+supervise. If the site is deliberately not serving, its operator runs `thrum site leave`; it comes
+back with `thrum site stay`. Neither is part of your loop.
+
 ## Where the answers are
 
 | What you need | Where it is |
 | --- | --- |
-| what the job is for, and how it will be judged | `doc/task/<job-id>/brief.md` |
+| what the job is for, and how it will be judged | `doc/task/<job-id>/brief.md` — the body's Goal, Scope and Acceptance criteria sections; `--body` writes them whole |
 | which repository the job works in | the brief's `repo`, declared at `doc/repo/<name>.yaml` |
 | where the last stretch stopped, and what to do first | the newest file in `handoff/<job-id>/`; its `next` is the baton |
 | where to work | `thrum where --job <job-id>` prints it; `thrum work <job-id>` gets you there |
 | everything about this job | `thrum job show <job-id>`, or `--json` for whatever asked |
-| this project's rules, in number order | `doc/convention/` — read them before working |
+| this project's internal rules, in number order | `doc/convention/` — read them before working |
 | the rule behind a question the loop raises | the files beside `SKILL.md`: `actors.md`, `messages.md`, `names.md`, `placement.md`, `records.md`, `knowledge.md`, `assets.md`, `sites.md` |
+| my mail, and any files it carried | `thrum message list`, `thrum message read <id> [--out <dir>]` |
 | what is true right now | `thrum status`, `thrum job show <job-id>`, `thrum message list` |
+| another site, and reaching it | `thrum sync`; the `sites.md` skill file |
 
 `doc/` is **the line** and `handoff/` is **the ledger**: two shared histories, both versioned, and
 the only places a durable record can live. The rest of the workspace is runtime, and is disposable.

@@ -1,9 +1,10 @@
 # Sites: the fabric, messages, and moving a job
 
 What changes once there is a second machine? A workspace is one project's shared thing; a **site** is
-one machine's copy of it. Each site runs a daemon, and the daemons together are the fabric: they
-place names, carry messages, and keep the shared histories converging. Most work never notices, and
-this file is what to read when it does.
+one machine's copy of it. A site has a daemon — the endpoint other sites reach — and the daemons
+together are the fabric: they place names, carry messages, and keep the shared histories
+converging. The CLI starts that daemon when a command needs it, so it is never a process you run.
+Most work never notices, and this file is what to read when it does.
 
 ## The shared histories converge, and a merge is never a conflict
 
@@ -23,7 +24,8 @@ rewritten.
   people editing one document at once is a merge a person resolves. It is rare, it is visible, and no
   mechanism would be better than saying so.
 - **Fetch and publish when another site depends on it**, not on every keystroke. `thrum sync` does
-  it: fetch the peers, merge, publish. Nothing requires a fetch in order to start work.
+  it: fetch the reachable peers, merge, publish, and leave an unreachable peer for the next round.
+  Nothing requires a fetch in order to start work.
 
 ## Messages
 
@@ -32,20 +34,22 @@ state**: not a record, never committed, and it does not travel by git. `messages
 it; what a site adds is where the message actually is.
 
 ```sh
-thrum message send dana --subject '…' --body '…' [--attach <file>]
-thrum message list [--watch]
-thrum message read <id>
+thrum message send dana --subject '…' --body '…' [--attach <src[:name]>]
+thrum message list
+thrum message read <id> [--out <dir>] [--force]
 thrum message reply <id> --body '…'
 thrum message purge <id>
-thrum events [--json]
 ```
 
 - **The site pushes, and the sender keeps nothing.** The fabric places `to` — the site that last took
-  mail for the actor, or its `home` — and hands the message over. If the name is not declared, or
-  that site cannot be reached, the send fails and says which.
+  mail for the actor, or its `home` — and hands the message over, directly or through a relay. If
+  the name is not declared, or no route reaches the site, the send fails and says which.
 - **The receiving site holds it** until it is read or purged, across a daemon restart.
-- **A wake is not thrum's.** `thrum events` is a stream a plugin may subscribe to; a human reads
-  their mailbox. Nothing is woken by the fabric, and a missed event is never a lost message.
+- **Attachments stay small**: a message carries at most ten megabytes of exact bytes; the larger
+  payload belongs in the store, and `messages.md` has the details.
+- **A wake is not thrum's.** The plugin reaches delivery through the extension interfaces
+  (`doc/extension.md`); an actor reads their mailbox. Nothing is woken by the fabric, and a missed
+  event is never a lost message.
 
 ## Moving a job to another site
 
@@ -118,31 +122,58 @@ read the same on every site; there is nothing for a bundle to carry.
 Adding a machine is two commands and one token.
 
 1. **Invite**, from a site already in the workspace: `thrum site invite` writes the new roster entry
-   at `doc/site/<name>.yaml` and prints a token that names the workspace and the inviting site. It
-   expires, and it is the only secret that has to move by hand.
+   at `doc/site/<name>.yaml` and prints a token that names the workspace, the inviting site, and,
+   when they are known, the address of each. It expires, and it is the only secret that has to move
+   by hand.
 2. **Join**, on the new machine: `thrum join <token>` proves the token, presents a key, takes the
-   roster and every declared repository, starts this site's daemon, and registers the key in the
-   roster.
-3. **Introduce**: the inviting site tells the peers it can reach that the new site exists and where
-   it listens. A peer accepts an introduction only for a site the roster already declares.
+   roster and every declared repository, and registers the key. It starts no process; the next
+   command starts the endpoint. If the token carries no address, the machine asks the LAN first —
+   which needs `thrum site discover on` at the inviting site.
+3. **The roster is the introduction.** The new entry travels in the line, and the peers see it on
+   their next sync; there is no separate announcement to accept.
 
 A site the roster does not declare is refused rather than half-joined, and joining begins no history:
 a second first commit would be a second workspace with its own idea of which names are taken.
 
-**The daemon is what makes a site reachable.** It listens on its own port with its own protocol, and
-authenticates a peer by the key the roster pins. Reach normally writes itself at join;
-`thrum site reach <name> --at <host:port>` is the override, and it is site-local, never committed.
-`thrum site doctor` reports, per peer, whether it is declared, addressed, keyed, answering, and
-speaking a version this site understands.
+## The daemon, and addresses
+
+The daemon is internal. The CLI starts it on demand at the site's address, or the fixed default port
+7700, and it stops itself after six route intervals with no reachable neighbour. There is no
+`daemon run` in your loop, no service to manage and nothing to watch. `thrum site doctor` reports,
+per peer, whether it is declared, addressed, keyed and answering; `thrum site routes` prints the
+learned route table.
+
+**An address is a hint.** This machine resolves a peer in this order: its own `var/config` (written
+by `site reach`, or by the join for the inviter), the roster's declared `reach`, and the last LAN
+announcement under `var/discovered`. The discovery is opt-in (`thrum site discover on`), emits
+nothing until asked, and never writes the roster. Only an explicit declaration writes the roster:
+`create --at`, `site invite --at`, and `thrum site announce`. A site with no declared address is
+still reachable when discovery is on and the LAN has found it.
+
+`thrum site reach <name> --at <host:port>` is the local override; `thrum site announce --at
+<host:port>` is the shared declaration, and it restarts this site's endpoint on the next command.
+**The same machine in two workspaces runs two daemons** — give them different addresses, because the
+default port 7700 is per machine.
 
 A site that accepts no peers is still a site: everything that needs only its own machine works, and
 `thrum verify`, `thrum job` and `thrum message list` are unaffected. What stops is reaching another
 machine.
 
+**Leaving and returning.** `thrum site leave` clears this site's declared address, commits the
+departure, writes a site-local left flag and stops the endpoint. The line, ledger, store, mail and
+code stay; the peers stop dialling on the next sync. `thrum site stay [--at <host:port>]` reverses
+it. A job's worktree blocks the leave — hand it off first.
+
 ## When something is down
 
-- **A peer is unreachable** — messages to actors there, and merging with it, stop. Everything local,
-  and every other peer, continues.
+- **A peer is unreachable** — messages to actors there, and merging with it directly, stop.
+  Everything local, every other peer, and every route through a neighbour continues. Nothing is
+  queued.
+- **A relay is down** — the routes through it expire; messages take another route or fail.
+- **A site has left** — it is not down: it said it is not serving. The peers skip it (or keep their
+  own local view), and `site stay` returns it.
+- **The daemon stops** — it is internal; the next command starts it again. Mail and records are
+  files, so nothing durable is lost.
 - **A claim cannot be established** — refused, never assumed. An unreachable site is not a site that
   said no.
 - **A message cannot be placed** — the send fails and says so. Nothing is queued on the sending side,

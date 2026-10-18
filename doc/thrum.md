@@ -189,9 +189,10 @@ the original sender, so a relay can read what it carries.
 
 **Binding is the agent's step, and the harness's tool.** A session that wants its mail as turns
 tells its harness which actor it is, once, at the start; the plugin records the binding and may say
-hello on the actor's behalf. thrum does not know how that call is spelled — the workspace manual
-states the obligation, and the project's convention names the tool — but it knows the result: a
-session bound to a name, and an event stream that reaches it.
+hello on the actor's behalf. thrum does not know how that call is spelled — the harness's tool list
+is where the session finds it, and the workspace does not name it, because a tool named after one
+harness is not true of every workspace — but it knows the result: a session bound to a name, and an
+event stream that reaches it. `doc/extension.md` is the plugin author's side of this.
 
 ## The shared histories
 

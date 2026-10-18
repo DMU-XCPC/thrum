@@ -79,10 +79,11 @@ export THRUM_ACTOR=agent-3f9c     # or --actor <name> on every command
   `thrum actor declare <name> --kind agent|human`, once. `thrum actor hello` then says where your
   mail is now. There is no session and nothing to end — `actors.md` has both.
 - **If your harness can wake you, bind the name to this session.** One call to the harness's own
-  tool — the project's convention names it — records which session this actor is, and it is the one
-  startup step thrum cannot do for you, because only the harness knows. Without it, delivery is
-  unchanged: `thrum message list` still has your mail, and you are only slower to hear.
-  `messages.md` has the contract.
+  tool records which session this actor is — the tool is in your harness's tool list, and the
+  workspace does not name it — and it is the one startup step thrum cannot do for you, because only
+  the harness knows. Without it, delivery is unchanged: `thrum message list` still has your mail,
+  and you are only slower to hear. `messages.md` has the contract; `doc/extension.md` is the
+  plugin author's side.
 
 ## What you may touch
 

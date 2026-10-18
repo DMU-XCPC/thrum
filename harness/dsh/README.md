@@ -46,8 +46,8 @@ one. So the session says who it is: the agent calls `thrum_watch(actor)` once, a
 plugin records `<root, actor> → sessionId` and runs `thrum actor hello` for it.
 
 That call is the actor's initialization step. The workspace manual states the obligation —
-*Binding, waking, and reading* in `.agents/skills/workspace-actor/messages.md` — and the
-project's convention names the tool; see *What a project has to add*, below.
+*Binding, waking, and reading* in `.agents/skills/workspace-actor/messages.md` — and the tool is
+the harness's: the session sees `thrum_watch` in its tool list, and the workspace does not name it.
 
 ## The tool
 
@@ -85,27 +85,16 @@ One JSON file under the harness home (`$DSH_HOME`, else `~/.dsh`), holding the b
 the announced ids. **Not in the workspace**: the workspace is a shared thing whose `var/` is
 the tooling's, and a harness's bookkeeping has no business in it.
 
-## What a project has to add: one convention
+## How the tool reaches the session
 
-The plugin cannot be useful if nobody calls the tool. The workspace manual states the obligation —
-bind your name to this session if your harness can wake you — but it deliberately does **not** name
-the tool: the skeleton states what is true of every workspace, and a tool named after one
-harness's plugin is not that. What the manual cannot say, the project can.
+The tool is part of the harness's surface. When this plugin is installed, the DSH session sees
+`thrum_watch` in its tool list, and the workspace does not name it: a tool named after one harness
+is not true of every workspace, and `doc/convention/` is the project's internal policy, not a
+registry of harness plugins. The workspace manual states the obligation — bind the name if your
+harness can wake you — and stops there; the harness supplies the answer.
 
-It belongs where a project's own agent policy already goes — a convention, which is
-versioned, travels with the records, and is read in number order before work starts:
-
-```markdown
-# 01-waking-on-messages
-
-Call `thrum_watch` with your actor name once at the start of a stretch, before you begin
-work. It binds this session to the name and says hello for you; messages then arrive as
-ordinary turns instead of waiting for you to look. A session that skips it is not wrong — it
-will find its mail the next time it checks — it is only slower to hear.
-```
-
-A project without DSH writes the equivalent for whatever it runs, which is the point: this
-plugin is one deployment's answer, not the format's.
+A project that runs DSH installs this plugin; another harness ships its own equivalent. Neither is
+a reason for the workspace format to change. `doc/extension.md` is the interface both sides use.
 
 ## Installing it
 
