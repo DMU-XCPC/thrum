@@ -91,29 +91,40 @@ func newMessageCmd() *cobra.Command {
 	send.Flags().StringVar(&idFlag, "id", "", "reuse an id to make a retry idempotent")
 	send.Flags().DurationVar(&wait, "wait", 0, "retry for up to this long while the site is unreachable")
 
+	var watch bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "This actor's mailbox, oldest first",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			msgs, err := messages.List(workspaceRoot(), actorName())
-			if err != nil {
-				return err
-			}
-			if jsonFlag {
-				for _, m := range msgs {
-					if err := printJSONLine(cmd, m); err != nil {
-						return err
-					}
+			l := workspaceRoot()
+			seen := map[string]bool{}
+			for {
+				msgs, err := messages.List(l, actorName())
+				if err != nil {
+					return err
 				}
-				return nil
+				for _, m := range msgs {
+					if seen[m.ID] {
+						continue
+					}
+					seen[m.ID] = true
+					if jsonFlag {
+						if err := printJSONLine(cmd, m); err != nil {
+							return err
+						}
+						continue
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "%-24s %-14s %-20s %s\n", m.ID, m.From, m.Sent, m.Subject)
+				}
+				if !watch {
+					return nil
+				}
+				time.Sleep(500 * time.Millisecond)
 			}
-			for _, m := range msgs {
-				fmt.Fprintf(cmd.OutOrStdout(), "%-24s %-14s %-20s %s\n", m.ID, m.From, m.Sent, m.Subject)
-			}
-			return nil
 		},
 	}
+	list.Flags().BoolVar(&watch, "watch", false, "keep reporting arrivals; the backlog is printed first")
 
 	var outDir string
 	var force bool

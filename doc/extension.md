@@ -43,12 +43,12 @@ remembered, capped and pruned; a repeated nudge is the only cost of forgetting a
   `var/`.
 - The plugin never inserts a message and never purges one.
 
-## Where the current CLI differs
+## What the current CLI provides
 
-`thrum events` and `message list --watch` are the intended interface; the current CLI exposes the
-event stream only as the hidden `daemon events`, and `message list` has no `--watch` flag. The DSH
-plugin is written against the intended interface; the CLI will follow. Until then
-`message list --json` is the fallback.
+`thrum events [--json]` is the local event stream, and `thrum message list --watch [--json]`
+prints the mailbox's backlog and then each arrival, one JSON object per line. The first event kind
+is `message.delivered`; the job-state and history-moved kinds the design names are not emitted yet,
+and no plugin depends on them.
 
 ## The DSH companion
 

@@ -179,7 +179,7 @@ func TestMessages(t *testing.T) {
 	r.as("a1").run("message", "send", "ghost", "--subject", "x").fails(t, "send to nobody", "no actor named")
 	r.as("ghost").run("message", "send", "a2", "--subject", "x").fails(t, "send from nobody", "not declared")
 
-	events := r.as("a2").run("events").ok(t, "events")
+	events := r.as("a2").run("events", "--json").ok(t, "events")
 	evs := jsonLines[struct {
 		Kind    string `json:"kind"`
 		Message struct {
