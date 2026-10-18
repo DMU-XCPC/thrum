@@ -334,7 +334,9 @@ An attachment travels base64 inside the JSON protocol. Ten megabytes is the test
 hundred is not promised. `site invite` has no capacity in this version.
 
 The daemon is internal: the CLI starts it on demand and restarts it on the next command after a
-crash or an address change; the user-facing commands never ask for it.
+crash or an address change; the user-facing commands never ask for it. It stops itself after
+six route intervals with no reachable neighbour, so a single-site workspace runs it only around
+the commands that need it.
 
 A discovered address is a hint, not a promise: it expires after a few intervals and a stale one
 is ignored before a dial. The LAN packet is unsigned because the network is trusted; the site

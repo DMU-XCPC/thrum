@@ -64,6 +64,10 @@ func ensureDaemon(l layout.Layout) error {
 		return err
 	}
 	args := []string{"--root", l.Root, "daemon", "run", "--listen", reach}
+	// The test suite shortens the route interval to see the idle shutdown quickly.
+	if v := os.Getenv("THRUM_ROUTE_INTERVAL"); v != "" {
+		args = append(args, "--route-interval", v)
+	}
 	if readLocalConfig(l, self).Discover {
 		args = append(args, "--discover")
 	}

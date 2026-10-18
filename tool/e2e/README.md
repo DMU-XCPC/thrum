@@ -44,7 +44,8 @@ addresses, the local view beating a fresh hint, and the stale hint expiring).
 learning it on sync, and the local view still winning. `TestDaemonStartsOnDemand`
 covers the daemon being an implementation detail: sync, hello, a message and a
 join start it, the help does not list it, and `site discover on|off` is the
-local toggle.
+local toggle. `TestDaemonIdlesWhenAlone` covers the daemon stopping itself when
+no neighbour answers and the next command starting it again.
 
 The daemon transport — `history.exchange`, `git.serve`, `thrum git-proxy` — is
 covered by `TestDaemonServesGit`, `TestSyncThroughTheDaemon` and the Docker

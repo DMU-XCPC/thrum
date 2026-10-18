@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
 	"github.com/multiagentworkspace/thrum/tool/internal/layout"
@@ -58,5 +59,35 @@ func TestDaemonStartsOnDemand(t *testing.T) {
 	a.r().run("site", "discover", "off").ok(t, "discover off")
 	if out := a.r().run("site", "show", "s1").ok(t, "show off").stdout; !strings.Contains(out, "LAN    off") {
 		t.Fatalf("discovery off was not recorded: %s", out)
+	}
+}
+
+// TestDaemonIdlesWhenAlone: with no reachable neighbour the daemon stops itself
+// after a few route intervals; the next command starts it again.
+func TestDaemonIdlesWhenAlone(t *testing.T) {
+	t.Setenv("THRUM_ROUTE_INTERVAL", "100ms")
+	a := newWorkspace(t)
+	pa := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	a.r().run("site", "reach", "s1", "--at", pa).ok(t, "address")
+	a.r().run("sync").ok(t, "sync")
+	l := layout.New(a.root)
+	if _, err := daemon.Status(l); err != nil {
+		t.Fatalf("the daemon did not start on demand: %v", err)
+	}
+	gone := false
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := daemon.Status(l); err != nil {
+			gone = true
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !gone {
+		t.Fatalf("the daemon did not stop when it had no neighbour")
+	}
+	a.r().run("sync").ok(t, "sync again")
+	if _, err := daemon.Status(l); err != nil {
+		t.Fatalf("the daemon did not come back: %v", err)
 	}
 }

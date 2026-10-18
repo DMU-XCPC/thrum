@@ -617,20 +617,31 @@ type route struct {
 func (s *server) router() {
 	t := time.NewTicker(s.routeEvery)
 	defer t.Stop()
-	s.pollRoutes()
+	alone := 0
 	for {
+		if s.pollRoutes() == 0 {
+			alone++
+		} else {
+			alone = 0
+		}
+		// Six intervals with no neighbour answering: nobody is being served, and
+		// nothing durable lives in the daemon, so it can stop. The next command
+		// starts it again.
+		if alone >= 6 {
+			s.once.Do(func() { close(s.stop) })
+			return
+		}
 		select {
 		case <-s.stop:
 			return
 		case <-t.C:
-			s.pollRoutes()
 		}
 	}
 }
 
 // pollRoutes asks every directly reachable peer for its own reachable set, keeps
 // the direct edges at one hop, and takes the shortest route through a neighbour.
-func (s *server) pollRoutes() {
+func (s *server) pollRoutes() int {
 	peers := rosterOf(s.l)
 	best := map[string]route{}
 	sets := map[string]map[string]int{}
@@ -665,6 +676,7 @@ func (s *server) pollRoutes() {
 		}
 	}
 	s.setRoutes(best)
+	return len(sets)
 }
 
 func consider(m map[string]route, site string, r route) {
