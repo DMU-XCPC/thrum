@@ -66,6 +66,16 @@ func (s *server) advertisedReach() string {
 	return net.JoinHostPort(host, port)
 }
 
+// DefaultReach is where a daemon listens when the site declares no address: the
+// default port on the machine's outbound address.
+func DefaultReach() string {
+	host := outboundIP()
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, "7700")
+}
+
 func outboundIP() string {
 	c, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {

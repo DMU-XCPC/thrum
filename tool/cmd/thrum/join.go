@@ -50,16 +50,20 @@ func newJoinCmd() *cobra.Command {
 func newSyncCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sync",
-		Short: "Ask this daemon to exchange the line, the ledger and the store with the peers",
+		Short: "Exchange the line, the ledger and the store with the peers",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := daemon.LocalDo(workspaceRoot(), daemon.Request{Verb: "history.exchange"})
+			l := workspaceRoot()
+			if err := ensureDaemon(l); err != nil {
+				return err
+			}
+			resp, err := daemon.LocalDo(l, daemon.Request{Verb: "history.exchange"})
 			if err != nil {
 				var refusal *daemon.Refusal
 				if errors.As(err, &refusal) {
 					return err
 				}
-				return fmt.Errorf("the daemon is not running here (%v); start it with `thrum daemon run`", err)
+				return fmt.Errorf("this site's endpoint is not answering here: %w", err)
 			}
 			var out struct {
 				Settled     []exchange.Resolution `json:"settled"`

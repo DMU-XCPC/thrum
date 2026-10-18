@@ -60,6 +60,9 @@ func newActorCmd() *cobra.Command {
 				name = actorName()
 			}
 			l := workspaceRoot()
+			// The daemon is started on demand; if it cannot start, the local table is
+			// still all there is.
+			_ = ensureDaemon(l)
 			now := time.Now().UTC()
 			if err := actors.Hello(l, name, now); err != nil {
 				return err

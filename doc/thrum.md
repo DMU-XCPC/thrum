@@ -18,7 +18,8 @@ so its concurrency does not have to be perfect.
 ## Sites
 
 A **site** is one machine's copy of a workspace, running a daemon. A workspace has one or more
-of them.
+of them. The daemon is started on demand by the CLI; a person does not run it as a separate
+step, and the commands that manage it are internal.
 
 The roster lives in the line, one file per site:
 
@@ -46,16 +47,18 @@ write the shared roster. A declared address can change: `site announce` writes t
 roster entry, or clears it, and commits it as one line event. A site with no declared address is still reachable when discovery
 is on and the LAN has found it.
 
-**The LAN hint is plain UDP multicast, off unless asked for.** With `--discover`, a daemon
-announces `{workspace, site, reach}` on a fixed group and port on an interval, and answers a
+**The LAN hint is plain UDP multicast, off unless asked for.** With discovery on
+(`site discover on`; the daemon's internal `--discover`), a daemon announces `{workspace, site, reach}` on a fixed group and port on an interval, and answers a
 join query for its own name. A peer keeps the last announcement, ignores one older than a few
 intervals, and never treats it as identity: the site key still authenticates every connection.
 The network is trusted, so the packet is not signed. Several daemons on one host hear each
 other through the loopback. Explicit addresses work without it; turn it on when the machines
 share a LAN and the operator wants them found automatically.
 
-**The daemon has its own port and its own protocol.** It listens on its own socket,
-authenticates a peer by the key the roster pins, and answers typed requests. It does not shell
+**The daemon has its own port and its own protocol.** It listens on its own socket, starts on
+demand at the site's address or the fixed default port 7700, authenticates a peer by the key
+the roster pins, and answers typed requests. The CLI starts it when a command needs it, and the
+next command starts it again after a crash or an address change. It does not shell
 out to `sshd` to answer a lookup or take a message: the fabric does both constantly, and
 putting a process launch in that path would make the fabric's availability depend on a
 machine's SSH configuration. `ssh` is kept for the one thing it is good at here — carrying the
@@ -311,7 +314,7 @@ that. `history.exchange` is local only: it is this machine asking its own daemon
 | a relay | the routes through it, after the table expires | messages take another route or fail; the histories still gossip through the rest of the graph |
 | the LAN hint | finding a fresh address | the local view and the roster's declared address; a join then has to carry one |
 | the line's sequencer, if one is declared | recording durable events | reading, working, messages, and this site's own commits |
-| a daemon | messages, placement and `sync` at that site | its files, and the command line's local operations |
+| a daemon | messages, placement and `sync` at that site, until the next command starts it again | its files, and the command line's local operations |
 
 Nothing is refused because the fabric is unhappy, except the thing that genuinely needed the
 fabric. There is no hidden queue and no invented liveness: a thing that could not be placed was
@@ -329,6 +332,9 @@ and the version number stays taken.
 
 An attachment travels base64 inside the JSON protocol. Ten megabytes is the tested bound; a
 hundred is not promised. `site invite` has no capacity in this version.
+
+The daemon is internal: the CLI starts it on demand and restarts it on the next command after a
+crash or an address change; the user-facing commands never ask for it.
 
 A discovered address is a hint, not a promise: it expires after a few intervals and a stale one
 is ignored before a dial. The LAN packet is unsigned because the network is trusted; the site

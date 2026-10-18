@@ -253,6 +253,9 @@ func forward(l layout.Layout, site string, msg records.Message, body []byte, fil
 	if err != nil {
 		return err
 	}
+	if err := ensureDaemon(l); err != nil {
+		return err
+	}
 	_, err = daemon.LocalDo(l, daemon.Request{Verb: "msg.forward", Args: args})
 	if err == nil {
 		return nil
@@ -275,6 +278,9 @@ func askPlace(l layout.Layout, to string) (string, error) {
 		Actor string `json:"actor"`
 	}{to})
 	if err != nil {
+		return "", err
+	}
+	if err := ensureDaemon(l); err != nil {
 		return "", err
 	}
 	resp, err := daemon.LocalDo(l, daemon.Request{Verb: "actor.where", Args: args})

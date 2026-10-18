@@ -12,7 +12,9 @@ import (
 )
 
 func newDaemonCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "daemon", Short: "This site's endpoint: run it, ask it, stop it"}
+	// The daemon is an implementation detail; the CLI starts it when needed. The
+	// group stays callable for debugging and for a service manager.
+	cmd := &cobra.Command{Use: "daemon", Short: "This site's endpoint (internal)", Hidden: true}
 
 	var listen string
 	var routeEvery time.Duration

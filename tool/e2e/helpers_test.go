@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
+	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 )
 
 var (
@@ -189,6 +192,8 @@ func newWorkspace(t *testing.T) *workspace {
 	initRepo(t, src)
 	r := &runner{t: t, root: root}
 	r.run("create", root, "--site", "s1", "--code", "code="+src).ok(t, "create")
+	// A command may have started the daemon on demand; leave nothing running.
+	t.Cleanup(func() { _ = daemon.Stop(layout.New(root)) })
 	return &workspace{t: t, root: root, src: src}
 }
 

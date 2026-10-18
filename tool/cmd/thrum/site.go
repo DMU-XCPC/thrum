@@ -24,6 +24,7 @@ type siteView struct {
 	Reach      string `json:"reach,omitempty"`
 	Local      string `json:"local_reach,omitempty"`
 	Discovered string `json:"discovered,omitempty"`
+	Discover   bool   `json:"discover,omitempty"`
 	NextHop    string `json:"next_hop,omitempty"`
 	Hops       int    `json:"hops,omitempty"`
 }
@@ -109,6 +110,11 @@ func newSiteCmd() *cobra.Command {
 			if err := os.MkdirAll(l.Sites(), 0o755); err != nil {
 				return err
 			}
+			// The joining machine will need this daemon; start it now if the operator
+			// has not, so the invitation works without a second command.
+			if err := ensureDaemon(l); err != nil {
+				return err
+			}
 			nonce := join.NewNonce()
 			if err := records.Write(l.Site(name), records.Site{
 				Site: name, Reach: inviteAt, Invite: join.InviteHash(nonce),
@@ -175,12 +181,47 @@ func newSiteCmd() *cobra.Command {
 			if err := line.Commit(l.Root, []string{l.Site(self)}, message); err != nil {
 				return err
 			}
+			// The daemon comes back on the next command, at whatever address the
+			// local view resolves to (this site's own if it has one, else the new
+			// declaration).
+			_ = daemon.Stop(l)
 			fmt.Fprintf(cmd.OutOrStdout(), "announced %s at %s\n", self, orNone(announceAt))
 			return nil
 		},
 	}
 	announce.Flags().StringVar(&announceAt, "at", "", "the host:port this site is now reached at")
 	announce.Flags().BoolVar(&announceClear, "clear", false, "remove the declared address instead")
+
+	discover := &cobra.Command{
+		Use:   "discover [on|off]",
+		Short: "Turn this site's LAN announcement on or off",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := workspaceRoot()
+			self := readSiteName(l)
+			if self == "" {
+				return fmt.Errorf("this machine does not name its site")
+			}
+			var on bool
+			switch args[0] {
+			case "on":
+				on = true
+			case "off":
+				on = false
+			default:
+				return fmt.Errorf("give on or off")
+			}
+			cfg := readLocalConfig(l, self)
+			cfg.Discover = on
+			if err := writeLocalConfig(l, self, cfg); err != nil {
+				return err
+			}
+			// The running daemon reads this at start; it restarts on the next command.
+			_ = daemon.Stop(l)
+			fmt.Fprintf(cmd.OutOrStdout(), "discovery %s\n", args[0])
+			return nil
+		},
+	}
 
 	var at string
 	reach := &cobra.Command{
@@ -192,18 +233,15 @@ func newSiteCmd() *cobra.Command {
 				return fmt.Errorf("--at is required")
 			}
 			l := workspaceRoot()
-			if err := os.MkdirAll(l.ConfigDir(), 0o755); err != nil {
+			cfg := readLocalConfig(l, args[0])
+			cfg.Reach = at
+			if err := writeLocalConfig(l, args[0], cfg); err != nil {
 				return err
 			}
-			data, err := format.MarshalYAML(struct {
-				Reach string `yaml:"reach"`
-			}{Reach: at})
-			if err != nil {
-				return err
-			}
-			path := filepath.Join(l.ConfigDir(), args[0]+".yaml")
-			if err := format.WriteFileAtomic(path, data); err != nil {
-				return err
+			// A running daemon keeps the listen address it started with; it comes
+			// back at the new one on the next command.
+			if args[0] == readSiteName(l) {
+				_ = daemon.Stop(l)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s is reached at %s\n", args[0], at)
 			return nil
@@ -259,15 +297,19 @@ func newSiteCmd() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("no site named %q", args[0])
 			}
-			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site)}
+			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site), Discover: readLocalConfig(l, s.Site).Discover}
 			if r, ok := readRoutes(l)[s.Site]; ok {
 				v.NextHop, v.Hops = r.NextHop, r.Hops
 			}
 			if jsonFlag {
 				return printJSON(cmd, v)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "site   %s\nkey    %s\nreach  %s\nlocal  %s\ndisc.  %s\n",
-				v.Site, v.Key, orNone(v.Reach), orNone(v.Local), orNone(v.Discovered))
+			discovery := "off"
+			if v.Discover {
+				discovery = "on"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "site   %s\nkey    %s\nreach  %s\nlocal  %s\ndisc.  %s\nLAN    %s\n",
+				v.Site, v.Key, orNone(v.Reach), orNone(v.Local), orNone(v.Discovered), discovery)
 			if v.NextHop != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "next   %s (%d hop(s))\n", v.NextHop, v.Hops)
 			}
@@ -277,7 +319,7 @@ func newSiteCmd() *cobra.Command {
 
 	routes := &cobra.Command{
 		Use:   "routes",
-		Short: "This machine's route table, as the daemon learned it",
+		Short: "This machine's learned route table",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			l := workspaceRoot()
@@ -334,7 +376,7 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(reach, list, show, routes, doctor, invite, announce, newSiteKeyCmd(), newSiteForgetCmd())
+	cmd.AddCommand(reach, list, show, routes, doctor, invite, announce, discover, newSiteKeyCmd(), newSiteForgetCmd())
 	return cmd
 }
 
@@ -358,7 +400,7 @@ func siteViews(l layout.Layout) ([]siteView, error) {
 			return nil, err
 		}
 		if ok {
-			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site)}
+			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site), Discover: readLocalConfig(l, s.Site).Discover}
 			if r, ok := routes[s.Site]; ok {
 				v.NextHop, v.Hops = r.NextHop, r.Hops
 			}
@@ -370,17 +412,7 @@ func siteViews(l layout.Layout) ([]siteView, error) {
 }
 
 func localReach(l layout.Layout, name string) string {
-	data, err := os.ReadFile(filepath.Join(l.ConfigDir(), name+".yaml"))
-	if err != nil {
-		return ""
-	}
-	var cfg struct {
-		Reach string `yaml:"reach"`
-	}
-	if err := format.DecodeWhole(data, &cfg); err != nil {
-		return ""
-	}
-	return cfg.Reach
+	return readLocalConfig(l, name).Reach
 }
 
 func readSiteName(l layout.Layout) string {
