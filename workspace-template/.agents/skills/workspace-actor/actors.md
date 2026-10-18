@@ -51,9 +51,10 @@ command, the same for a person at a keyboard and for an agent's wrapper. A plugi
 actor's behalf, but nothing depends on a plugin existing — `messages.md` has that half.
 
 **An agent that wants its mail as turns binds its name to its session once, at the start** — one
-call to the harness's own tool, named by the project's convention. That is not a session: it records
-which running session is this actor, and it says hello on the actor's behalf. Skip it and you lose
-only the nudge; `messages.md` has the contract.
+call to the harness's own tool, which the harness's tool list offers; the workspace does not name
+it. That is not a session: it records which running session is this actor, and it says hello on the
+actor's behalf. Skip it and you lose only the nudge; `messages.md` has the contract and
+`doc/extension.md` is the plugin author's side.
 
 **Nothing ages out.** A place is corrected by saying hello somewhere else, and by a delivery that
 arrives where the actor no longer is; by nothing else. A daemon may drop a cached address to save

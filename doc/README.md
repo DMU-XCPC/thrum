@@ -1,21 +1,23 @@
 # The design
 
-Three documents, read in this order:
+Four documents, read in this order:
 
 1. [`workspace.md`](workspace.md) — what a workspace is: the jobs that isolate work, the
    records that say what happened, and where everything goes.
 2. [`thrum.md`](thrum.md) — the fabric that holds the sites together: finding actors, carrying
    messages, and keeping the shared histories converging.
 3. [`commands.md`](commands.md) — the operations and every command, and what each refuses.
+4. [`extension.md`](extension.md) — the interfaces a harness plugin uses: the event stream, the
+   watch, the binding and its state. Not the actor's manual.
 
-They are parts of one design, not separate designs. The first two are its two halves; the third is
-how you ask for either.
+They are parts of one design, not separate designs. The first two are its two halves, the third is
+how you ask for either, and the fourth is the plugin author's side of the binding.
 
 ## What this replaces
 
 These documents replace `design.md`, `tooling.md`, and `implementation.md`, which are on
-`master`. `tool/` and `workspace-template/` here still implement the previous design; they are
-stale and are rebuilt from these documents.
+`master`. `tool/` and `workspace-template/` are built from these documents, and the fixtures test
+the design they describe.
 
 ## What changed, and why
 
@@ -35,9 +37,9 @@ stale and are rebuilt from these documents.
   inventing a backlog.
 - **The binding is the harness's step, not thrum's.** An agent that wants mail as turns calls its
   harness's tool once at the start, which records which session is this actor and says hello for
-  it. The workspace manual states the obligation and the project's convention names the tool,
-  because the skeleton cannot name one harness's plugin. thrum never wakes anybody, and a session
-  that skips the binding loses only the nudge.
+  it. The workspace manual states the obligation; the harness's tool list carries the tool, and
+  the workspace does not name it. thrum never wakes anybody, and a session that skips the binding
+  loses only the nudge.
 - **Two shared histories, and both merge.** The line (`doc/`) holds the decisions, and no two
   sites write one file there: a brief has the one site working its job, and a name claimed twice
   is settled by a deterministic order rather than merged. The ledger (`handoff/`) holds the

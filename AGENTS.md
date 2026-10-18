@@ -31,9 +31,8 @@ refusal to the code that makes it.
 
 `master` holds the previous design (`doc/design.md`, `doc/tooling.md`,
 `doc/implementation.md`). This branch replaces it with `doc/workspace.md` and `doc/thrum.md`.
-**`tool/`, `workspace-template/` and `harness/` here still implement the previous design**, so
-`make test` is expected to fail until the implementation is rebuilt from these two documents.
-Do not treat the current code as evidence about the design.
+**`tool/`, `workspace-template/` and `harness/` are built from these documents**; `make test`
+passes and the code follows the design. A decision that is not in the design is not a decision.
 
 ## Build and test
 
@@ -54,8 +53,7 @@ to run it on its own.
 
 The tests are part of the specification rather than an afterthought: each package tests the
 rules it holds, and `tool/e2e` drives the built command through a whole job's life and through
-two sites over a real channel. Every one of them is written against the previous design and is
-rebuilt with it.
+two sites over a real channel. Every one of them is written against this design.
 
 ## Where things are
 
@@ -65,8 +63,8 @@ rebuilt with it.
 | `doc/thrum.md` | The fabric: sites, actors, messages, and the two shared histories. The authority. |
 | `doc/commands.md` | The interface: the operations, what each refuses, and every command. |
 | `doc/README.md` | The reading order, and what changed and why. |
-| `tool/` | The implementation — stale; it implements the previous design. |
-| `workspace-template/` | What a workspace is created from, carried into the binary — stale. |
+| `tool/` | The implementation of this design. |
+| `workspace-template/` | What a workspace is created from, carried into the binary. |
 | `harness/` | Companions for particular agent harnesses, and **not the format**. They read the CLI, `--json` output and the documented layout; they must never be a reason for the design to change, and a workspace neither ships nor knows about them. `harness/dsh/` is one. |
 | `template.go` | The `go:embed` for that template — at the repository root because `go:embed` cannot name a path outside the directory its own source file lives in. |
 
