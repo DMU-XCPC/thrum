@@ -32,22 +32,32 @@ const key = (root, actor) => `${root}\u0000${actor}`
  */
 export function install(ctx, config, deps) {
   const { defineTool, createUserMessage, spawn, sayHello = sayHelloWith } = deps
-  const command = config.thrum || 'thrum'
-  const coalesceMs = config.coalesceMs ?? COALESCE_MS
-  const wakeRetryMs = config.wakeRetryMs ?? WAKE_RETRY_MS
-  const maxWakeAttempts = config.maxWakeAttempts ?? MAX_WAKE_ATTEMPTS
+  // A volatile Config field is a reference with get(), not the value. Read it once at
+  // mount; a settings save reloads the row, so the next mount sees the new reference.
+  const read = (field, fallback) => {
+    if (field === undefined || field === null) return fallback
+    const value = typeof field === 'object' && typeof field.get === 'function' ? field.get() : field
+    return value ?? fallback
+  }
+  const command = read(config.thrum, '') || 'thrum'
+  const defaultRoot = read(config.root, '')
+  const sourceKind = read(config.sourceKind, '') || 'thrum-mailbox'
+  const coalesceMs = read(config.coalesceMs, COALESCE_MS)
+  const helloTimeoutMs = read(config.helloTimeoutMs, undefined)
+  const wakeRetryMs = read(config.wakeRetryMs, WAKE_RETRY_MS)
+  const maxWakeAttempts = read(config.maxWakeAttempts, MAX_WAKE_ATTEMPTS)
 
   const log = (message) => {
     if (ctx.logger?.info) ctx.logger.info(`thrum-mailbox: ${message}`)
     else console.error(`thrum-mailbox: ${message}`)
   }
 
-  const bindings = Bindings.load(statePath(config.dshHome || undefined))
+  const bindings = Bindings.load(statePath(read(config.dshHome, '') || undefined))
   const wake = makeWaker({
     sessionController: ctx.sessionController,
     sessions: ctx.sessions,
     createUserMessage,
-    sourceKind: config.sourceKind,
+    sourceKind,
     log,
   })
 
@@ -222,7 +232,7 @@ export function install(ctx, config, deps) {
             'owns its delivery. Call thrum_watch from the session that should be woken.',
         )
       }
-      const root = args.root ?? (config.root || undefined) ?? agent?.session?.header?.cwd
+      const root = args.root ?? (defaultRoot || undefined) ?? agent?.session?.header?.cwd
       if (!root) {
         throw new Error(
           'thrum_watch needs a workspace: pass root, configure one, or start the session in the workspace',
@@ -255,7 +265,7 @@ export function install(ctx, config, deps) {
           command,
           root,
           actor: args.actor,
-          timeoutMs: config.helloTimeoutMs,
+          timeoutMs: helloTimeoutMs,
         })
       } catch (error) {
         hello = { ok: false, reason: error.message }
@@ -315,7 +325,7 @@ export function install(ctx, config, deps) {
             'and DSH owns its delivery.',
         )
       }
-      const root = args.root ?? (config.root || undefined) ?? agent?.session?.header?.cwd
+      const root = args.root ?? (defaultRoot || undefined) ?? agent?.session?.header?.cwd
       if (!root) {
         throw new Error(
           'thrum_unwatch needs a workspace: pass root, configure one, or start the session in the workspace',

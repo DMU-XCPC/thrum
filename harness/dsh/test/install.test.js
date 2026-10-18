@@ -152,6 +152,29 @@ test('a hello that fails is logged and does not stop the watch', async () => {
   assert.equal(w.woken.length, 1, 'the mailbox is still the truth')
 })
 
+test('volatile Config references are read as values at mount', async () => {
+  const ref = (value) => ({ get: () => value })
+  const home = mkdtempSync(join(tmpdir(), 'thrum-mailbox-'))
+  const w = mount({
+    thrum: ref('thrum'),
+    root: ref(`${WS}`),
+    dshHome: ref(home),
+    sourceKind: ref('thrum-mailbox'),
+    coalesceMs: ref(10),
+    helloTimeoutMs: ref(50),
+    wakeRetryMs: ref(20),
+    maxWakeAttempts: ref(2),
+  })
+  w.session('s-1')
+
+  await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
+  assert.equal(w.hellos.length, 1)
+  assert.equal(w.hellos[0].root, `${WS}`)
+  assert.equal(w.hellos[0].timeoutMs, 50)
+  assert.deepEqual(w.spawned[0].args.slice(0, 3), ['--root', `${WS}`, '--actor'])
+  assert.equal(w.spawned[0].command, 'thrum')
+})
+
 test('a failed wake is retried, and the message is announced only after it succeeds', async () => {
   const w = mount({ wakeRetryMs: 20, maxWakeAttempts: 3, coalesceMs: 10 })
   w.session('s-1')
