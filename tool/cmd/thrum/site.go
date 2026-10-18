@@ -25,6 +25,7 @@ type siteView struct {
 	Local      string `json:"local_reach,omitempty"`
 	Discovered string `json:"discovered,omitempty"`
 	Discover   bool   `json:"discover,omitempty"`
+	Inactive   bool   `json:"inactive,omitempty"`
 	NextHop    string `json:"next_hop,omitempty"`
 	Hops       int    `json:"hops,omitempty"`
 }
@@ -223,6 +224,122 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 
+	leave := &cobra.Command{
+		Use:   "leave",
+		Short: "Leave the workspace: stop serving, keep this site's files",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := workspaceRoot()
+			self := readSiteName(l)
+			if self == "" {
+				return fmt.Errorf("this machine does not name its site")
+			}
+			cfg := readLocalConfig(l, self)
+			if cfg.Inactive {
+				return fmt.Errorf("site %s has already left", self)
+			}
+			if dirs, err := os.ReadDir(l.Worktrees()); err == nil {
+				for _, d := range dirs {
+					if d.IsDir() {
+						return fmt.Errorf("this site holds a job's worktree (%s); hand it off before leaving", d.Name())
+					}
+				}
+			}
+			var s records.Site
+			ok, err := records.Read(l.Site(self), &s)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("site %q is not declared in the roster", self)
+			}
+			s.Reach = ""
+			if err := records.Write(l.Site(self), s); err != nil {
+				return err
+			}
+			if err := line.Commit(l.Root, []string{l.Site(self)},
+				fmt.Sprintf("site %s: left", self)); err != nil {
+				return err
+			}
+			// Announce the departure to the peers that answer, before the endpoint
+			// stops. The others see it when this site returns or through another
+			// copy of the line.
+			_ = ensureDaemon(l)
+			_, _ = daemon.LocalDo(l, daemon.Request{Verb: "history.exchange"})
+			cfg.Inactive = true
+			if err := writeLocalConfig(l, self, cfg); err != nil {
+				return err
+			}
+			_ = daemon.Stop(l)
+			fmt.Fprintf(cmd.OutOrStdout(), "site %s has left; its files remain\n", self)
+			return nil
+		},
+	}
+
+	var stayAt string
+	stay := &cobra.Command{
+		Use:   "stay [--at <host:port>]",
+		Short: "Return a site that left the workspace",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := workspaceRoot()
+			self := readSiteName(l)
+			if self == "" {
+				return fmt.Errorf("this machine does not name its site")
+			}
+			cfg := readLocalConfig(l, self)
+			if !cfg.Inactive {
+				return fmt.Errorf("site %s has not left", self)
+			}
+			addr := stayAt
+			if addr == "" {
+				addr = cfg.Reach
+			}
+			if addr == "" {
+				var s records.Site
+				if ok, _ := records.Read(l.Site(self), &s); ok {
+					addr = s.Reach
+				}
+			}
+			if addr == "" {
+				addr = daemon.DefaultReach()
+			}
+			if stayAt != "" {
+				host, port, err := net.SplitHostPort(stayAt)
+				if err != nil || host == "" || port == "" {
+					return fmt.Errorf("%q is not host:port", stayAt)
+				}
+			}
+			var s records.Site
+			ok, err := records.Read(l.Site(self), &s)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("site %q is not declared in the roster", self)
+			}
+			s.Reach = addr
+			if err := records.Write(l.Site(self), s); err != nil {
+				return err
+			}
+			if err := line.Commit(l.Root, []string{l.Site(self)},
+				fmt.Sprintf("site %s: serving at %s", self, addr)); err != nil {
+				return err
+			}
+			cfg.Inactive = false
+			cfg.Reach = addr
+			if err := writeLocalConfig(l, self, cfg); err != nil {
+				return err
+			}
+			if err := ensureDaemon(l); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "site %s is serving at %s\n", self, addr)
+			return nil
+		},
+	}
+	stay.Flags().StringVar(&stayAt, "at", "", "the host:port to serve on; defaults to the local view")
+
 	var at string
 	reach := &cobra.Command{
 		Use:   "reach <name> --at <host:port>",
@@ -297,7 +414,7 @@ func newSiteCmd() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("no site named %q", args[0])
 			}
-			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site), Discover: readLocalConfig(l, s.Site).Discover}
+			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site), Discover: readLocalConfig(l, s.Site).Discover, Inactive: readLocalConfig(l, s.Site).Inactive}
 			if r, ok := readRoutes(l)[s.Site]; ok {
 				v.NextHop, v.Hops = r.NextHop, r.Hops
 			}
@@ -308,8 +425,12 @@ func newSiteCmd() *cobra.Command {
 			if v.Discover {
 				discovery = "on"
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "site   %s\nkey    %s\nreach  %s\nlocal  %s\ndisc.  %s\nLAN    %s\n",
-				v.Site, v.Key, orNone(v.Reach), orNone(v.Local), orNone(v.Discovered), discovery)
+			state := "serving"
+			if v.Inactive {
+				state = "left"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "site   %s\nkey    %s\nreach  %s\nlocal  %s\ndisc.  %s\nLAN    %s\nstate  %s\n",
+				v.Site, v.Key, orNone(v.Reach), orNone(v.Local), orNone(v.Discovered), discovery, state)
 			if v.NextHop != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "next   %s (%d hop(s))\n", v.NextHop, v.Hops)
 			}
@@ -376,7 +497,7 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(reach, list, show, routes, doctor, invite, announce, discover, newSiteKeyCmd(), newSiteForgetCmd())
+	cmd.AddCommand(reach, list, show, routes, doctor, invite, announce, discover, leave, stay, newSiteKeyCmd(), newSiteForgetCmd())
 	return cmd
 }
 
@@ -400,7 +521,7 @@ func siteViews(l layout.Layout) ([]siteView, error) {
 			return nil, err
 		}
 		if ok {
-			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site), Discover: readLocalConfig(l, s.Site).Discover}
+			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site), Discovered: discoveredAddress(l, s.Site), Discover: readLocalConfig(l, s.Site).Discover, Inactive: readLocalConfig(l, s.Site).Inactive}
 			if r, ok := routes[s.Site]; ok {
 				v.NextHop, v.Hops = r.NextHop, r.Hops
 			}

@@ -37,7 +37,8 @@ reach: build-01.internal:7700
 | `reach` | where the daemon can be reached, when the operator declares it. Omitted means no address is declared, not that the site is unreachable |
 
 The declaration travels by git, like every other durable fact, and needs no quorum to read. A
-site that is declared but unreachable is a site that is down, not a site that does not exist.
+site that is declared but unreachable is a site that is down, not a site that does not exist. A
+site that has left has cleared its address and said so; a site that is merely down has not.
 
 **An address is a hint; only a declaration writes the roster.** This machine resolves a peer in
 this order: its own `var/config` (written by `site reach`, or by the join for the inviter), the
@@ -292,6 +293,22 @@ creator's through `create --at`, an invited site's through the invite's `--at` â
 local view in `var/config/` wins over it. `daemon run --listen 0.0.0.0:<port>` keeps the listener
 independent of the machine's address.
 
+## Leaving
+
+A site can leave without destroying its copy. `thrum site leave`, run there:
+
+1. refuses while this site holds a job's worktree;
+2. clears this site's own declared address in the roster and commits `site <name>: left`;
+3. exchanges once more, so the peers that answer learn the departure before the endpoint stops;
+4. writes a site-local `inactive` flag, so the CLI does not start the endpoint again;
+5. stops the endpoint.
+
+The line, the ledger, the store, the mail and the code stay. The peers see the empty address on
+their next sync and stop dialling the site; their own local view still wins, and `site forget
+<name>` removes the entry for good. `thrum site stay [--at <host:port>]` reverses it: clear the
+flag, write the address locally and in the roster (`site <name>: serving at ...`), and start the
+endpoint again. A left site is not a down site: it has said it is not serving.
+
 ## The wire
 
 One protocol, versioned from the start, with a mutual-authentication handshake and typed
@@ -313,6 +330,7 @@ that. `history.exchange` is local only: it is this machine asking its own daemon
 | a peer | messages to actors there, if no route leads another way; its direct history exchange | everything local, every other peer, and any route through a neighbour; its records reach the others through the remaining graph |
 | a relay | the routes through it, after the table expires | messages take another route or fail; the histories still gossip through the rest of the graph |
 | the LAN hint | finding a fresh address | the local view and the roster's declared address; a join then has to carry one |
+| a site that has left | its declared address, so the peers stop dialling | its line, ledger, store, mail and code; `site stay` returns it |
 | the line's sequencer, if one is declared | recording durable events | reading, working, messages, and this site's own commits |
 | a daemon | messages, placement and `sync` at that site, until the next command starts it again | its files, and the command line's local operations |
 

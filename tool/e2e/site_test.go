@@ -163,3 +163,53 @@ func TestSiteAnnounce(t *testing.T) {
 	w1.r().run("site", "announce", "--at", "nonsense").fails(t, "bad address", "host:port")
 	w1.r().run("site", "announce", "--at", "127.0.0.1:9911", "--clear").fails(t, "both", "not both")
 }
+
+// TestSiteLeaveAndStay: a site can leave without destroying its copy, the peers
+// see the cleared declaration, and it can return.
+func TestSiteLeaveAndStay(t *testing.T) {
+	ts := setupTwoSites(t)
+	twoSiteDaemons(t, ts)
+	w1, w2 := ts.w1, ts.w2
+
+	w2.r().run("site", "leave").ok(t, "leave")
+	if log := w2.git("log", "-1", "--format=%s"); !strings.Contains(log, "site s2: left") {
+		t.Fatalf("the departure is not a line event: %s", log)
+	}
+	show := w2.r().run("site", "show", "s2").ok(t, "show").stdout
+	if !strings.Contains(show, "state  left") || !strings.Contains(show, "reach  none") {
+		t.Fatalf("the site is not marked left with no address: %s", show)
+	}
+	w2.r().run("site", "leave").fails(t, "left twice", "already left")
+
+	// The endpoint is gone and the commands that need it refuse.
+	w2.r().run("sync").fails(t, "a left site", "has left")
+	w2.r().as("a2").run("message", "send", "a1", "--subject", "x").fails(t, "a left message", "has left")
+
+	// The w1 merges the cleared declaration; its own local view still wins, so it
+	// dials the stopped endpoint and reports it.
+	if out := w1.r().run("sync").ok(t, "w1 sync").stdout; !strings.Contains(out, "unreachable: s2") {
+		t.Fatalf("the w1's local view did not keep its old address: %s", out)
+	}
+	if show := w1.r().run("site", "show", "s2").ok(t, "show").stdout; !strings.Contains(show, "reach  none") {
+		t.Fatalf("the w1 did not see the cleared declaration: %s", show)
+	}
+
+	w2.r().run("site", "stay", "--at", ts.p2).ok(t, "stay")
+	if log := w2.git("log", "-1", "--format=%s"); !strings.Contains(log, "site s2: serving at "+ts.p2) {
+		t.Fatalf("the return is not a line event: %s", log)
+	}
+	if show := w2.r().run("site", "show", "s2").ok(t, "show").stdout; !strings.Contains(show, "state  serving") {
+		t.Fatalf("the site is not serving again: %s", show)
+	}
+	w2.r().run("site", "stay", "--at", ts.p2).fails(t, "staying while serving", "has not left")
+	w2.r().run("sync").ok(t, "w2 sync back")
+	w1.r().run("sync").ok(t, "w1 sync back")
+	w2.r().as("a2").run("message", "send", "a1", "--subject", "back").ok(t, "message back")
+	if out := w1.r().as("a1").run("message", "list").ok(t, "a1 list").stdout; !strings.Contains(out, "back") {
+		t.Fatalf("the message after the return did not arrive: %s", out)
+	}
+
+	// A site holding a job's worktree does not leave.
+	w2.r().run("job", "open", "j2", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "job")
+	w2.r().run("site", "leave").fails(t, "a busy site", "holds a job")
+}

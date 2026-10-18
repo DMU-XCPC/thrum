@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
+	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 )
 
 type twoSites struct {
@@ -28,6 +31,7 @@ func setupTwoSites(t *testing.T) *twoSites {
 	root2 := filepath.Join(dir, "w2")
 	(&runner{t: t, root: root2}).run("join", token, "--dir", root2).ok(t, "join")
 	w2 := &workspace{t: t, root: root2}
+	t.Cleanup(func() { _ = daemon.Stop(layout.New(root2)) })
 	w2.r().run("verify").ok(t, "verify the joined site")
 	wireSites(t, []*workspace{w1, w2}, []string{p1, p2})
 	// The code is the project's: every site materialises it with its own git.

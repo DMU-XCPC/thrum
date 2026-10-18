@@ -18,6 +18,7 @@ import (
 type localConfig struct {
 	Reach    string `yaml:"reach"`
 	Discover bool   `yaml:"discover,omitempty"`
+	Inactive bool   `yaml:"inactive,omitempty"`
 }
 
 func readLocalConfig(l layout.Layout, name string) localConfig {
@@ -48,12 +49,15 @@ func writeLocalConfig(l layout.Layout, name string, c localConfig) error {
 // hello, and never has to run it. The address is the site's own, or the fixed
 // default port on the machine's outbound address.
 func ensureDaemon(l layout.Layout) error {
-	if _, err := daemon.Status(l); err == nil {
-		return nil
-	}
 	self := readSiteName(l)
 	if self == "" {
 		return fmt.Errorf("this machine does not name its site")
+	}
+	if readLocalConfig(l, self).Inactive {
+		return fmt.Errorf("this site has left the workspace; run `thrum site stay --at <host:port>` to return")
+	}
+	if _, err := daemon.Status(l); err == nil {
+		return nil
 	}
 	reach := daemon.Reach(l, self)
 	if reach == "" {
