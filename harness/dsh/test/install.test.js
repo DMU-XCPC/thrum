@@ -49,16 +49,17 @@ class FakeChild extends EventEmitter {
 function world() {
   const w = {
     woken: [],
+    logs: [],
     children: [],
     spawned: [],
     agents: new Map(),
     registered: null,
     dispose: null,
     /** Make a session that can be woken, and remember what it was told. */
-    session(sessionId, cwd = WS) {
+    session(sessionId, cwd = WS, header = {}) {
       const agent = {
         sessionId,
-        session: { id: sessionId, header: { cwd } },
+        session: { id: sessionId, header: { cwd, ...header } },
         followup(message) {
           w.woken.push({ sessionId, text: message.content[0].text, source: message.source.kind })
         },
@@ -72,7 +73,7 @@ function world() {
   }
 
   w.ctx = {
-    logger: { info: () => {} },
+    logger: { info: (message) => w.logs.push(message) },
     sessionController: {
       async resolveAgent(sessionId) {
         const agent = w.agents.get(sessionId)
@@ -93,8 +94,11 @@ function world() {
   return w
 }
 
-function mount(overrides = {}) {
+function mount(overrides = {}, injected = {}) {
   const w = world()
+  const home = mkdtempSync(join(tmpdir(), 'thrum-mailbox-'))
+  w.home = home
+  w.hellos = []
   const deps = {
     defineTool: (definition) => definition, // the real one only adds validation
     createUserMessage: ({ content, source }) => ({ id: 'm-nudge', role: 'user', content, source }),
@@ -104,8 +108,13 @@ function mount(overrides = {}) {
       w.spawned.push({ command, args, options })
       return child
     },
+    sayHello: async (options) => {
+      w.hellos.push(options)
+      return { ok: true }
+    },
+    ...injected,
   }
-  install(w.ctx, { dshHome: mkdtempSync(join(tmpdir(), 'thrum-mailbox-')), ...overrides }, deps)
+  install(w.ctx, { dshHome: home, ...overrides }, deps)
   return w
 }
 
@@ -119,6 +128,26 @@ test('a session says who it is, and a watch for that actor starts', async () => 
   assert.equal(w.spawned.length, 1)
   assert.deepEqual(w.spawned[0].args, ['--root', `${WS}`, '--actor', 'alice', 'message', 'list', '--watch', '--json'])
   assert.equal(w.spawned[0].options.env.THRUM_ACTOR, 'alice')
+
+  assert.equal(w.hellos.length, 1, 'binding says hello for the actor')
+  assert.equal(w.hellos[0].actor, 'alice')
+  assert.equal(w.hellos[0].root, `${WS}`)
+})
+
+test('a hello that fails is logged and does not stop the watch', async () => {
+  const w = mount({}, {
+    sayHello: async () => ({ ok: false, reason: 'no current thrum' }),
+  })
+  w.session('s-1')
+
+  const result = await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
+  assert.deepEqual(result, { watching: 'alice', root: `${WS}`, mailbox: `${WS}/var/msg/alice` })
+  assert.equal(w.spawned.length, 1, 'the watch still starts')
+  assert.match(w.logs.join('\n'), /could not say hello: no current thrum/)
+
+  w.children[0].say({ id: 'm-1', from: 'bob', subject: 'local mail still wakes' })
+  await settle()
+  assert.equal(w.woken.length, 1, 'the mailbox is still the truth')
 })
 
 test('a message wakes the session bound to that actor, naming the message', async () => {
@@ -189,6 +218,7 @@ test('the binding is per workspace and per actor, and a session can rebind', asy
   }
   await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-3') })
   assert.ok(oldStopped, 'rebinding should stop the watch the old session was using')
+  assert.equal(w.hellos.length, 3, 'a rebind says hello again')
 
   const rebindFeed = w.children.at(-1)
   rebindFeed.say({ id: 'm-later', from: 'bob', subject: 'later' })
@@ -205,6 +235,27 @@ test('a call with no session, and a session with no workspace, are refused with 
     () => w.registered.execute({ actor: 'alice' }, { agent: { sessionId: 's-1', session: {} } }),
     /needs a workspace/,
   )
+  assert.equal(w.hellos.length, 0)
+  assert.equal(w.spawned.length, 0)
+})
+
+test('a bad actor name and a non-workspace root are refused before hello or bind', async () => {
+  const w = mount()
+  w.session('s-1')
+
+  await assert.rejects(
+    () => w.registered.execute({ actor: 'Alice' }, { agent: w.agents.get('s-1') }),
+    /not an actor name/,
+  )
+  await assert.rejects(
+    () => w.registered.execute({ actor: 'alice', root: '/definitely/not/a/workspace' }, {
+      agent: w.agents.get('s-1'),
+    }),
+    /not a thrum workspace/,
+  )
+  assert.equal(w.hellos.length, 0)
+  assert.equal(w.spawned.length, 0)
+  assert.equal(Bindings.load(statePath(w.home)).sessionFor(WS, 'alice'), undefined)
 })
 
 test('unloading the plugin stops every watch', async () => {
@@ -238,6 +289,7 @@ test('a host that mounts with bindings recorded starts watching them again', asy
     ['alice', 'bob'],
     'and each is watched for the actor it was bound for',
   )
+  assert.equal(w.hellos.length, 0, 'mounting carries the watch back, not a new hello')
 
   // And the wake works from there, without the tool being called again in this process.
   w.children[0].say({ id: 'm-1', from: 'carol', sent: '2026-10-11T00:00:00Z', subject: 'hello' })

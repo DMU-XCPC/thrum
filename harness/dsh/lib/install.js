@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { watchMailbox } from './feed.js'
+import { sayHello as sayHelloWith } from './hello.js'
 import { Bindings, statePath } from './state.js'
 import { makeWaker } from './wake.js'
 
@@ -21,10 +22,10 @@ const key = (root, actor) => `${root}\u0000${actor}`
  *
  * @param {object} ctx - the cordis context.
  * @param {object} config - `{thrum, root, dshHome, sourceKind}`.
- * @param {object} deps - `{defineTool, createUserMessage, spawn}`.
+ * @param {object} deps - `{defineTool, createUserMessage, spawn, sayHello?}`.
  */
 export function install(ctx, config, deps) {
-  const { defineTool, createUserMessage, spawn } = deps
+  const { defineTool, createUserMessage, spawn, sayHello = sayHelloWith } = deps
   const command = config.thrum ?? 'thrum'
 
   const log = (message) => {
@@ -158,6 +159,18 @@ export function install(ctx, config, deps) {
       }
       bindings.bind(root, args.actor, sessionId)
       startFeed(root, args.actor)
+      // Start the watch before saying hello: hello can be slow or time out, and the watch
+      // must not wait for it. The mailbox's backlog covers anything that arrived meanwhile;
+      // hello only changes which site mail is pushed to from now on.
+      let hello
+      try {
+        hello = await sayHello({ spawn, command, root, actor: args.actor })
+      } catch (error) {
+        hello = { ok: false, reason: error.message }
+      }
+      if (!hello?.ok) {
+        log(`watching ${args.actor}, but could not say hello: ${hello?.reason ?? 'no answer'}`)
+      }
       return { watching: args.actor, root, mailbox: `${root}/var/msg/${args.actor}` }
     },
   })

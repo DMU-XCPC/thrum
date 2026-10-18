@@ -71,6 +71,11 @@ rather than a missing message.
 
 - `thrum` missing, or the watch process dying: log it, and let the tool's next call start a
   new one. The backlog is printed again on start, so nothing that arrived meanwhile is lost.
+- `thrum actor hello` failing, timing out, or not acknowledging (`<actor> is here`): log it
+  and start the watch anyway. The mailbox is still the truth; until hello succeeds, mail is
+  only pushed to the actor's last known site. An older `thrum` that exits 0 while printing
+  `actor` help is reported as a hello that was not acknowledged, so the configured `thrum`
+  must be the current CLI.
 - The bound session being gone, busy, or unwritable: log it. The message stays where it is.
 - A message that has already been announced is not announced again. The set of announced ids
   is kept next to the binding, capped, and pruned — a message id is unique forever, so the
@@ -137,6 +142,11 @@ nothing else. There is no wake without a session to wake.
 Mount it where the sessions live (a profile's bundle or `cordis.patch.yml`), not per agent:
 it holds the bindings for every actor on this host, and the tool it registers is what ties a
 session to one of them.
+
+The `thrum` named by `config.thrum`, or found on PATH, must be the current CLI: binding runs
+`thrum actor hello`, and an older binary can exit 0 while printing `actor` help. The plugin
+logs that as an unacknowledged hello and keeps watching; it does not fall back to an older
+spelling. Point the row at the current binary when PATH has an old one.
 
 ## What a restart does
 

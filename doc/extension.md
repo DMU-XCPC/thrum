@@ -12,7 +12,7 @@ the delivery path: **the mailbox is the truth; the stream is a hint.**
 | Interface | What it gives | State |
 | --- | --- | --- |
 | `thrum events --json` (and `--watch`) | one JSON event per line: a message delivered, a job's state changed, a shared history moved | design; the current CLI has it only as the hidden `daemon events` |
-| `thrum message list --watch --json` | the mailbox's backlog first, then one JSON message per line as it arrives | design; the current `message list --json` has no `--watch` |
+| `thrum message list --watch --json` | the mailbox's backlog first, then one JSON message per line as it arrives | current |
 | `--json` on the read commands | the machine-readable form | current |
 | the mailbox (`var/msg/<actor>/<id>.md`, `<id>/` for attachments) | the truth | current; a plugin never writes it |
 
@@ -36,6 +36,8 @@ remembered, capped and pruned; a repeated nudge is the only cost of forgetting a
 ## Failure and state
 
 - The stream can die; the plugin restarts it with a backoff and prints the backlog on start.
+- A failed `actor hello` is logged, not fatal: the mailbox is still the truth and the watch
+  still starts. Until it succeeds, mail is only pushed to the actor's last known site.
 - A missed event is never a lost message; the mailbox is the source.
 - The daemon stops itself when no neighbour answers and starts again on the next command; the
   stream's reconnect covers it.
