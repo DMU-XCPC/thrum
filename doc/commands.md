@@ -40,8 +40,9 @@ changes.
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
 | `thrum site invite <name> --at <host:port>` | Writes the new roster entry and prints a token that names the workspace, this site and its daemon, and the new site's address. | One event. The token is one-time, and it is the only secret that has to move by hand; this site's own reach has to be set first. |
-| `thrum site list`, `thrum site show <name>` | The roster, and what each site is and where it is. | Reads only. |
+| `thrum site list`, `thrum site show <name>` | The roster, and what each site is, where it is, and its next hop. | Reads only; the next hop comes from the daemon's learned `var/routes.yaml`. |
 | `thrum site reach <name> --at <host:port>` | Overrides where a peer listens. | Site-local, never committed; it wins over the roster's declared address. The inviter's is written by the join and this site's by `create --at`. The host may be a name; it is resolved at each dial. |
+| `thrum site routes` | The route table this daemon learned: each site, its next hop and its distance. | Reads `var/routes.yaml`, a hint that is never committed. A direct edge is one hop, then the fewest hops; a route expires when the neighbour stops answering. |
 | `thrum site doctor` | For each peer: declared, addressed, key known, last answered, protocol understood. | Reads only, and useful precisely when something is unreachable. |
 | `thrum site key rotate`, `thrum site key revoke` | Replaces a site's key, or withdraws it. | One event. A rotated key is proved by the previous one until the line carrying the new one reaches a peer; a revoked key is refused by every peer. |
 | `thrum site forget <name>` | Removes a site from the roster. | Refused while it is the last site, or while a job is materialised there; reports what it cannot clean up. |
@@ -76,7 +77,7 @@ decision and nothing else should make one as a side effect.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum message send <to> [--subject <text>] [--body <file>\|-] [--attach <file>] [--job <id>] [--reply-to <id>] [--wait <dur>]` | Places the name and pushes the message to the site that takes it. | Refuses a name nobody has declared, and a site that cannot be reached. **The sender never queues**: `--wait` is a bound the caller chose, not a lifetime the fabric invented. |
+| `thrum message send <to> [--subject <text>] [--body <file>\|-] [--attach <file>] [--job <id>] [--reply-to <id>] [--wait <dur>]` | Places the name, then hands the message to this site's daemon: a direct peer gets it pushed, a farther one gets it forwarded through the next hop. | Refuses a name nobody has declared, and a site with no route. **The sender never queues**, and a relay holds nothing durable: `--wait` is a bound the caller chose, not a lifetime the fabric invented. |
 | `thrum message list [--watch]`, `thrum message read <id>` | Reads this actor's mailbox at the site holding it, reached through the fabric. | Reads only. `--watch` keeps reporting arrivals, and prints the backlog before it starts. |
 | `thrum message reply <id>` | Sends a message whose `reply_to` names the one answered. | A message is never retracted or edited; a correction is another message. |
 | `thrum message purge <id>` | Removes a message and its attachments. | Manual on purpose: nothing collects messages, because nothing can know which still matter. |
@@ -131,7 +132,7 @@ decision and nothing else should make one as a side effect.
 
 | Command | Does | Refuses, or guarantees |
 | --- | --- | --- |
-| `thrum daemon run` | Runs this site's daemon in the foreground, listening on the site's reach unless `--listen` says otherwise. | One per site: a second refuses to start. Starting needs no network; `--listen 0.0.0.0:<port>` keeps the listener independent of the machine's address. |
+| `thrum daemon run [--listen <host:port>] [--route-interval <dur>]` | Runs this site's daemon in the foreground, listening on the site's reach unless `--listen` says otherwise; `--route-interval` sets how often it asks the reachable peers for routes. | One per site: a second refuses to start. Starting needs no network; `--listen 0.0.0.0:<port>` keeps the listener independent of the machine's address. |
 | `thrum daemon status` | Whether it is up, what it is, and what it holds. | Reads only; works by asking the socket, and its absence is an answer too. |
 | `thrum daemon stop` | Stops it. | Restarting loses nothing durable: the roster, the mail and the shared histories are files. |
 

@@ -352,6 +352,70 @@ func TestPartialConnectivity(t *testing.T) {
 			}
 		}
 	}
+	// Routing: each direction is two hops through B.
+	waitForRoute(t, a, "s3", "s2")
+	waitForRoute(t, c, "s1", "s2")
+	a.r().as("a1").run("actor", "hello").ok(t, "a hello")
+	b.r().as("b1").run("actor", "hello").ok(t, "b hello")
+	c.r().as("c1").run("actor", "hello").ok(t, "c hello")
+	sent := strings.TrimSpace(a.r().as("a1").run("message", "send", "c1", "--subject", "hello c").ok(t, "a to c").stdout)
+	if out := c.r().as("c1").run("message", "list").ok(t, "c list").stdout; !strings.Contains(out, "hello c") {
+		t.Fatalf("the two-hop message did not arrive:\n%s", out)
+	}
+	c.r().as("c1").run("message", "reply", sent).ok(t, "c replies")
+	if out := a.r().as("a1").run("message", "list").ok(t, "a list").stdout; !strings.Contains(out, "re: hello c") {
+		t.Fatalf("the two-hop reply did not arrive:\n%s", out)
+	}
+
+	// The relay goes away: the route expires, the send says so, and it works again
+	// when the relay returns.
+	b.r().run("daemon", "stop").ok(t, "stop b")
+	waitRouteGone(t, a, "s3")
+	a.r().as("a1").run("message", "send", "c1", "--subject", "lost").fails(t, "a to c lost", "no route")
+	startDaemon(t, b, pb)
+	waitForRoute(t, a, "s3", "s2")
+	a.r().as("a1").run("message", "send", "c1", "--subject", "back").ok(t, "a to c again")
+	if out := c.r().as("c1").run("message", "list").ok(t, "c list again").stdout; !strings.Contains(out, "back") {
+		t.Fatalf("the message after the relay returned did not arrive:\n%s", out)
+	}
+
 	a.r().run("verify").ok(t, "verify a")
 	c.r().run("verify").ok(t, "verify c")
+}
+
+func routesOf(t *testing.T, w *workspace) map[string]string {
+	t.Helper()
+	out := w.r().run("site", "routes").ok(t, "site routes").stdout
+	m := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 3 && f[1] == "via" {
+			m[f[0]] = f[2]
+		}
+	}
+	return m
+}
+
+func waitForRoute(t *testing.T, w *workspace, site, next string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if routesOf(t, w)[site] == next {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("no route %s via %s at %s", site, next, w.root)
+}
+
+func waitRouteGone(t *testing.T, w *workspace, site string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if routesOf(t, w)[site] == "" {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("the route to %s did not expire at %s", site, w.root)
 }

@@ -63,20 +63,27 @@ type greeting struct {
 }
 
 type server struct {
-	l         layout.Layout
-	site      string
-	roster    map[string]records.Site
-	workspace string
-	stop      chan struct{}
-	once      sync.Once
+	l          layout.Layout
+	site       string
+	roster     map[string]records.Site
+	workspace  string
+	stop       chan struct{}
+	once       sync.Once
+	routes     map[string]route
+	routesMu   sync.RWMutex
+	routeEvery time.Duration
 }
 
 // Run listens until it is stopped. The TCP listener serves peers; the unix socket
 // serves this machine's commands.
-func Run(l layout.Layout, listen string) error {
+func Run(l layout.Layout, listen string, routeEvery time.Duration) error {
 	s, err := newServer(l)
 	if err != nil {
 		return err
+	}
+	s.routeEvery = routeEvery
+	if s.routeEvery <= 0 {
+		s.routeEvery = 5 * time.Second
 	}
 	if err := os.MkdirAll(l.Var(), 0o755); err != nil {
 		return err
@@ -129,6 +136,7 @@ func Run(l layout.Layout, listen string) error {
 	fmt.Printf("listening on %s\n", tcp.Addr())
 	go s.accept(unix, false)
 	go s.accept(tcp, true)
+	go s.router()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -181,7 +189,7 @@ func newServer(l layout.Layout) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &server{l: l, site: site, roster: roster, workspace: ws, stop: make(chan struct{})}, nil
+	return &server{l: l, site: site, roster: roster, workspace: ws, stop: make(chan struct{}), routes: map[string]route{}}, nil
 }
 
 func (s *server) accept(ln net.Listener, remote bool) {
@@ -347,6 +355,18 @@ type pushArgs struct {
 	Files   map[string]string `json:"files,omitempty"`
 }
 
+// forwardArgs carries a message one hop. Seen is the sites it has already passed
+// through, Hops counts them; the id in Message is what makes a retry idempotent.
+type forwardArgs struct {
+	To      string            `json:"to"`
+	Message records.Message   `json:"message"`
+	Body    string            `json:"body,omitempty"`
+	Files   map[string]string `json:"files,omitempty"`
+	From    string            `json:"from,omitempty"`
+	Seen    []string          `json:"seen,omitempty"`
+	Hops    int               `json:"hops,omitempty"`
+}
+
 func (s *server) dispatch(req Request, remote bool, caller string) Response {
 	switch req.Verb {
 	case "store.published":
@@ -444,33 +464,94 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 		if err := json.Unmarshal(req.Args, &args); err != nil {
 			return fail(err)
 		}
-		if place, ok := actors.Places(s.l).Actors[args.Message.To]; ok && place.Site != "" && place.Site != s.site {
-			data, _ := json.Marshal(map[string]string{"site": place.Site})
-			return Response{
-				Code:  "not_here",
-				Error: fmt.Sprintf("%s is at %s, not here", args.Message.To, place.Site),
-				Data:  data,
+		return s.pushMessage(args)
+	case "msg.forward":
+		var args forwardArgs
+		if err := json.Unmarshal(req.Args, &args); err != nil {
+			return fail(err)
+		}
+		if args.To == "" || args.Message.ID == "" {
+			return fail(errors.New("a forward needs a destination and a message id"))
+		}
+		// A relay that sees itself in the path is a loop; the destination's own
+		// delivery is not.
+		if remote && args.To != s.site {
+			for _, seen := range args.Seen {
+				if seen == s.site {
+					return fail(fmt.Errorf("the message for %s looped back to %s", args.Message.To, s.site))
+				}
 			}
 		}
-		body, err := base64.StdEncoding.DecodeString(args.Body)
+		if args.Hops > len(rosterOf(s.l))+1 {
+			return fail(fmt.Errorf("the message for %s exceeded the hop limit", args.Message.To))
+		}
+		if args.To == s.site {
+			return s.pushMessage(pushArgs{Message: args.Message, Body: args.Body, Files: args.Files})
+		}
+		r, ok := s.routeFor(args.To)
+		if !ok {
+			return fail(fmt.Errorf("no route to %s", args.To))
+		}
+		if r.NextHop == args.To {
+			body, err := base64.StdEncoding.DecodeString(args.Body)
+			if err != nil {
+				return fail(err)
+			}
+			files := map[string][]byte{}
+			for name, encoded := range args.Files {
+				data, err := base64.StdEncoding.DecodeString(encoded)
+				if err != nil {
+					return fail(fmt.Errorf("attachment %s: %w", name, err))
+				}
+				files[name] = data
+			}
+			err = Push(s.l, args.To, args.Message, body, files)
+			if err == nil {
+				return payload(map[string]string{"id": args.Message.ID})
+			}
+			var nh *NotHere
+			if errors.As(err, &nh) && nh.Site != "" {
+				data, _ := json.Marshal(map[string]string{"site": nh.Site})
+				return Response{Code: "not_here", Error: err.Error(), Data: data}
+			}
+			return fail(err)
+		}
+		if !hasSite(args.Seen, s.site) {
+			args.Seen = append(args.Seen, s.site)
+		}
+		args.Hops++
+		c, err := Dial(s.l, r.NextHop)
 		if err != nil {
 			return fail(err)
 		}
-		files := map[string][]byte{}
-		for name, encoded := range args.Files {
-			data, err := base64.StdEncoding.DecodeString(encoded)
-			if err != nil {
-				return fail(fmt.Errorf("attachment %s: %w", name, err))
-			}
-			files[name] = data
+		defer c.Close()
+		data, err := json.Marshal(args)
+		if err != nil {
+			return fail(err)
 		}
-		if err := messages.Send(s.l, args.Message, body, files); err != nil {
-			if errors.Is(err, messages.ErrExists) {
-				return payload(map[string]any{"id": args.Message.ID, "duplicate": true})
+		resp, err := c.Do(Request{Verb: "msg.forward", Args: data})
+		if err != nil {
+			if resp.Code != "" {
+				return resp
 			}
 			return fail(err)
 		}
-		return payload(map[string]string{"id": args.Message.ID})
+		return resp
+	case "site.routes":
+		s.routesMu.RLock()
+		out := make(map[string]route, len(s.routes))
+		for k, v := range s.routes {
+			out[k] = v
+		}
+		s.routesMu.RUnlock()
+		if remote {
+			sites := map[string]int{}
+			for k, v := range out {
+				sites[k] = v.Hops
+			}
+			return payload(map[string]any{"sites": sites})
+		}
+		return payload(map[string]any{"routes": out})
 	case "stop":
 		if remote {
 			return fail(fmt.Errorf("stop is local only"))
@@ -480,6 +561,132 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 	default:
 		return fail(fmt.Errorf("unknown verb %q", req.Verb))
 	}
+}
+
+// pushMessage hands a message to this site's mailbox, refusing it when the actor has
+// moved. It is the destination end of both msg.push and a relayed msg.forward.
+func (s *server) pushMessage(args pushArgs) Response {
+	if place, ok := actors.Places(s.l).Actors[args.Message.To]; ok && place.Site != "" && place.Site != s.site {
+		data, _ := json.Marshal(map[string]string{"site": place.Site})
+		return Response{
+			Code:  "not_here",
+			Error: fmt.Sprintf("%s is at %s, not here", args.Message.To, place.Site),
+			Data:  data,
+		}
+	}
+	body, err := base64.StdEncoding.DecodeString(args.Body)
+	if err != nil {
+		return fail(err)
+	}
+	files := map[string][]byte{}
+	for name, encoded := range args.Files {
+		data, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return fail(fmt.Errorf("attachment %s: %w", name, err))
+		}
+		files[name] = data
+	}
+	if err := messages.Send(s.l, args.Message, body, files); err != nil {
+		if errors.Is(err, messages.ErrExists) {
+			return payload(map[string]any{"id": args.Message.ID, "duplicate": true})
+		}
+		return fail(err)
+	}
+	return payload(map[string]string{"id": args.Message.ID})
+}
+
+type route struct {
+	NextHop string `json:"next_hop" yaml:"next_hop"`
+	Hops    int    `json:"hops" yaml:"hops"`
+}
+
+func (s *server) router() {
+	t := time.NewTicker(s.routeEvery)
+	defer t.Stop()
+	s.pollRoutes()
+	for {
+		select {
+		case <-s.stop:
+			return
+		case <-t.C:
+			s.pollRoutes()
+		}
+	}
+}
+
+// pollRoutes asks every directly reachable peer for its own reachable set, keeps
+// the direct edges at one hop, and takes the shortest route through a neighbour.
+func (s *server) pollRoutes() {
+	peers := rosterOf(s.l)
+	best := map[string]route{}
+	sets := map[string]map[string]int{}
+	for name := range peers {
+		if name == s.site || peers[name].Key == "" || reachFor(s.l, name, peers) == "" {
+			continue
+		}
+		c, err := dial(s.l, name, true)
+		if err != nil {
+			continue
+		}
+		resp, err := c.Do(Request{Verb: "site.routes"})
+		_ = c.Close()
+		if err != nil || !resp.OK {
+			continue
+		}
+		var d struct {
+			Sites map[string]int `json:"sites"`
+		}
+		if json.Unmarshal(resp.Data, &d) != nil {
+			continue
+		}
+		best[name] = route{NextHop: name, Hops: 1}
+		sets[name] = d.Sites
+	}
+	for peer, set := range sets {
+		for dest, hops := range set {
+			if dest == s.site || dest == peer {
+				continue
+			}
+			consider(best, dest, route{NextHop: peer, Hops: hops + 1})
+		}
+	}
+	s.setRoutes(best)
+}
+
+func consider(m map[string]route, site string, r route) {
+	cur, ok := m[site]
+	if !ok || r.Hops < cur.Hops || (r.Hops == cur.Hops && r.NextHop < cur.NextHop) {
+		m[site] = r
+	}
+}
+
+func (s *server) setRoutes(routes map[string]route) {
+	s.routesMu.Lock()
+	s.routes = routes
+	s.routesMu.Unlock()
+	data, err := format.MarshalYAML(struct {
+		Sites map[string]route `yaml:"sites"`
+	}{Sites: routes})
+	if err != nil {
+		return
+	}
+	_ = format.WriteFileAtomic(filepath.Join(s.l.Var(), "routes.yaml"), data)
+}
+
+func (s *server) routeFor(site string) (route, bool) {
+	s.routesMu.RLock()
+	defer s.routesMu.RUnlock()
+	r, ok := s.routes[site]
+	return r, ok
+}
+
+func hasSite(list []string, site string) bool {
+	for _, s := range list {
+		if s == site {
+			return true
+		}
+	}
+	return false
 }
 
 // broadcastPlace tells the peers where a name just said hello. It is best effort:

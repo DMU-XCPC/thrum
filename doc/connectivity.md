@@ -1,8 +1,10 @@
 # Partial connectivity and local discovery
 
-Status: Phase 1 (the histories over a connected graph) is implemented: the per-peer
-best-effort sync, the store's live-tag offer, and the A—B—C test. Phases 2–4 remain. The
-authority is still `thrum.md`; fold the rest in as it lands.
+Status: Phases 1–2 are implemented. Phase 1: the per-peer best-effort sync, the store's
+live-tag offer, the A—B—C history test. Phase 2: `site.routes`, the site-local route table
+(direct edge, then fewest hops, expiry), `msg.forward` with the seen-site set and the hop
+bound, routed placement, `site routes`, and the A—B—C message and relay-down tests. Phases 3–4
+remain.
 
 ## 1. Requirements
 

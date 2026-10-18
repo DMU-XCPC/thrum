@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -209,7 +210,7 @@ func sendMessage(l layout.Layout, to, subject string, body []byte, files map[str
 				return msg.ID, nil
 			}
 		} else {
-			err = daemon.Push(l, site, msg, body, files)
+			err = forward(l, site, msg, body, files)
 			if err == nil {
 				return msg.ID, nil
 			}
@@ -227,6 +228,45 @@ func sendMessage(l layout.Layout, to, subject string, body []byte, files map[str
 		}
 		return "", err
 	}
+}
+
+// forward hands a message to this site's daemon, which chooses the direct edge or
+// the next hop. The daemon owns the route table; the CLI never picks a via.
+func forward(l layout.Layout, site string, msg records.Message, body []byte, files map[string][]byte) error {
+	encoded := map[string]string{}
+	for name, data := range files {
+		encoded[filepath.Base(name)] = base64.StdEncoding.EncodeToString(data)
+	}
+	args, err := json.Marshal(struct {
+		To      string            `json:"to"`
+		Message records.Message   `json:"message"`
+		Body    string            `json:"body,omitempty"`
+		Files   map[string]string `json:"files,omitempty"`
+		From    string            `json:"from,omitempty"`
+		Seen    []string          `json:"seen,omitempty"`
+		Hops    int               `json:"hops,omitempty"`
+	}{
+		To: site, Message: msg,
+		Body: base64.StdEncoding.EncodeToString(body), Files: encoded,
+		From: actors.Site(l),
+	})
+	if err != nil {
+		return err
+	}
+	_, err = daemon.LocalDo(l, daemon.Request{Verb: "msg.forward", Args: args})
+	if err == nil {
+		return nil
+	}
+	var refusal *daemon.Refusal
+	if errors.As(err, &refusal) && refusal.Code == "not_here" {
+		var d struct {
+			Site string `json:"site"`
+		}
+		if json.Unmarshal(refusal.Data, &d) == nil && d.Site != "" {
+			return &daemon.NotHere{Site: d.Site}
+		}
+	}
+	return err
 }
 
 // askPlace asks this site's daemon, which asks the peers.

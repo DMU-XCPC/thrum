@@ -96,8 +96,10 @@ reader knows what to expect; it changes nothing about what is permitted.
 
 ## Finding an actor
 
-To place a name, a daemon looks at what it knows, then asks its peers. The answer is the last
-site that took mail for the name, or, if it has never said hello, the `home` in its standing.
+To place a name, a daemon looks at what it knows, then asks its reachable neighbours. A
+neighbour answers from its own table and does not ask further, so the question cannot loop. The
+answer is the last site that took mail for the name, or, if it has never said hello, the `home`
+in its standing.
 The answer is cached; it is corrected by `actor hello` and by a delivery that finds the actor
 has moved.
 
@@ -128,9 +130,24 @@ attachments: [coverage.html]     # optional
 The flaky case is fixed; `make test-upload` is green.
 ```
 
-**Push, to the actor's place.** The sender's daemon resolves `to`, opens a connection to that
-site's daemon, and hands the message over. The receiving daemon writes it into the mailbox,
-where it stays until it is read or purged. The sender keeps nothing.
+**Route, to the actor's place.** The sender's daemon resolves `to` and hands the message to
+the site that takes it: a direct peer gets a push over the site-authenticated channel, a
+farther one gets the message forwarded through the next hop (`msg.forward`), and the relay
+pushes it on or forwards it again. The receiving daemon writes it into the mailbox, where it
+stays until it is read or purged. The sender keeps nothing.
+
+Each daemon keeps a route table. A direct edge is one hop; a route through a neighbour is that
+neighbour's distance plus one. The direct edge wins a tie, then the fewest hops, then the
+site's name. The table is learned by asking the reachable peers (`site.routes`) on an interval,
+is site-local (`var/routes`), and is never committed. A route expires when the neighbour stops
+answering, so a relay going away is a route that disappears, not a stale address kept forever.
+
+A forward carries the destination site, the message, the sites it has already passed through,
+and a hop count. The message id makes a retry idempotent; the passed-through set and the hop
+bound stop a loop. The relay holds the message only for the call: there is no durable queue,
+and a destination that stays down makes the send fail, exactly as a direct send does. The
+network and the sites are trusted, and the destination authenticates the last hop rather than
+the original sender, so a relay can read what it carries.
 
 - **The sender never queues.** A message is placed or it is not sent. If no site is known for
   the name, or the site that would take it cannot be reached, the send fails and says which of
@@ -261,8 +278,9 @@ requests. The handshake carries the workspace, the site, the protocol range, and
 caller answers; a mismatch is refused clearly, which is a small cost now and the thing that
 makes a mixed-version fleet debuggable later.
 
-The verbs are named `noun.verb` throughout — `site.hello`, `actor.where`, `actor.hello`,
-`msg.push`, `history.exchange`, `store.published`, `git.serve` and `stop` — because the
+The verbs are named `noun.verb` throughout — `site.hello`, `site.routes`, `actor.where`,
+`actor.hello`, `msg.push`, `msg.forward`, `history.exchange`, `store.published`, `git.serve`
+and `stop` — because the
 previous design's half-and-half naming was a regret, and a wire is the wrong place to discover
 that. `history.exchange` is local only: it is this machine asking its own daemon to sync.
 `git.serve` is the daemon's internal payload, never a remote a repository names.
@@ -271,7 +289,8 @@ that. `history.exchange` is local only: it is this machine asking its own daemon
 
 | What is down | What stops | What continues |
 | --- | --- | --- |
-| a peer | messages to actors there; its direct history exchange | everything local, and every other peer; its records reach the others through them |
+| a peer | messages to actors there, if no route leads another way; its direct history exchange | everything local, every other peer, and any route through a neighbour; its records reach the others through the remaining graph |
+| a relay | the routes through it, after the table expires | messages take another route or fail; the histories still gossip through the rest of the graph |
 | the line's sequencer, if one is declared | recording durable events | reading, working, messages, and this site's own commits |
 | a daemon | messages, placement and `sync` at that site | its files, and the command line's local operations |
 
@@ -291,6 +310,10 @@ and the version number stays taken.
 
 An attachment travels base64 inside the JSON protocol. Ten megabytes is the tested bound; a
 hundred is not promised. `site invite` has no capacity in this version.
+
+A route is a hint. It is learned from neighbours and never committed; a stale route costs one
+failed send and a retry, never a wrong record. The sites and the network are trusted, so a
+relay may read or forge what it forwards, as any site may write the line.
 
 The daemon transport is a git `ext::` command built in memory: the workspace and binary paths
 are carried as written, so a path with a space cannot be carried; the daemon refuses such a

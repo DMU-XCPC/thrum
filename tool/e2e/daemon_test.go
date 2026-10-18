@@ -21,7 +21,7 @@ type daemonProc struct {
 // startDaemon runs a site's daemon and waits until its local socket answers.
 func startDaemon(t *testing.T, w *workspace, listen string) *daemonProc {
 	t.Helper()
-	cmd := exec.Command(thrumBin, "--root", w.root, "daemon", "run", "--listen", listen)
+	cmd := exec.Command(thrumBin, "--root", w.root, "daemon", "run", "--listen", listen, "--route-interval", "200ms")
 	cmd.Env = envWith("THRUM_ROOT="+w.root, "THRUM_ACTOR=a1")
 	var out bytes.Buffer
 	cmd.Stdout = &out

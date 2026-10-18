@@ -18,10 +18,32 @@ import (
 )
 
 type siteView struct {
-	Site  string `json:"site"`
-	Key   string `json:"key"`
-	Reach string `json:"reach,omitempty"`
-	Local string `json:"local_reach,omitempty"`
+	Site    string `json:"site"`
+	Key     string `json:"key"`
+	Reach   string `json:"reach,omitempty"`
+	Local   string `json:"local_reach,omitempty"`
+	NextHop string `json:"next_hop,omitempty"`
+	Hops    int    `json:"hops,omitempty"`
+}
+
+type routeView struct {
+	NextHop string `json:"next_hop" yaml:"next_hop"`
+	Hops    int    `json:"hops" yaml:"hops"`
+}
+
+// readRoutes reads the daemon's learned table; it is a hint, not state that syncs.
+func readRoutes(l layout.Layout) map[string]routeView {
+	data, err := os.ReadFile(filepath.Join(l.Var(), "routes.yaml"))
+	if err != nil {
+		return nil
+	}
+	var d struct {
+		Sites map[string]routeView `yaml:"sites"`
+	}
+	if format.DecodeWhole(data, &d) != nil {
+		return nil
+	}
+	return d.Sites
 }
 
 func newSiteCmd() *cobra.Command {
@@ -144,7 +166,11 @@ func newSiteCmd() *cobra.Command {
 				if addr == "" {
 					addr = "no reach"
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-20s %s\n", v.Site, shortKey(v.Key), addr)
+				via := ""
+				if v.NextHop != "" {
+					via = fmt.Sprintf("via %s (%d)", v.NextHop, v.Hops)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-20s %-22s %s\n", v.Site, shortKey(v.Key), addr, via)
 			}
 			return nil
 		},
@@ -165,11 +191,40 @@ func newSiteCmd() *cobra.Command {
 				return fmt.Errorf("no site named %q", args[0])
 			}
 			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site)}
+			if r, ok := readRoutes(l)[s.Site]; ok {
+				v.NextHop, v.Hops = r.NextHop, r.Hops
+			}
 			if jsonFlag {
 				return printJSON(cmd, v)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "site   %s\nkey    %s\nreach  %s\nlocal  %s\n",
 				v.Site, v.Key, orNone(v.Reach), orNone(v.Local))
+			if v.NextHop != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "next   %s (%d hop(s))\n", v.NextHop, v.Hops)
+			}
+			return nil
+		},
+	}
+
+	routes := &cobra.Command{
+		Use:   "routes",
+		Short: "This machine's route table, as the daemon learned it",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := workspaceRoot()
+			table := readRoutes(l)
+			if jsonFlag {
+				return printJSON(cmd, table)
+			}
+			names := make([]string, 0, len(table))
+			for name := range table {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				r := table[name]
+				fmt.Fprintf(cmd.OutOrStdout(), "%-16s via %-16s %d hop(s)\n", name, r.NextHop, r.Hops)
+			}
 			return nil
 		},
 	}
@@ -210,7 +265,7 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(reach, list, show, doctor, invite, newSiteKeyCmd(), newSiteForgetCmd())
+	cmd.AddCommand(reach, list, show, routes, doctor, invite, newSiteKeyCmd(), newSiteForgetCmd())
 	return cmd
 }
 
@@ -222,6 +277,7 @@ func siteViews(l layout.Layout) ([]siteView, error) {
 	if err != nil {
 		return nil, err
 	}
+	routes := readRoutes(l)
 	var out []siteView
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
@@ -233,7 +289,11 @@ func siteViews(l layout.Layout) ([]siteView, error) {
 			return nil, err
 		}
 		if ok {
-			out = append(out, siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site)})
+			v := siteView{Site: s.Site, Key: s.Key, Reach: s.Reach, Local: localReach(l, s.Site)}
+			if r, ok := routes[s.Site]; ok {
+				v.NextHop, v.Hops = r.NextHop, r.Hops
+			}
+			out = append(out, v)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Site < out[j].Site })

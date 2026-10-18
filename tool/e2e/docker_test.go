@@ -77,7 +77,7 @@ func TestDockerMultiSite(t *testing.T) {
 	thrumIn(t, siteA, "thrum", "--root", "/w", "--actor", "a1", "actor", "declare", "a1", "--kind", "agent")
 	thrumIn(t, siteA, "thrum", "--root", "/w", "site", "reach", "s1", "--at", siteA+":7701")
 	dockerOK(t, "exec", "-d", siteA, "sh", "-c",
-		"thrum --root /w daemon run --listen 0.0.0.0:7701 >/tmp/daemon.log 2>&1")
+		"thrum --root /w daemon run --listen 0.0.0.0:7701 --route-interval 1s >/tmp/daemon.log 2>&1")
 	waitFor(t, 10*time.Second, "site one's daemon", func() bool {
 		_, err := dockerTry("exec", siteA, "thrum", "--root", "/w", "daemon", "status")
 		return err == nil
@@ -98,7 +98,7 @@ func TestDockerMultiSite(t *testing.T) {
 		t.Fatalf("site one did not learn site two's key: %s", keyed)
 	}
 	dockerOK(t, "exec", "-d", siteB, "sh", "-c",
-		"thrum --root /w daemon run --listen 0.0.0.0:7702 >/tmp/daemon.log 2>&1")
+		"thrum --root /w daemon run --listen 0.0.0.0:7702 --route-interval 1s >/tmp/daemon.log 2>&1")
 	waitFor(t, 10*time.Second, "site two's daemon", func() bool {
 		_, err := dockerTry("exec", siteB, "thrum", "--root", "/w", "daemon", "status")
 		return err == nil
@@ -224,7 +224,7 @@ func TestDockerMultiSite(t *testing.T) {
 	// lock from the process the restart killed must not stop it.
 	dockerOK(t, "restart", siteB)
 	dockerOK(t, "exec", "-d", siteB, "sh", "-c",
-		"thrum --root /w daemon run --listen 0.0.0.0:7702 >/tmp/daemon.log 2>&1")
+		"thrum --root /w daemon run --listen 0.0.0.0:7702 --route-interval 1s >/tmp/daemon.log 2>&1")
 	waitFor(t, 10*time.Second, "the restarted daemon", func() bool {
 		_, err := dockerTry("exec", siteB, "thrum", "--root", "/w", "daemon", "status")
 		return err == nil
