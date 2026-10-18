@@ -63,6 +63,11 @@ Calling it says hello for the actor (`thrum actor hello`), so the fabric knows w
 subscribes to `thrum message list --watch --json` for that name. Calling it twice rebinds, which is what a session that
 switched jobs wants.
 
+The session must be an ordinary one. A subagent session's delivery belongs to DSH's subagent
+routing, and `sessionController` refuses to resolve it for a follow-up; the tool refuses the
+call at bind with that reason instead of promising a wake it cannot deliver. The actor must
+already be declared: the tool says hello, and hello refuses an undeclared name.
+
 ## What it does when something goes wrong
 
 **Nothing here may lose a message, and nothing here may stop work.** The mailbox is the

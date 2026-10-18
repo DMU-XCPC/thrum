@@ -258,6 +258,19 @@ test('a bad actor name and a non-workspace root are refused before hello or bind
   assert.equal(Bindings.load(statePath(w.home)).sessionFor(WS, 'alice'), undefined)
 })
 
+test('a subagent session is refused before anything is bound or watched', async () => {
+  const w = mount()
+  w.session('s-child', `${WS}`, { origin: 'subagent', parentSession: 's-parent' })
+
+  await assert.rejects(
+    () => w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-child') }),
+    /only binds an ordinary session/,
+  )
+  assert.equal(w.hellos.length, 0)
+  assert.equal(w.spawned.length, 0)
+  assert.equal(Bindings.load(statePath(w.home)).sessionFor(WS, 'alice'), undefined)
+})
+
 test('unloading the plugin stops every watch', async () => {
   const w = mount()
   w.session('s-1')

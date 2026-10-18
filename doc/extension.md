@@ -27,6 +27,10 @@ and subscribes for that actor. **The workspace does not name the tool and no con
 it**: the session finds it in the harness's tool list, and only the harness knows what it
 installed.
 
+The tool binds a session the harness can wake. A child session whose delivery belongs to the
+harness's own subagent routing is not one: the harness owns that delivery, so the tool refuses
+it at bind rather than promising a wake it cannot deliver.
+
 ## The wake
 
 The nudge names the messages and their ids; the body arrives through `message read`. DSH's

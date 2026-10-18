@@ -103,7 +103,8 @@ export function install(ctx, config, deps) {
     description:
       'Have this session woken when the actor it works as receives a message in a thrum ' +
       'workspace. Call it once, before you start working, with the same actor name you set ' +
-      'in THRUM_ACTOR. Messages arrive as ordinary turns; this call only arranges that.',
+      'in THRUM_ACTOR. Messages arrive as ordinary turns; this call only arranges that. ' +
+      'Only an ordinary session can be bound: a subagent session belongs to the harness.',
     parameters: {
       actor: {
         type: 'string',
@@ -138,16 +139,25 @@ export function install(ctx, config, deps) {
       if (!sessionId) {
         throw new Error('thrum_watch needs the session it was called from, and the call carried none')
       }
+      // A subagent session belongs to DSH's subagent routing. sessionController refuses to
+      // resolve it for a follow-up, so this tool cannot wake it: refusing at bind is what
+      // keeps "you will be woken" from being a promise nothing can keep.
+      if (agent?.session?.header?.origin === 'subagent') {
+        throw new Error(
+          'thrum_watch only binds an ordinary session: this session is a subagent, and DSH ' +
+            'owns its delivery. Call thrum_watch from the session that should be woken.',
+        )
+      }
       const root = args.root ?? config.root ?? agent?.session?.header?.cwd
       if (!root) {
         throw new Error(
           'thrum_watch needs a workspace: pass root, configure one, or start the session in the workspace',
         )
       }
-      // The tool promises a wake, so the two things that would make one impossible are
-      // refused here rather than logged later: a name thrum would never accept, and a
-      // root that is not a workspace. "You will be woken" when nothing can arrive is the
-      // one lie this tool must not tell.
+      // The tool promises a wake, so what would make one impossible is refused here rather
+      // than logged later: a session DSH will not resolve for a follow-up, a name thrum
+      // would never accept, and a root that is not a workspace. "You will be woken" when
+      // nothing can arrive is the one lie this tool must not tell.
       if (!isSlug(args.actor)) {
         throw new Error(
           `${JSON.stringify(args.actor)} is not an actor name: an actor name is a slug, ` +
