@@ -49,12 +49,16 @@ test('a watch runs one process per workspace and says which actors it watches', 
   const { spawn, calls, children } = fakeSpawn()
   const watch = watchWorkspace({ spawn, command: 'thrum', root: '/ws', onMessage: () => {} })
   watch.watch('alice')
-  watch.stop()
 
   assert.equal(calls.length, 1)
   assert.equal(calls[0].command, 'thrum')
   assert.deepEqual(calls[0].args, ['--root', '/ws', 'watch'])
   assert.match(children[0].written, /"op":"watch","actor":"alice"/)
+  assert.equal(watch.size(), 1)
+  assert.equal(watch.has('alice'), true)
+  assert.equal(watch.running(), true)
+  watch.stop()
+  assert.equal(watch.running(), false)
 })
 
 test('a delivery names its actor, and a line that is not JSON is reported', async () => {

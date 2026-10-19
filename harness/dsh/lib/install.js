@@ -348,7 +348,7 @@ export function install(ctx, config, deps) {
       const k = key(root, args.actor)
       const feed = feeds.get(root)
       feed?.unwatch(args.actor)
-      if (feed && !feed.has(args.actor)) {
+      if (feed && feed.size() === 0) {
         // Nothing left in this workspace to report, so the process can go.
         feed.stop()
         feeds.delete(root)
@@ -370,10 +370,25 @@ export function install(ctx, config, deps) {
         type: 'object',
         additionalProperties: false,
         properties: {
-          bindings: { type: 'array', items: { type: 'string' } },
+          bindings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                actor: { type: 'string' },
+                root: { type: 'string' },
+                sessionId: { type: 'string' },
+                feed: { type: 'string' },
+                announced: { type: 'number' },
+              },
+            },
+          },
         },
       },
-      render: (_args, value) => `${value.bindings.length} binding(s)`,
+      render: (_args, value) => [
+        { type: 'text', text: `${value.bindings.length} binding(s)` },
+      ],
     },
     async execute() {
       return {
@@ -381,7 +396,7 @@ export function install(ctx, config, deps) {
           actor,
           root,
           sessionId,
-          feed: feeds.get(root)?.has(actor) ? 'alive' : 'missing',
+          feed: feeds.get(root)?.running() && feeds.get(root)?.has(actor) ? 'alive' : 'missing',
           announced: bindings.announcedCount(root, actor),
         })),
       }

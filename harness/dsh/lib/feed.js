@@ -37,6 +37,7 @@ export function watchWorkspace({
   const pending = []
   let child = null
   let stdin = null
+  let running = false
   let stopped = false
   let restartMs = firstRestartMs
   let timer = null
@@ -54,7 +55,11 @@ export function watchWorkspace({
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     stdin = child.stdin
-    for (const line of pending.splice(0)) stdin.write(line)
+    running = true
+    stdin?.on('error', (error) => {
+      onError(new Error(`could not send to ${command}: ${error.message}`))
+    })
+    for (const line of pending.splice(0)) stdin?.write(line)
     // The process is new, so it knows no scope; say the current one again.
     if (actors.size > 0) send({ op: 'scope', actors: [...actors] })
 
@@ -82,6 +87,7 @@ export function watchWorkspace({
     })
 
     child.on('error', (error) => {
+      running = false
       onError(new Error(`could not run ${command}: ${error.message}`))
       if (stopped) return
       timer = setTimeout(start, restartMs)
@@ -89,6 +95,7 @@ export function watchWorkspace({
     })
 
     child.on('exit', (code, signal) => {
+      running = false
       if (stopped) return
       const why = signal ? `signal ${signal}` : `status ${code}`
       onError(new Error(`${command} watch stopped (${why})${complaint ? `: ${complaint.trim()}` : ''}`))
@@ -116,8 +123,15 @@ export function watchWorkspace({
     has(actor) {
       return actors.has(actor)
     },
+    running() {
+      return running
+    },
+    size() {
+      return actors.size
+    },
     stop() {
       stopped = true
+      running = false
       if (timer) clearTimeout(timer)
       stdin?.end()
       child?.kill()

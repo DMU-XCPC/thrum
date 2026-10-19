@@ -243,6 +243,45 @@ test('thrum_unwatch stops the watch and removes only this session\'s binding', a
   )
 })
 
+test('a workspace feed stays while another actor remains', async () => {
+  const w = mount()
+  w.session('s-1')
+  w.session('s-2')
+  await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
+  await w.registered.execute({ actor: 'bob' }, { agent: w.agents.get('s-2') })
+  assert.equal(w.spawned.length, 1, 'one process serves both actors in one workspace')
+
+  let stopped = false
+  w.children[0].kill = () => { stopped = true }
+  await w.tools.thrum_unwatch.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
+  assert.equal(stopped, false, 'unwatching one actor must not stop the workspace feed')
+
+  const status = await w.tools.thrum_watch_status.execute()
+  assert.equal(status.bindings.length, 1)
+  assert.equal(status.bindings[0].actor, 'bob')
+  assert.equal(status.bindings[0].feed, 'alive')
+
+  await w.tools.thrum_unwatch.execute({ actor: 'bob' }, { agent: w.agents.get('s-2') })
+  assert.equal(stopped, true, 'the last unwatch stops the workspace feed')
+})
+
+test('thrum_watch_status declares the object rows it returns', async () => {
+  const w = mount()
+  const status = w.tools.thrum_watch_status
+  const items = status.output.schema.properties.bindings.items
+  assert.equal(items.type, 'object')
+  assert.deepEqual(Object.keys(items.properties).sort(), [
+    'actor',
+    'announced',
+    'feed',
+    'root',
+    'sessionId',
+  ])
+  assert.deepEqual(Array.from(status.output.render({}, { bindings: [] })), [
+    { type: 'text', text: '0 binding(s)' },
+  ])
+})
+
 test('a message wakes the session bound to that actor, naming the message', async () => {
   const w = mount()
   w.session('s-1')

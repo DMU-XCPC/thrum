@@ -25,8 +25,8 @@ turn to run".
 ```text
         thrum                            the plugin                      DSH
   ┌──────────────────┐            ┌────────────────────────┐     ┌──────────────────┐
-  │ thrum messages   │            │  feed: reads the stream│     │ agent.followup() │
-  │  --json (JSONL)  │──stream───▶│  registry: actor→session│────▶│ session/flush    │
+  │ thrum watch      │            │  feed: reads the stream│     │ agent.followup() │
+  │  (JSONL)         │──stream───▶│  registry: actor→session│────▶│ session/flush    │
   └──────────────────┘            └────────────────────────┘     └──────────────────┘
                                               ▲
                                     tool call: thrum_watch(actor)
@@ -65,7 +65,7 @@ thrum_watch_status()         →  { bindings }
   announced count.
 
 Calling `thrum_watch` says hello for the actor (`thrum actor hello`), so the fabric knows where
-to push, and subscribes to `thrum message list --watch --json` for that name. Calling it twice
+to push, and subscribes to `thrum watch` with that actor in its scope. Calling it twice
 rebinds, which is what a session that switched jobs wants.
 
 `thrum_unwatch` retires that binding and stops its watch. Only the bound session may retire it,
