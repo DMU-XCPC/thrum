@@ -26,10 +26,10 @@ optional reading when their question comes up: `actors.md`, `messages.md`, `name
 `placement.md`, `records.md`, `knowledge.md`, `assets.md`, `sites.md`. The loop below names the file
 at each step that reaches one, and *What to read, and when* maps the rest.
 
-**Reading this file alone is not reading the skill.** This file is the loop and the shape of a
-stretch; every rule it names is stated in full in one of those files, and a summary is not the rule.
-**Read the file the step names, before you act on it** — a workspace expects the files a stretch
-touches to have been opened, and they are short, one question each.
+**Read all eight once before your first handoff** — they are short — and the one a step names
+before you act on it. **Reading this file alone is not reading the skill.** This file is the loop
+and the shape of a stretch; every rule it names is stated in full in one of those files, and a
+summary is not the rule. A workspace expects the files a stretch touches to have been opened.
 
 ## Seven things that explain the rest
 
@@ -85,12 +85,13 @@ export THRUM_ACTOR=flash-9c2e     # or --actor <name> on every command
   mail is now. There is no session and nothing to end — `actors.md` has both. If nobody named you,
   mint one as **your model in one short word plus exactly four random characters** — `flash-9c2e` —
   after `thrum actor list`; not the bare model and not a generic `agent-` prefix.
-- **If your harness can wake you, bind the name to this session.** One call to the harness's own
-  tool records which session this actor is — the tool is in your harness's tool list, and the
-  workspace does not name it — and it is the one startup step thrum cannot do for you, because only
-  the harness knows. Without it, delivery is unchanged: `thrum message list` still has your mail,
-  and you are only slower to hear. `messages.md` has the contract; the design's `doc/extension.md` is the
-  plugin author's side.
+- **Bind the name to this session with the harness's tool.** Look in your tool list for one whose
+  description says it wakes the session when the actor it works as receives a message, and call it
+  once with your name: it records which session this actor is and says hello. The workspace does
+  not name it — only the harness knows its spelling — but every bound session should have it in
+  the list; ask for it if it is missing. Without it, delivery is unchanged: `thrum message list`
+  still has your mail, and you are only slower to hear. `messages.md` has the contract; the
+  design's `doc/extension.md` is the plugin author's side.
 
 ## What you may touch
 

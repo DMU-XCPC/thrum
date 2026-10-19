@@ -99,6 +99,11 @@ has the reasoning.
 The file name is the **start** of the stretch in UTC, with `:` replaced by `-`
 (`2026-10-09T02-10-00Z.md`). It labels the work, not the write.
 
+**If it matters only to this job, it belongs here and nowhere else.** A log of what you tried, a
+decision you made for this job, a status, a note for whoever continues *this* work — all of it is
+handoff material. A topic is for what the next job needs; if there is no next job, there is no
+topic. `knowledge.md` has the two tests.
+
 ```yaml
 ---
 job: add-retry-to-uploader

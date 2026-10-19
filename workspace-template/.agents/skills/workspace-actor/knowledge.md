@@ -87,12 +87,21 @@ A signature list goes stale the moment a signature changes, so it belongs with t
 explanation of the contract the signature has to satisfy stays true while the implementation is
 rewritten, so it is a topic.
 
+The other question is whose question it answers:
+
+> Would only this job, or this stretch, ever need this?
+
+If yes, it is not a topic. A log of what you tried, a decision you made for this job, a status, or
+a note for whoever continues **this** work belongs in the handoff. A topic is written for the next
+job that needs the same understanding: if there is no next job, there is no topic.
+
 | Not a topic | Where it belongs |
 | --- | --- |
 | An API reference or a component design document | next to the code, in the worktree, reviewed with the change |
 | A rule or an obligation | `doc/convention/` — a convention instructs, a topic describes |
 | A plan or a status | `task/<job-id>/brief.md` |
 | An investigation log | `handoff/` — a topic is what survives the investigation |
+| A decision, a log or a status about this job only | `handoff/` — the next job is not the audience |
 | A restatement of the code's comments | nowhere; delete it |
 
 ## Retirement

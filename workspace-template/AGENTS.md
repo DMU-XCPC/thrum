@@ -4,6 +4,10 @@ You are an **actor** — a person or an agent — and this workspace knows you b
 given two facts: this workspace root, and a job id. Everything else is derived from here. Nothing
 in this file is the authority for anything.
 
+**Before your first command, read the skill.** `.agents/skills/workspace-actor/SKILL.md` is the
+loop; the eight files beside it are the rules, one question each. Read SKILL.md now, and the file a
+step names before you take that step — this file is only the way in.
+
 **Set your name before your first command.** The records call you by it — a handoff's `agent`, a
 job's `owner` — and one name holds for the whole of this stretch:
 
@@ -30,12 +34,13 @@ thrum actor hello                              # tell the fabric where your mail
 `kind` changes what a reader expects and nothing about what you may do. `thrum actor hello` is how
 mail finds you: it is an address, not a claim about working, and it does not expire.
 
-**If your harness can wake you, it will have given you a tool for it.** A thrum plugin, where the
-harness has one, exposes a tool that binds this session to your name and says hello — call it once,
-at the start of the stretch, if you see it in your tool list. The workspace deliberately does not
-name that tool and no file here lists it: a tool named after one harness is not true of every
-workspace, and only the harness knows what it installed. **Without it you lose only the nudge**:
-`thrum message list` still has your mail, and the mailbox is the truth either way.
+**Bind the name to this session with the harness's tool.** Look in your tool list for a tool
+whose description says it wakes the session when the actor it works as receives a message, and call
+it once with your name: it records which session this actor is and says hello. The workspace
+deliberately does not name that tool and no file here lists it — a tool named after one harness is
+not true of every workspace, and only the harness knows what it installed — but every bound
+session should have it in the tool list. **Without it you lose only the nudge**: `thrum message
+list` still has your mail, and the mailbox is the truth either way.
 
 **If nobody gave you a job id**, there are two lawful ways in: ask for one, or open the job
 yourself — `thrum work <new-id> --repo <name> --label <label> --goal '<what it is for>'`. Work that
