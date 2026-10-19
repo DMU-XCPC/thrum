@@ -182,10 +182,16 @@ func newSiteCmd() *cobra.Command {
 			if err := line.Commit(l.Root, []string{l.Site(self)}, message); err != nil {
 				return err
 			}
-			// The daemon comes back on the next command, at whatever address the
-			// local view resolves to (this site's own if it has one, else the new
-			// declaration).
-			_ = daemon.Stop(l)
+			// Apply the new address in place: a restart would lose the routes and
+			// places the daemon has learned.
+			if announceAt != "" {
+				if err := ensureDaemon(l); err != nil {
+					return err
+				}
+				if err := daemon.Reconfigure(l, map[string]any{"listen": announceAt}); err != nil {
+					return err
+				}
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "announced %s at %s\n", self, orNone(announceAt))
 			return nil
 		},
@@ -217,8 +223,14 @@ func newSiteCmd() *cobra.Command {
 			if err := writeLocalConfig(l, self, cfg); err != nil {
 				return err
 			}
-			// The running daemon reads this at start; it restarts on the next command.
-			_ = daemon.Stop(l)
+			// The loop is switched in place; a restart would drop the routes, and
+			// the join that needs the LAN may be on another machine. No daemon yet
+			// starts with the new setting.
+			if err := daemon.Reconfigure(l, map[string]any{"discover": on}); err != nil {
+				if err := ensureDaemon(l); err != nil {
+					return err
+				}
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "discovery %s\n", args[0])
 			return nil
 		},
@@ -355,11 +367,9 @@ func newSiteCmd() *cobra.Command {
 			if err := writeLocalConfig(l, args[0], cfg); err != nil {
 				return err
 			}
-			// A running daemon keeps the listen address it started with; it comes
-			// back at the new one on the next command.
-			if args[0] == readSiteName(l) {
-				_ = daemon.Stop(l)
-			}
+			// A local address is read at start; a running daemon keeps its listener.
+			// Leaving it alone here is deliberate: a restart would drop the routes and
+			// places it has learned. `site announce --at` moves it in place.
 			fmt.Fprintf(cmd.OutOrStdout(), "%s is reached at %s\n", args[0], at)
 			return nil
 		},

@@ -213,3 +213,17 @@ func TestSiteLeaveAndStay(t *testing.T) {
 	w2.r().run("job", "open", "j2", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "job")
 	w2.r().run("site", "leave").fails(t, "a busy site", "holds a job")
 }
+
+// TestSiteDiscoverKeepsTheDaemon: a discovery toggle is applied in place. The daemon
+// must not restart (its routes and places would go with it), and it must not stop.
+func TestSiteDiscoverKeepsTheDaemon(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("actor", "hello").ok(t, "the daemon is up")
+	r.run("site", "discover", "on").ok(t, "discover on")
+	r.run("daemon", "status").ok(t, "the daemon is still there")
+	r.run("site", "discover", "off").ok(t, "discover off")
+	r.run("daemon", "status").ok(t, "the daemon is still there")
+	r.run("daemon", "stop").ok(t, "stop")
+}

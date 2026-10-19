@@ -90,7 +90,7 @@ func outboundIP() string {
 
 // discoverLoop announces this site on the interval, records the peers it hears, and
 // answers a join query for this site.
-func (s *server) discoverLoop(conn *discovery.Socket) {
+func (s *server) discoverLoop(conn *discovery.Socket, stop <-chan struct{}) {
 	buf := make([]byte, 4096)
 	go func() {
 		for {
@@ -98,6 +98,8 @@ func (s *server) discoverLoop(conn *discovery.Socket) {
 			if err != nil {
 				select {
 				case <-s.stop:
+					return
+				case <-stop:
 					return
 				default:
 				}
@@ -148,6 +150,8 @@ func (s *server) discoverLoop(conn *discovery.Socket) {
 	for {
 		select {
 		case <-s.stop:
+			return
+		case <-stop:
 			return
 		case <-t.C:
 			announce()

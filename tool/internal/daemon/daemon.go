@@ -75,6 +75,13 @@ type server struct {
 	routeEvery    time.Duration
 	discoverEvery time.Duration
 	listen        string
+
+	discoverMu   sync.Mutex
+	discoverConn *discovery.Socket
+	discoverStop chan struct{}
+
+	listenerMu sync.Mutex
+	tcp        net.Listener
 }
 
 // Run listens until it is stopped. The TCP listener serves peers; the unix socket
@@ -93,12 +100,10 @@ func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool
 	if s.discoverEvery <= 0 {
 		s.discoverEvery = 5 * time.Second
 	}
-	if discover {
-		if conn, err := discovery.Listen(); err == nil {
-			defer conn.Close()
-			go s.discoverLoop(conn)
-		}
+	if err := s.setDiscover(discover); err != nil {
+		return err
 	}
+	defer s.stopDiscover()
 	if err := os.MkdirAll(l.Var(), 0o755); err != nil {
 		return err
 	}
@@ -148,15 +153,13 @@ func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool
 	_ = os.Chmod(l.DaemonSocket(), 0o600)
 	defer os.Remove(l.DaemonSocket())
 
-	tcp, err := net.Listen("tcp", addr)
-	if err != nil {
+	if err := s.setListen(addr); err != nil {
 		return err
 	}
-	defer tcp.Close()
+	defer s.closeListeners()
 
-	fmt.Printf("listening on %s\n", tcp.Addr())
+	fmt.Printf("listening on %s\n", s.tcp.Addr())
 	go s.accept(unix, false)
-	go s.accept(tcp, true)
 	go s.router()
 
 	sig := make(chan os.Signal, 1)
@@ -172,6 +175,16 @@ func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool
 // Status reports whether a daemon answers here, and what it says.
 func Status(l layout.Layout) (Response, error) {
 	return LocalDo(l, Request{Verb: "site.hello"})
+}
+
+// Reconfigure applies a setting to the running daemon without restarting it.
+func Reconfigure(l layout.Layout, args map[string]any) error {
+	b, err := json.Marshal(args)
+	if err != nil {
+		return err
+	}
+	_, err = LocalDo(l, Request{Verb: "site.reconfigure", Args: b})
+	return err
 }
 
 // Stop asks the local daemon to stop.
@@ -582,6 +595,26 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 			return payload(map[string]any{"sites": sites})
 		}
 		return payload(map[string]any{"routes": out})
+	case "site.reconfigure":
+		var args struct {
+			Discover *bool  `json:"discover"`
+			Listen   string `json:"listen"`
+		}
+		if err := json.Unmarshal(req.Args, &args); err != nil {
+			return fail(err)
+		}
+		if args.Discover != nil {
+			if err := s.setDiscover(*args.Discover); err != nil {
+				return fail(err)
+			}
+		}
+		if args.Listen != "" {
+			if err := s.setListen(args.Listen); err != nil {
+				return fail(err)
+			}
+		}
+		return payload(map[string]any{"site": s.site})
+
 	case "stop":
 		if remote {
 			return fail(fmt.Errorf("stop is local only"))
@@ -699,6 +732,66 @@ func consider(m map[string]route, site string, r route) {
 	cur, ok := m[site]
 	if !ok || r.Hops < cur.Hops || (r.Hops == cur.Hops && r.NextHop < cur.NextHop) {
 		m[site] = r
+	}
+}
+
+func (s *server) setDiscover(on bool) error {
+	s.discoverMu.Lock()
+	defer s.discoverMu.Unlock()
+	if on && s.discoverConn == nil {
+		conn, err := discovery.Listen()
+		if err != nil {
+			return err
+		}
+		s.discoverConn = conn
+		s.discoverStop = make(chan struct{})
+		go s.discoverLoop(conn, s.discoverStop)
+	}
+	if !on && s.discoverConn != nil {
+		close(s.discoverStop)
+		_ = s.discoverConn.Close()
+		s.discoverConn = nil
+		s.discoverStop = nil
+	}
+	return nil
+}
+
+func (s *server) stopDiscover() {
+	s.discoverMu.Lock()
+	defer s.discoverMu.Unlock()
+	if s.discoverConn != nil {
+		close(s.discoverStop)
+		_ = s.discoverConn.Close()
+		s.discoverConn = nil
+		s.discoverStop = nil
+	}
+}
+
+func (s *server) setListen(addr string) error {
+	s.listenerMu.Lock()
+	defer s.listenerMu.Unlock()
+	if s.tcp != nil {
+		if s.tcp.Addr().String() == addr {
+			return nil
+		}
+		_ = s.tcp.Close()
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	s.tcp = ln
+	s.listen = addr
+	go s.accept(ln, true)
+	return nil
+}
+
+func (s *server) closeListeners() {
+	s.listenerMu.Lock()
+	defer s.listenerMu.Unlock()
+	if s.tcp != nil {
+		_ = s.tcp.Close()
+		s.tcp = nil
 	}
 }
 
