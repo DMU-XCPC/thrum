@@ -196,6 +196,29 @@ is where the session finds it, and the workspace does not name it, because a too
 harness is not true of every workspace — but it knows the result: a session bound to a name, and an
 event stream that reaches it. `doc/extension.md` is the plugin author's side of this.
 
+## Using another site
+
+An actor belongs to one site: its name, its mail and its word are there. A job may still need
+another site's machine, disk or hardware. The actor stays where it is; the other site is a
+**helper**, not a second owner.
+
+`thrum run --site <helper> [--job <id>] -- <command>` runs the actor's own command on the helper.
+The default working directory is the job's source snapshot (`job/<id>/data/src/`) or, without
+one, its payload; the environment is that job's payload; stdout and stderr come back; the exit
+status is the command's; the helper writes a log under `job/<id>/log/`. There is no sandbox: the
+site is trusted and the command is the actor's. The helper's daemon refuses `run` unless its
+operator turns it on (`site run on`).
+
+`thrum sync --code --job <id> --site <helper>` copies the job's working tree — tracked files,
+uncommitted changes and untracked files, without `.git` — into the helper's `job/<id>/data/src/`.
+It is one-way, replaces the directory, and touches no repository: no remote is added, no ref or
+branch is written. It is off by default and needs the helper's `site code on` as well. It exists
+because only the site that holds the job can commit; the helper only needs the source.
+
+The job's brief records `held_at`: the site whose branch and commits are the job's. `job show`
+and `status` display it, and `thrum work` on another site refuses instead of becoming a second
+writer. A helper receives no hello and no mail; the actor's place stays its own site.
+
 ## The shared histories
 
 Every workspace has **two** shared histories, and several sites write each of them at once.
@@ -333,6 +356,7 @@ that. `history.exchange` is local only: it is this machine asking its own daemon
 | a peer | messages to actors there, if no route leads another way; its direct history exchange | everything local, every other peer, and any route through a neighbour; its records reach the others through the remaining graph |
 | a relay | the routes through it, after the table expires | messages take another route or fail; the histories still gossip through the rest of the graph |
 | the LAN hint | finding a fresh address | the local view and the roster's declared address; a join then has to carry one |
+| a helper site | executing there, and syncing the job's source to it | the job and its records at the site that holds it; `run --site` works without the helper holding the job |
 | a site that has left | its declared address, so the peers stop dialling | its line, ledger, store, mail and code; `site stay` returns it |
 | the line's sequencer, if one is declared | recording durable events | reading, working, messages, and this site's own commits |
 | a daemon | messages, placement and `sync` at that site, until the next command starts it again | its files, and the command line's local operations |
@@ -361,6 +385,9 @@ The daemon is internal: the CLI starts it on demand and restarts it on the next 
 crash or an address change; the user-facing commands never ask for it. It stops itself after
 six route intervals with no reachable neighbour, so a single-site workspace runs it only around
 the commands that need it.
+
+A helper is a resource, not a second owner: it never holds the job's branch, never takes the
+actor's mail, and never becomes the job's `held_at` without an explicit move.
 
 A discovered address is a hint, not a promise: it expires after a few intervals and a stale one
 is ignored before a dial. The LAN packet is unsigned because the network is trusted; the site

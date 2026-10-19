@@ -47,6 +47,7 @@ type Brief struct {
 	Owner     string   `yaml:"owner,omitempty" json:"owner,omitempty"`
 	Touches   []string `yaml:"touches,omitempty" json:"touches,omitempty"`
 	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
+	HeldAt    string   `yaml:"held_at,omitempty" json:"held_at,omitempty"`
 	Keep      bool     `yaml:"keep,omitempty" json:"keep,omitempty"`
 }
 

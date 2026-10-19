@@ -251,8 +251,9 @@ A job belongs to the workspace, not to a machine. Moving one is three acts:
 
 1. **The records travel by the shared histories.** The brief is in the line and the handoffs are
    in the ledger; both are already shared.
-2. **The branch travels through the fabric.** The receiving site fetches `job/<id>` from the
-   job's repository — `repo` in the brief.
+2. **The branch travels.** The project's own git carries `job/<id>`; thrum also offers an
+   optional one-way working-tree snapshot (`sync --code`) for a helper that only needs the
+   source, without writing its repository.
 3. **The payload travels as a bundle**, because git cannot carry it. Export runs after a
    handoff and never during work; it releases nothing, because stopping already released
    whatever the job held.
@@ -269,6 +270,11 @@ authority, or the owner may give the job up first and let the receiver claim it.
 `job/<job-id>/` is everything a job produces on disk: `log/`, `tmp/`, `cache/`, `data/`,
 `state/`, `ckpt/`, `out/`. Nothing in it is irreplaceable — whatever must survive is published
 to the store and referenced from a handoff, or reproduced.
+
+`data/src/` is the exception that proves the rule: it holds a working-tree snapshot that
+`thrum sync --code` copies from the site that holds the job to a helper, so the helper can run
+the source without touching its own repository. It is a transient input like the rest of
+`data/`, replaced whole on every sync and collected with the payload.
 
 A payload becomes collectible once its brief says `done` or `abandoned`, unless `keep` is true.
 `tmp/`, `cache/` and `ckpt/` go at the close; the rest after a retention window measured from

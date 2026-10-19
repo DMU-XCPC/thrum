@@ -19,6 +19,8 @@ type localConfig struct {
 	Reach    string `yaml:"reach"`
 	Discover bool   `yaml:"discover,omitempty"`
 	Inactive bool   `yaml:"inactive,omitempty"`
+	Code     bool   `yaml:"code,omitempty"`
+	Run      bool   `yaml:"run,omitempty"`
 }
 
 func readLocalConfig(l layout.Layout, name string) localConfig {
@@ -53,7 +55,8 @@ func ensureDaemon(l layout.Layout) error {
 	if self == "" {
 		return fmt.Errorf("this machine does not name its site")
 	}
-	if readLocalConfig(l, self).Inactive {
+	cfg := readLocalConfig(l, self)
+	if cfg.Inactive {
 		return fmt.Errorf("this site has left the workspace; run `thrum site stay --at <host:port>` to return")
 	}
 	if _, err := daemon.Status(l); err == nil {
@@ -72,8 +75,14 @@ func ensureDaemon(l layout.Layout) error {
 	if v := os.Getenv("THRUM_ROUTE_INTERVAL"); v != "" {
 		args = append(args, "--route-interval", v)
 	}
-	if readLocalConfig(l, self).Discover {
+	if cfg.Discover {
 		args = append(args, "--discover")
+	}
+	if cfg.Code {
+		args = append(args, "--code")
+	}
+	if cfg.Run {
+		args = append(args, "--run")
 	}
 	logPath := filepath.Join(l.Var(), "daemon.log")
 	if err := os.MkdirAll(l.Var(), 0o755); err != nil {

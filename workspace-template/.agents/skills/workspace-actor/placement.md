@@ -93,6 +93,10 @@ job/<job-id>/
     out/      # artifacts; not a delivery mechanism
 ```
 
+`data/src/` is a working-tree snapshot copied from the site that holds the job by
+`thrum sync --code`; it is a transient input like the rest of `data/`, replaced whole on every
+sync and collected with the payload.
+
 Nothing here is irreplaceable. `tmp/`, `cache/` and `ckpt/` are collected when the job closes;
 `log/`, `data/`, `state/` and `out/` follow once the retention window has passed, which defaults to
 14 days and is set by the `collect.window` value a convention may carry. A brief with `keep: true`

@@ -51,6 +51,9 @@ func newWorkCmd() *cobra.Command {
 				return nil
 			}
 
+			if b.HeldAt != "" && b.HeldAt != actors.Site(l) {
+				return fmt.Errorf("job %s is held at %s; work it there, or copy its source with `thrum sync --code --job %s --site %s`", id, b.HeldAt, id, b.HeldAt)
+			}
 			if b.Owner == "" {
 				if err := jobs.Claim(l, id, actorName()); err != nil {
 					return err

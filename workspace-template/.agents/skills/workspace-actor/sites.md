@@ -27,6 +27,21 @@ rewritten.
   it: fetch the reachable peers, merge, publish, and leave an unreachable peer for the next round.
   Nothing requires a fetch in order to start work.
 
+## The other site as a helper
+
+Your site is where your name, your mail and your word live. Another site can still be a
+resource without becoming a second owner:
+
+- `thrum sync --code --job <id> --site <helper>` copies the job's working tree — tracked,
+  uncommitted and untracked files, without `.git` — into the helper's `job/<id>/data/src/`. It is
+  one-way, replaces the directory, adds no remote and writes no ref. Both sites opt in
+  (`site code on`); the project's own git is untouched.
+- `thrum run --site <helper> --job <id> -- <command>` runs your own command there, in that
+  snapshot, with the payload's environment; output and exit status come back. There is no
+  sandbox: the site is trusted and the command is yours.
+- The job's `held_at` stays your site. The helper never becomes the writer, and `thrum work`
+  there refuses. The helper receives no hello and no mail; read your mail at your site.
+
 ## Messages
 
 Actors reach each other through the fabric, not through the records. A message is **temporary work

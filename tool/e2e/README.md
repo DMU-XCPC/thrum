@@ -44,7 +44,9 @@ addresses, the local view beating a fresh hint, and the stale hint expiring).
 learning it on sync, and the local view still winning. `TestSiteLeaveAndStay`
 covers a site leaving (the departure as a line event, the peer learning it, the
 left commands refusing), the return, and the job-worktree refusal.
-`TestPayloadCollection`, `TestPayloadKeep`, `TestPayloadDefaultWindow` and
+`TestCodeSyncAndRun`, `TestHeldAt` and `TestActorPlace` cover the helper site:
+the working-tree snapshot, remote execution, the record of the holder, and the
+mail place. `TestPayloadCollection`, `TestPayloadKeep`, `TestPayloadDefaultWindow` and
 `TestInvalidCollectWindow` cover the close's `tmp/cache/ckpt` collection, the
 `collect.window` retention, `keep`, the status states and `clean --payloads`. `TestDaemonStartsOnDemand`
 covers the daemon being an implementation detail: sync, hello, a message and a

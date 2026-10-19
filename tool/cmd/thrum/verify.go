@@ -56,9 +56,17 @@ func newStatusCmd() *cobra.Command {
 				return printJSON(cmd, r)
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "site  %s\nroot  %s\n\njobs\n", r.Site, r.Root)
+			fmt.Fprintf(out, "site  %s\nroot  %s\n", r.Site, r.Root)
+			if r.Place != "" {
+				fmt.Fprintf(out, "mail  at %s\n", r.Place)
+			}
+			fmt.Fprintln(out, "\njobs")
 			for _, j := range r.Jobs {
-				fmt.Fprintf(out, "  %-24s %-8s %-9s %-12s %s\n", j.Job, j.Repo, j.Status, j.State, j.Owner)
+				held := ""
+				if j.HeldAt != "" {
+					held = " (held at " + j.HeldAt + ")"
+				}
+				fmt.Fprintf(out, "  %-24s %-8s %-9s %-12s %s%s\n", j.Job, j.Repo, j.Status, j.State, j.Owner, held)
 			}
 			fmt.Fprintln(out, "\nworktrees")
 			for _, w := range r.Worktrees {

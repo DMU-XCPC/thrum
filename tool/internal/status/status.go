@@ -25,6 +25,7 @@ type Repo struct {
 type Report struct {
 	Root      string            `json:"root"`
 	Site      string            `json:"site"`
+	Place     string            `json:"mail_at,omitempty"`
 	Jobs      []jobs.Board      `json:"jobs"`
 	Worktrees []worktrees.Entry `json:"worktrees"`
 	Payloads  []payload.Entry   `json:"payloads,omitempty"`
@@ -35,6 +36,9 @@ type Report struct {
 // Build assembles the picture. It reads only.
 func Build(l layout.Layout, actor string) (Report, error) {
 	r := Report{Root: l.Root, Site: actors.Site(l)}
+	if p, ok := actors.Places(l).Actors[actor]; ok {
+		r.Place = p.Site
+	}
 
 	boards, err := jobs.List(l)
 	if err != nil {

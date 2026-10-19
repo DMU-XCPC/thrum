@@ -175,7 +175,7 @@ func TestWorkingAnotherSitesJobIsRefused(t *testing.T) {
 	ts.w2.r().run("sync").ok(t, "site two sees the job")
 
 	ts.w2.r().as("a2").run("work", "j1", "--label", "up2").
-		fails(t, "working another site's job", "is owned by")
+		fails(t, "working another site's job", "held at s1")
 }
 
 func TestOrderIndependence(t *testing.T) {

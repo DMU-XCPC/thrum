@@ -56,6 +56,7 @@ type HandoffOptions struct {
 
 // Board is one row of the task board.
 type Board struct {
+	HeldAt  string `json:"held_at,omitempty"`
 	Job     string `json:"job"`
 	Repo    string `json:"repo"`
 	Status  string `json:"status"`
@@ -108,6 +109,7 @@ func Open(l layout.Layout, o OpenOptions, now time.Time) (string, error) {
 	brief := records.Brief{
 		Job: o.Job, Status: "active", Repo: o.Repo, Branch: "job/" + o.Job,
 		Owner: o.Owner, Touches: o.Touches, DependsOn: o.DependsOn, Keep: o.Keep,
+		HeldAt: actors.Site(l),
 	}
 	if err := writeBrief(l, brief, body); err != nil {
 		worktrees.Discard(l, o.Label, o.Repo, o.Job)
@@ -303,7 +305,7 @@ func List(l layout.Layout) ([]Board, error) {
 		if !ok {
 			continue
 		}
-		row := Board{Job: b.Job, Repo: b.Repo, Status: b.Status, Owner: b.Owner, State: "no handoff yet"}
+		row := Board{Job: b.Job, Repo: b.Repo, Status: b.Status, Owner: b.Owner, HeldAt: b.HeldAt, State: "no handoff yet"}
 		if h, ok, err := Last(l, b.Job); err != nil {
 			return nil, err
 		} else if ok {

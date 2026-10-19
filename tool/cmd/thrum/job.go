@@ -98,6 +98,9 @@ func newJobCmd() *cobra.Command {
 			if b.Owner != "" {
 				fmt.Fprintf(out, "owner    %s\n", b.Owner)
 			}
+			if b.HeldAt != "" {
+				fmt.Fprintf(out, "held at %s\n", b.HeldAt)
+			}
 			fmt.Fprintf(out, "touches  %s\n", strings.Join(b.Touches, ", "))
 			if hasHandoff {
 				fmt.Fprintf(out, "last     %s, %s..%s\nnext     %s\n",

@@ -3,6 +3,7 @@
 package daemon
 
 import (
+	"archive/tar"
 	"bufio"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -75,6 +76,8 @@ type server struct {
 	routeEvery    time.Duration
 	discoverEvery time.Duration
 	listen        string
+	code          bool
+	run           bool
 
 	discoverMu   sync.Mutex
 	discoverConn *discovery.Socket
@@ -86,12 +89,14 @@ type server struct {
 
 // Run listens until it is stopped. The TCP listener serves peers; the unix socket
 // serves this machine's commands.
-func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool, discoverEvery time.Duration) error {
+func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool, discoverEvery time.Duration, code, run bool) error {
 	s, err := newServer(l)
 	if err != nil {
 		return err
 	}
 	s.listen = listen
+	s.code = code
+	s.run = run
 	s.routeEvery = routeEvery
 	if s.routeEvery <= 0 {
 		s.routeEvery = 5 * time.Second
@@ -379,6 +384,10 @@ func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool, caller stri
 			s.gitServe(conn, br, enc, req, joining)
 			return
 		}
+		if req.Verb == "code.receive" {
+			s.codeReceive(conn, enc, req, remote)
+			return
+		}
 		if joining {
 			_ = enc.Encode(fail(errors.New("a join connection carries repositories only")))
 			continue
@@ -615,6 +624,15 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 		}
 		return payload(map[string]any{"site": s.site})
 
+	case "run":
+		if !remote {
+			return fail(errors.New("run is for another site"))
+		}
+		var args runArgs
+		if err := json.Unmarshal(req.Args, &args); err != nil {
+			return fail(err)
+		}
+		return s.runCommand(args)
 	case "stop":
 		if remote {
 			return fail(fmt.Errorf("stop is local only"))
@@ -822,6 +840,129 @@ func hasSite(list []string, site string) bool {
 		}
 	}
 	return false
+}
+
+// codeReceive takes over the connection: ack, then a tar of a working tree that
+// lands in job/<id>/data/src/. No repository is touched.
+func (s *server) codeReceive(conn net.Conn, enc *json.Encoder, req Request, remote bool) {
+	if !remote {
+		_ = enc.Encode(fail(errors.New("code.receive is for another site")))
+		return
+	}
+	if !s.code {
+		_ = enc.Encode(fail(errors.New("code receiving is off here (site code on)")))
+		return
+	}
+	var args struct {
+		Job string `json:"job"`
+	}
+	if err := json.Unmarshal(req.Args, &args); err != nil {
+		_ = enc.Encode(fail(err))
+		return
+	}
+	if !format.ValidSlug(args.Job) {
+		_ = enc.Encode(fail(fmt.Errorf("%q is not a job id", args.Job)))
+		return
+	}
+	dir := s.l.PayloadSub(args.Job, "data/src")
+	_ = os.RemoveAll(dir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		_ = enc.Encode(fail(err))
+		return
+	}
+	if err := enc.Encode(payload(map[string]string{"state": "receiving"})); err != nil {
+		return
+	}
+	tr := tar.NewReader(conn)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return
+		}
+		if err != nil {
+			return
+		}
+		name := filepath.Clean(h.Name)
+		if name == "." || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) || filepath.IsAbs(name) {
+			return
+		}
+		target := filepath.Join(dir, name)
+		switch h.Typeflag {
+		case tar.TypeDir:
+			_ = os.MkdirAll(target, 0o755)
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return
+			}
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(h.Mode)&0o777)
+			if err != nil {
+				return
+			}
+			_, _ = io.Copy(f, tr)
+			_ = f.Close()
+		case tar.TypeSymlink:
+			_ = os.MkdirAll(filepath.Dir(target), 0o755)
+			_ = os.Remove(target)
+			_ = os.Symlink(h.Linkname, target)
+		}
+	}
+}
+
+type runArgs struct {
+	Job   string   `json:"job,omitempty"`
+	Actor string   `json:"actor,omitempty"`
+	Argv  []string `json:"argv"`
+}
+
+// runCommand executes the actor's own command on this site. It is a transport with
+// a default directory, not a sandbox.
+func (s *server) runCommand(args runArgs) Response {
+	if !s.run {
+		return fail(errors.New("remote run is off here (site run on)"))
+	}
+	if len(args.Argv) == 0 {
+		return fail(errors.New("run needs a command"))
+	}
+	cwd := s.l.Root
+	var env []string
+	logDir := filepath.Join(s.l.Var(), "run")
+	if args.Job != "" {
+		if !format.ValidSlug(args.Job) {
+			return fail(fmt.Errorf("%q is not a job id", args.Job))
+		}
+		cwd = s.l.PayloadSub(args.Job, "data/src")
+		if _, err := os.Stat(cwd); err != nil {
+			cwd = s.l.Payload(args.Job)
+		}
+		logDir = s.l.PayloadSub(args.Job, "log")
+		env = append(env,
+			"THRUM_JOB="+args.Job,
+			"TMPDIR="+s.l.PayloadSub(args.Job, "tmp"),
+			"XDG_STATE_HOME="+s.l.PayloadSub(args.Job, "state"),
+			"XDG_CACHE_HOME="+s.l.PayloadSub(args.Job, "cache"),
+		)
+	}
+	if args.Actor != "" {
+		env = append(env, "THRUM_ACTOR="+args.Actor)
+	}
+	cmd := exec.Command(args.Argv[0], args.Argv[1:]...)
+	cmd.Dir = cwd
+	cmd.Env = append(os.Environ(), env...)
+	out, err := cmd.CombinedOutput()
+	code := 0
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else {
+			code = -1
+		}
+	}
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return fail(err)
+	}
+	logPath := filepath.Join(logDir, "run-"+time.Now().UTC().Format("20060102T150405Z")+".log")
+	_ = os.WriteFile(logPath, out, 0o644)
+	return payload(map[string]any{"stdout": base64.StdEncoding.EncodeToString(out), "exit": code, "log": logPath})
 }
 
 // broadcastPlace tells the peers where a name just said hello. It is best effort:

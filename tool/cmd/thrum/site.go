@@ -199,6 +199,11 @@ func newSiteCmd() *cobra.Command {
 	announce.Flags().StringVar(&announceAt, "at", "", "the host:port this site is now reached at")
 	announce.Flags().BoolVar(&announceClear, "clear", false, "remove the declared address instead")
 
+	code := siteToggle("code", "Allow this site to receive a job's source snapshot",
+		func(c *localConfig, on bool) { c.Code = on })
+	run := siteToggle("run", "Allow this site to execute remote commands",
+		func(c *localConfig, on bool) { c.Run = on })
+
 	discover := &cobra.Command{
 		Use:   "discover [on|off]",
 		Short: "Turn this site's LAN announcement on or off",
@@ -507,7 +512,7 @@ func newSiteCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(reach, list, show, routes, doctor, invite, announce, discover, leave, stay, newSiteKeyCmd(), newSiteForgetCmd())
+	cmd.AddCommand(reach, list, show, routes, doctor, invite, announce, discover, leave, stay, code, run, newSiteKeyCmd(), newSiteForgetCmd())
 	return cmd
 }
 
@@ -540,6 +545,40 @@ func siteViews(l layout.Layout) ([]siteView, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Site < out[j].Site })
 	return out, nil
+}
+
+// siteToggle writes a two-level opt-in to the local config and restarts the daemon
+// on the next command, so the new flag takes effect.
+func siteToggle(name, short string, set func(*localConfig, bool)) *cobra.Command {
+	return &cobra.Command{
+		Use:   name + " [on|off]",
+		Short: short,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			l := workspaceRoot()
+			self := readSiteName(l)
+			if self == "" {
+				return fmt.Errorf("this machine does not name its site")
+			}
+			var on bool
+			switch args[0] {
+			case "on":
+				on = true
+			case "off":
+				on = false
+			default:
+				return fmt.Errorf("give on or off")
+			}
+			cfg := readLocalConfig(l, self)
+			set(&cfg, on)
+			if err := writeLocalConfig(l, self, cfg); err != nil {
+				return err
+			}
+			_ = daemon.Stop(l)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", name, args[0])
+			return nil
+		},
+	}
 }
 
 func localReach(l layout.Layout, name string) string {

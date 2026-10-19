@@ -64,6 +64,9 @@ func (c *Client) Do(req Request) (Response, error) {
 // Close closes the connection.
 func (c *Client) Close() error { return c.conn.Close() }
 
+// Conn is the connection, for a verb that takes it over after its ack (code.receive).
+func (c *Client) Conn() net.Conn { return c.conn }
+
 // Dial opens an authenticated connection to a peer's daemon.
 func Dial(l layout.Layout, peer string) (*Client, error) {
 	return dial(l, peer, false)
