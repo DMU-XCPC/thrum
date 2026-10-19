@@ -212,14 +212,14 @@ has not been mounted yet.
 
 A host that is killed outright leaves its watchers behind: they survive their parent and are
 adopted by init, then die on the first message they try to report, because the pipe they were
-writing to has no reader. That costs one idle process per binding until the next message
-arrives, and it cannot cost a wake — every watcher holds its own watch on the mailbox, so the
-host that mounted afterwards reports the message whichever orphan is still around.
+writing to has no reader. That costs one idle process per workspace until the next message
+arrives, and it cannot cost a wake — the watcher holds the whole workspace scope, so the host
+that mounted afterwards reports the message whichever orphan is still around.
 
-What that costs is one child process per binding, so a host that has been used for a long time
-starts as many as there are mailboxes it has ever watched for. `thrum_watch` in a session is
-what adds one, and nothing prunes them yet: a binding is dropped only if somebody writes the
-file without it.
+What that costs is one child process per workspace, so a host that has been used for a long
+time starts as many as there are workspaces it has ever watched. A feed exits when its last
+actor is unwatched; mounting also drops a binding whose session the harness store no longer
+holds. `thrum_unwatch` retires one explicitly.
 
 ## Two hosts, one home
 
