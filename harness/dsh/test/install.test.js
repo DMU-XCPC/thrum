@@ -280,6 +280,16 @@ test('thrum_watch_status declares the object rows it returns', async () => {
   assert.deepEqual(Array.from(status.output.render({}, { bindings: [] })), [
     { type: 'text', text: '0 binding(s)' },
   ])
+  const rendered = Array.from(
+    status.output.render({}, {
+      bindings: [
+        { actor: 'alice', root: '/ws', sessionId: 's-1', feed: 'alive', announced: 2 },
+      ],
+    }),
+  )
+  assert.equal(rendered[0].type, 'text')
+  assert.match(rendered[0].text, /1 binding\(s\)/)
+  assert.match(rendered[0].text, /alice in \/ws — alive, 2 announced, session s-1/)
 })
 
 test('a message wakes the session bound to that actor, naming the message', async () => {

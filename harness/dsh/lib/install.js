@@ -386,9 +386,14 @@ export function install(ctx, config, deps) {
           },
         },
       },
-      render: (_args, value) => [
-        { type: 'text', text: `${value.bindings.length} binding(s)` },
-      ],
+      render: (_args, value) => {
+        const lines = value.bindings.map(
+          (binding) =>
+            `${binding.actor} in ${binding.root} — ${binding.feed}, ` +
+            `${binding.announced} announced, session ${binding.sessionId}`,
+        )
+        return [{ type: 'text', text: [`${value.bindings.length} binding(s)`, ...lines].join('\n') }]
+      },
     },
     async execute() {
       return {
