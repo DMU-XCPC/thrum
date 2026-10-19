@@ -97,6 +97,12 @@ job/<job-id>/
 `thrum sync --code`; it is a transient input like the rest of `data/`, replaced whole on every
 sync and collected with the payload.
 
+**It is not a repository, and you never clone into it.** A `.git` here is a mistake: the next
+`sync --code` deletes the directory and unpacks the snapshot over it, and a clone would carry a
+remote and a default branch the job does not own. The helper's `repos/` may be empty; that is
+expected. If you need the branch — to edit, commit or push — that is the site that **holds** the
+job and its `worktree/<label>/`, not the helper.
+
 Nothing here is irreplaceable. `tmp/`, `cache/` and `ckpt/` are collected when the job closes;
 `log/`, `data/`, `state/` and `out/` follow once the retention window has passed, which defaults to
 14 days and is set by the `collect.window` value a convention may carry. A brief with `keep: true`

@@ -58,7 +58,9 @@ not name still has a right answer.
    reused. So *used once* is enforceable rather than promised.
 6. **Everything you write is inside the workspace, or it is a mistake.** `var/` belongs to thrum,
    `job/<job-id>/` is the payload, and the only place code is edited is the directory thrum names —
-   *What you may touch* in `AGENTS.md` is the whole of it.
+   *What you may touch* in `AGENTS.md` is the whole of it. On a helper, the job's source is
+   `job/<id>/data/src`, a snapshot `thrum run --site` executes in: it is **not** a repository, is
+   replaced whole, and you never clone into it.
 7. **thrum refuses what must not happen, and the refusal says why.** A rule it enforces is one less
    rule to carry: you meet it as a refusal at the moment it matters, rather than having to remember
    it.

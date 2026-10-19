@@ -187,3 +187,19 @@ func siteKeyLine(t *testing.T, w *workspace) string {
 	t.Fatal("no key in the site record")
 	return ""
 }
+
+// TestRunRefusesAClonedSnapshot: data/src is a source snapshot, not a repository.
+func TestRunRefusesAClonedSnapshot(t *testing.T) {
+	ts := setupTwoSites(t)
+	twoSiteDaemons(t, ts)
+	ts.w1.r().run("job", "open", "j1", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "open")
+	ts.w2.r().run("site", "code", "on").ok(t, "code on")
+	ts.w2.r().run("site", "run", "on").ok(t, "run on")
+	ts.w2.r().run("sync").ok(t, "helper sync")
+	ts.w1.r().run("sync", "--code", "--job", "j1", "--site", "s2").ok(t, "sync code")
+	if err := os.MkdirAll(filepath.Join(ts.w2.path("job", "j1", "data", "src", ".git")), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ts.w1.r().run("run", "--site", "s2", "--job", "j1", "--", "echo", "hello").
+		fails(t, "a cloned snapshot must be refused", "not a repository")
+}

@@ -62,6 +62,9 @@ the CLI restarts it on the next command. The caller still has to ask (`sync --co
    thrum sync --code --job <id> --site <helper>
    ```
    It is one-way and replaces `job/<id>/data/src/` on the helper. No repository is touched.
+   **Do not clone into `data/src`.** The helper's `repos/` may be empty, and that is expected: the
+   snapshot is the source, the helper never edits or commits the branch, and a `.git` in `data/src`
+   is deleted by the next sync.
 3. Bring the inputs. On the helper: `thrum sync` (line, ledger, store), then
    `thrum asset materialise <name> <version> --job <id>`, or `thrum bundle import` for a payload
    from this site.

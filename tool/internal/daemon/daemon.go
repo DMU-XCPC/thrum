@@ -1014,6 +1014,12 @@ func (s *server) runCommand(args runArgs) Response {
 		if _, err := os.Stat(cwd); err != nil {
 			cwd = s.l.Payload(args.Job)
 		}
+		// data/src is a source snapshot, not a repository. A .git here means someone
+		// cloned into it; the next sync would delete it, and the branch is not the
+		// helper's to own.
+		if _, err := os.Stat(filepath.Join(cwd, ".git")); err == nil {
+			return fail(fmt.Errorf("job/%s/data/src contains a .git: it is a source snapshot, not a repository; do not clone into it. Use `thrum sync --code` from the site that holds the job, or work in its worktree", args.Job))
+		}
 		logDir = s.l.PayloadSub(args.Job, "log")
 		env = append(env,
 			"THRUM_JOB="+args.Job,
