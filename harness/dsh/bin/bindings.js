@@ -73,13 +73,13 @@ if (prune) {
 function feedProcesses() {
   let out = ''
   try {
-    out = execFileSync('pgrep', ['-af', 'thrum (watch|message list --watch)'], { encoding: 'utf8' })
+    out = execFileSync('pgrep', ['-af', 'thrum .*(watch|message list --watch)'], { encoding: 'utf8' })
   } catch {
     return new Set()
   }
   const roots = new Set()
   for (const line of out.split('\n')) {
-    const m = line.match(/--root\s+(\S+)/)
+    const m = line.match(/--root(?:\s+|=)(\S+)/)
     if (m) roots.add(m[1])
   }
   return roots

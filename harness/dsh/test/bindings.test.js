@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 
 import { Bindings, statePath } from '../lib/state.js'
 
@@ -45,5 +45,29 @@ test('prune removes only a binding whose session the store does not hold', () =>
     assert.equal(Bindings.load(statePath(home)).sessionFor('/ws/two', 'bob'), 's-live')
   } finally {
     rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('bindings marks a root alive when a watch process is running', { skip: process.platform === 'win32' ? 'pgrep is not available here' : false }, async () => {
+  const home = mkdtempSync(join(tmpdir(), 'thrum-bindings-'))
+  const fakeDir = mkdtempSync(join(tmpdir(), 'thrum-fake-'))
+  try {
+    Bindings.load(statePath(home)).bind('/ws/live', 'alice', 's-1')
+    const fake = join(fakeDir, 'thrum')
+    writeFileSync(fake, '#!/bin/sh\nsleep 5\n')
+    chmodSync(fake, 0o755)
+    const child = spawn(fake, ['--root', '/ws/live', 'watch'], { stdio: 'ignore' })
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const r = run(home, '--json')
+      assert.equal(r.status, 0, r.stderr)
+      const rows = JSON.parse(r.stdout)
+      assert.equal(rows[0].feed, 'alive')
+    } finally {
+      child.kill()
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+    rmSync(fakeDir, { recursive: true, force: true })
   }
 })
