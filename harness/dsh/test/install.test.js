@@ -256,7 +256,7 @@ test('a workspace feed stays while another actor remains', async () => {
   await w.tools.thrum_unwatch.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
   assert.equal(stopped, false, 'unwatching one actor must not stop the workspace feed')
 
-  const status = await w.tools.thrum_watch_status.execute()
+  const status = await w.tools.thrum_watch_status.execute({})
   assert.equal(status.bindings.length, 1)
   assert.equal(status.bindings[0].actor, 'bob')
   assert.equal(status.bindings[0].feed, 'alive')
@@ -476,7 +476,7 @@ test('thrum_watch_status reports the binding and its feed', async () => {
 
   const status = w.tools.thrum_watch_status
   assert.ok(status, 'the status tool is registered')
-  const result = await status.execute()
+  const result = await status.execute({})
   assert.equal(result.bindings.length, 1)
   assert.equal(result.bindings[0].actor, 'alice')
   assert.equal(result.bindings[0].feed, 'alive')
