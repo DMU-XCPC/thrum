@@ -110,7 +110,7 @@ back with `thrum site stay`. Neither is part of your loop.
 | the rule behind a question the loop raises | the files beside `SKILL.md`: `actors.md`, `messages.md`, `names.md`, `placement.md`, `records.md`, `knowledge.md`, `assets.md`, `sites.md` |
 | my mail, and any files it carried | `thrum message list`, `thrum message read <id> [--out <dir>]` |
 | what is true right now | `thrum status`, `thrum job show <job-id>`, `thrum message list` |
-| another site, and reaching it | `thrum sync`; the `sites.md` skill file |
+| using another site's machine, or moving a job | `sites.md` |
 
 `doc/` is **the line** and `handoff/` is **the ledger**: two shared histories, both versioned, and
 the only places a durable record can live. The rest of the workspace is runtime, and is disposable.

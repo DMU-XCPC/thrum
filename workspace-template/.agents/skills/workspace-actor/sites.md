@@ -27,20 +27,72 @@ rewritten.
   it: fetch the reachable peers, merge, publish, and leave an unreachable peer for the next round.
   Nothing requires a fetch in order to start work.
 
-## The other site as a helper
+## Using another site's machine (the helper workflow)
 
-Your site is where your name, your mail and your word live. Another site can still be a
-resource without becoming a second owner:
+When the work needs another machine — a GPU, a different architecture, a larger disk, a
+network location, or assets already materialised there — use it while staying where you are.
+Your site keeps the name, the mail, the session and the handoff's `agent`; the other site is a
+**helper**, not a second owner.
 
-- `thrum sync --code --job <id> --site <helper>` copies the job's working tree — tracked,
-  uncommitted and untracked files, without `.git` — into the helper's `job/<id>/data/src/`. It is
-  one-way, replaces the directory, adds no remote and writes no ref. Both sites opt in
-  (`site code on`); the project's own git is untouched.
-- `thrum run --site <helper> --job <id> -- <command>` runs your own command there, in that
-  snapshot, with the payload's environment; output and exit status come back. There is no
-  sandbox: the site is trusted and the command is yours.
-- The job's `held_at` stays your site. The helper never becomes the writer, and `thrum work`
-  there refuses. The helper receives no hello and no mail; read your mail at your site.
+**The job stays yours.** Its `held_at` is your site: the branch, the commits and the worktree
+are yours, and `thrum work` on the helper refuses. The helper receives no hello and no mail.
+Your project's git is not modified: no remote, no branch and no ref is added there.
+
+**The helper's operator turns it on, once:**
+
+```sh
+thrum site code on     # allow receiving a job's source snapshot
+thrum site run on      # allow executing remote commands
+```
+
+Both are site-local, never committed, and off by default. The daemon reads them when it starts;
+the CLI restarts it on the next command. The caller still has to ask (`sync --code`, `run`).
+
+**The workflow:**
+
+1. Here, open or claim the job and work it as usual. Commit what you want the snapshot's
+   tracked part to be current.
+2. Copy the working tree to the helper — tracked, uncommitted and untracked files, without
+   `.git` and without the files `.gitignore` excludes:
+   ```sh
+   thrum sync --code --job <id> --site <helper>
+   ```
+   It is one-way and replaces `job/<id>/data/src/` on the helper. No repository is touched.
+3. Bring the inputs. On the helper: `thrum sync` (line, ledger, store), then
+   `thrum asset materialise <name> <version> --job <id>`, or `thrum bundle import` for a payload
+   from this site.
+4. Run there. The default directory is the helper's `job/<id>/data/src/`; `TMPDIR`, the cache
+   and the state are the helper's payload; stdout and the exit status come back; a log is
+   written under `job/<id>/log/`:
+   ```sh
+   thrum run --site <helper> --job <id> -- make test
+   ```
+5. Bring the results home. Small output is in the run's stdout; large results live in the
+   helper's `job/<id>/out/`. Export/import them with `thrum bundle`, or publish durable bytes
+   with `thrum asset publish` and let this site sync the tag.
+6. Write the handoff here — you are the agent — naming the artifacts by their raw hashes. Close
+   as usual. The branch and commits remain yours; the helper's repository is unchanged.
+
+**What it is not:**
+
+- **No sandbox.** The helper's operator trusts you: `run` executes as that site's user. The
+  command is yours; thrum does not decide it.
+- **Not a live stream.** The run's output comes back whole (captured); the full log is on the
+  helper.
+- **Not a git transfer.** `sync --code` carries files, not history; the helper's own git
+  remains the project's. Nothing is fetched, pushed or branched.
+- **Not a second writer.** The snapshot replaces `data/src/`; the helper never commits or holds
+  the job. Moving the writer is a different act: handoff/close here, make the branch available
+  at the other site through the project's git, then work it there.
+- **The source is disposable.** `data/src/` is a transient input, collected with the payload
+  after the job closes.
+
+**When it refuses:**
+
+- `code receiving is off here (site code on)` — the helper's operator must run `thrum site code on`.
+- `remote run is off here (site run on)` — likewise for `thrum site run on`.
+- `connect: connection refused` — the helper's daemon is not running; its next command starts it.
+- `job <id> is held at <site>` — you are on the helper; work the job at its holder.
 
 ## Messages
 
