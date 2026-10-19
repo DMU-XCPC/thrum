@@ -130,6 +130,14 @@ The client half is registered through `package.json`'s `dsh.client` and exports 
 finds the row's form. A host that was started before the bundle grew its client half needs a
 restart (or an HMR rebuild) before the control appears.
 
+## Seeing the bindings
+
+`npm run bindings` prints every binding with its session, workspace, live feed and announced
+count. `--json` prints the same rows as data, and `--prune` removes a binding whose session the
+harness store no longer holds — never one it cannot decide. `--dsh-home` points at another
+harness home. The entry works from the package directory, or anywhere with
+`npm --prefix <package> run bindings`; `npm link` puts `thrum-watch-bindings` on the path.
+
 ## How the tool reaches the session
 
 The tools are part of the harness's surface. When this plugin is installed, the DSH session sees

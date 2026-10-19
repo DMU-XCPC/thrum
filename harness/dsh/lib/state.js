@@ -94,6 +94,11 @@ export class Bindings {
     }))
   }
 
+  /** How many message ids are still remembered as announced. */
+  announcedCount(root, actor) {
+    return (this.#state.bindings[key(root, actor)]?.announced ?? []).length
+  }
+
   /** Whether this message has already been announced to this binding. */
   announced(root, actor, id) {
     return (this.#state.bindings[key(root, actor)]?.announced ?? []).includes(id)

@@ -10,7 +10,11 @@
     "./client": "./client.js"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/",
+    "bindings": "node bin/bindings.js"
+  },
+  "bin": {
+    "thrum-watch-bindings": "bin/bindings.js"
   },
   "license": "UNLICENSED",
   "peerDependencies": {
