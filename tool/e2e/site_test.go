@@ -213,16 +213,3 @@ func TestSiteLeaveAndStay(t *testing.T) {
 	w2.r().run("job", "open", "j2", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "job")
 	w2.r().run("site", "leave").fails(t, "a busy site", "holds a job")
 }
-
-// TestSiteDiscoverRestartsTheDaemon: discover on/off changes how the daemon starts,
-// so the command must bring it back rather than wait for an unrelated next command.
-// The join that needs the LAN may run on another machine.
-func TestSiteDiscoverRestartsTheDaemon(t *testing.T) {
-	w := newWorkspace(t)
-	r := w.r()
-	r.run("site", "discover", "on").ok(t, "discover on")
-	r.run("daemon", "status").ok(t, "the daemon answers after discover on")
-	r.run("site", "discover", "off").ok(t, "discover off")
-	r.run("daemon", "status").ok(t, "the daemon answers after discover off")
-	r.run("daemon", "stop").ok(t, "stop")
-}

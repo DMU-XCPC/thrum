@@ -182,12 +182,10 @@ func newSiteCmd() *cobra.Command {
 			if err := line.Commit(l.Root, []string{l.Site(self)}, message); err != nil {
 				return err
 			}
-			// The running daemon keeps the address it started with, so it is
-			// restarted here rather than on whatever command happens to come next.
+			// The daemon comes back on the next command, at whatever address the
+			// local view resolves to (this site's own if it has one, else the new
+			// declaration).
 			_ = daemon.Stop(l)
-			if err := ensureDaemon(l); err != nil {
-				return err
-			}
 			fmt.Fprintf(cmd.OutOrStdout(), "announced %s at %s\n", self, orNone(announceAt))
 			return nil
 		},
@@ -219,12 +217,8 @@ func newSiteCmd() *cobra.Command {
 			if err := writeLocalConfig(l, self, cfg); err != nil {
 				return err
 			}
-			// The running daemon reads this only at start, so restart it now: the
-			// next command may be on another machine, and the LAN is waiting.
+			// The running daemon reads this at start; it restarts on the next command.
 			_ = daemon.Stop(l)
-			if err := ensureDaemon(l); err != nil {
-				return err
-			}
 			fmt.Fprintf(cmd.OutOrStdout(), "discovery %s\n", args[0])
 			return nil
 		},
@@ -361,13 +355,10 @@ func newSiteCmd() *cobra.Command {
 			if err := writeLocalConfig(l, args[0], cfg); err != nil {
 				return err
 			}
-			// A running daemon keeps the listen address it started with, so a local
-			// address change restarts it now.
+			// A running daemon keeps the listen address it started with; it comes
+			// back at the new one on the next command.
 			if args[0] == readSiteName(l) {
 				_ = daemon.Stop(l)
-				if err := ensureDaemon(l); err != nil {
-					return err
-				}
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s is reached at %s\n", args[0], at)
 			return nil

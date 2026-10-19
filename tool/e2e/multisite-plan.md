@@ -4,7 +4,7 @@ Status: proposal. The single-site suite (`tool/e2e`, 24 tests) and one Docker ha
 This plan is what has to be added to make the claims in `doc/thrum.md` true *under distance,
 concurrency and failure*, not just when everything is up.
 
-Executed 2026-10-17. The default suite (`tool/e2e`, 88 tests including Docker) covers every P0
+Executed 2026-10-17. The default suite (`tool/e2e`, 87 tests including Docker) covers every P0
 and P1 and the feasible P2s: 300 ms latency, a six-second soak, four sites and 200 events, 1,000
 events, 10 MB attachments, 100 connections, the daemon transport (`history.exchange`;
 the Docker test joins through the inviting daemon and stops the code hub after the join), and
