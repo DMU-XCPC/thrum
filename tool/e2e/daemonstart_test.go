@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,4 +91,21 @@ func TestDaemonIdlesWhenAlone(t *testing.T) {
 	if _, err := daemon.Status(l); err != nil {
 		t.Fatalf("the daemon did not come back: %v", err)
 	}
+}
+
+// TestDaemonStaleLock: a lock whose pid is alive but which is not a daemon must not
+// stop the daemon from starting. A reused pid is the ordinary way this happens.
+func TestDaemonStaleLock(t *testing.T) {
+	w := newWorkspace(t)
+	if err := os.MkdirAll(w.path("var"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(w.path("var", "daemon.lock"), []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("actor", "hello").ok(t, "a stale lock does not stop the daemon")
+	r.run("daemon", "status").ok(t, "the daemon answers")
+	r.run("daemon", "stop").ok(t, "stop")
 }

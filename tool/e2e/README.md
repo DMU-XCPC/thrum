@@ -56,7 +56,8 @@ covers duplicate names, `src:name`, the ten-megabyte bound, the metadata and
 `--out` refusing to overwrite without `--force`. `TestMessageListWatch` and `TestEventsStream` cover the streaming
 interfaces the harness plugin's feed uses; `TestWorkUnderAnOwner`, `TestHandoffSameSecond`
 and `TestHandoffBase` cover the ownership, unique-start and branch-point rules; `TestThrumWatch`
-covers the two-way scope negotiation.
+covers the two-way scope negotiation; `TestDaemonStaleLock` covers a reused pid in
+`var/daemon.lock`.
 
 The daemon transport — `history.exchange`, `git.serve`, `thrum git-proxy` — is
 covered by `TestDaemonServesGit`, `TestSyncThroughTheDaemon` and the Docker

@@ -103,13 +103,20 @@ func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool
 		return err
 	}
 	if pid, err := readLock(l.DaemonLock()); err == nil {
+		// A pid can be alive and still not be a daemon: the number may have been
+		// reused, or an old daemon may have died leaving its socket behind. Only an
+		// answer on the socket is a daemon; anything else is a leftover.
 		if processAlive(pid) {
-			return fmt.Errorf("a daemon is already running here (pid %d)", pid)
+			if _, err := Status(l); err == nil {
+				return fmt.Errorf("a daemon is already running here (pid %d)", pid)
+			}
 		}
 		_ = os.Remove(l.DaemonLock())
+		_ = os.Remove(l.DaemonSocket())
 	} else if !os.IsNotExist(err) {
 		// A lock nobody can read is a leftover, not a daemon.
 		_ = os.Remove(l.DaemonLock())
+		_ = os.Remove(l.DaemonSocket())
 	}
 	lock, err := os.OpenFile(l.DaemonLock(), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
