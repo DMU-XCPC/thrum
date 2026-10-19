@@ -32,10 +32,11 @@ turn to run".
                                     tool call: thrum_watch(actor)
 ```
 
-**The feed** is `thrum message list --watch --json`, one message per line, the backlog first. A
-message names the id, the sender and the subject, never the body, so the nudge says what arrived and
-`thrum message read` is where the body is. The stream is a hint — a missed event is never a lost
-message — and the backlog a starting stream prints is what arrived while nobody was watching.
+**The feed** is `thrum watch`, one process per workspace. The plugin says which actors it is
+responsible for, thrum confirms the scope, and every event carries its actor; the messages are still
+the mailbox's. A message names the id, the sender and the subject, never the body, so the nudge says
+what arrived and `thrum message read` is where the body is. The stream is a hint — a missed event is
+never a lost message — and a restarted watch replays the scope and the backlog.
 
 **The binding** is the hard half, and it is why there is a tool. A watcher's callback runs
 outside any agent's asynchronous chain (DSH's initiator scope covers only the driver's own
@@ -53,12 +54,15 @@ the harness's: the session sees `thrum_watch` in its tool list, and the workspac
 ```text
 thrum_watch(actor, root?)    →  { watching, root, mailbox }
 thrum_unwatch(actor, root?)  →  { unwatched, root, actor }
+thrum_watch_status()         →  { bindings }
 ```
 
 - `actor` — the name this session works as. Required, and explicit: the agent chose it, so
   it is the one thing the plugin must not guess.
 - `root` — the workspace. Omitted, it is the plugin's configured root, and failing that the
   session's own working directory, because the workspace root is where an actor starts.
+- `thrum_watch_status` is read-only: every binding with its workspace, session, feed state and
+  announced count.
 
 Calling `thrum_watch` says hello for the actor (`thrum actor hello`), so the fabric knows where
 to push, and subscribes to `thrum message list --watch --json` for that name. Calling it twice

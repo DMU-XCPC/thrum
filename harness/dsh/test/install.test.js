@@ -34,10 +34,15 @@ class FakeChild extends EventEmitter {
     super()
     this.stdout = new PassThrough()
     this.stderr = new PassThrough()
+    this.stdin = new PassThrough()
+    this.written = ''
+    this.stdin.on('data', (chunk) => {
+      this.written += chunk
+    })
   }
 
   say(message) {
-    this.stdout.write(`${JSON.stringify(message)}\n`)
+    this.stdout.write(`${JSON.stringify({ kind: 'message.delivered', actor: 'alice', message })}\n`)
   }
 
   kill() {
@@ -81,7 +86,10 @@ function world() {
         return agent ? { agent } : { error: { code: 'session/not-found' } }
       },
     },
-    sessions: { async flush() { return true } },
+    sessions: {
+      async flush() { return true },
+      get(sessionId) { return w.agents.get(sessionId)?.session },
+    },
     tools: {
       register(definition) {
         w.tools[definition.name] = definition
@@ -128,8 +136,8 @@ test('a session says who it is, and a watch for that actor starts', async () => 
   assert.deepEqual(result, { watching: 'alice', root: `${WS}`, mailbox: `${WS}/var/msg/alice` })
 
   assert.equal(w.spawned.length, 1)
-  assert.deepEqual(w.spawned[0].args, ['--root', `${WS}`, '--actor', 'alice', 'message', 'list', '--watch', '--json'])
-  assert.equal(w.spawned[0].options.env.THRUM_ACTOR, 'alice')
+  assert.deepEqual(w.spawned[0].args, ['--root', `${WS}`, 'watch'])
+  assert.match(w.children[0].written, /"op":"watch","actor":"alice"/)
 
   assert.equal(w.hellos.length, 1, 'binding says hello for the actor')
   assert.equal(w.hellos[0].actor, 'alice')
@@ -171,7 +179,7 @@ test('volatile Config references are read as values at mount', async () => {
   assert.equal(w.hellos.length, 1)
   assert.equal(w.hellos[0].root, `${WS}`)
   assert.equal(w.hellos[0].timeoutMs, 50)
-  assert.deepEqual(w.spawned[0].args.slice(0, 3), ['--root', `${WS}`, '--actor'])
+  assert.deepEqual(w.spawned[0].args, ['--root', `${WS}`, 'watch'])
   assert.equal(w.spawned[0].command, 'thrum')
 })
 
@@ -294,18 +302,14 @@ test('the binding is per workspace and per actor, and a session can rebind', asy
     'each workspace wakes the session bound to it',
   )
 
-  // Rebinding is what a session that switched jobs does: the watch for that workspace is
-  // replaced, and the messages it reports go to the session that is bound now.
+  // Rebinding is what a session that switched jobs does: the workspace's feed stays, and
+  // the messages it reports go to the session that is bound now.
   w.session('s-3', `${WS}`)
-  let oldStopped = false
-  w.children[0].kill = () => {
-    oldStopped = true
-  }
   await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-3') })
-  assert.ok(oldStopped, 'rebinding should stop the watch the old session was using')
+  assert.equal(w.spawned.length, 2, 'the workspace feed is reused, not replaced')
   assert.equal(w.hellos.length, 3, 'a rebind says hello again')
 
-  const rebindFeed = w.children.at(-1)
+  const rebindFeed = w.children[0]
   rebindFeed.say({ id: 'm-later', from: 'bob', subject: 'later' })
   await settle()
   assert.equal(w.last().sessionId, 's-3')
@@ -399,12 +403,13 @@ test('a host that mounts with bindings recorded starts watching them again', asy
 
   const w = mount({ dshHome: home })
   w.session('s-1', `${WS}`)
+  w.session('s-2', `${OTHER}`)
 
-  assert.equal(w.spawned.length, 2, 'both recorded mailboxes are watched again')
+  assert.equal(w.spawned.length, 2, 'both recorded workspaces are watched again')
   assert.deepEqual(
-    w.spawned.map((s) => s.args[3]).sort(),
-    ['alice', 'bob'],
-    'and each is watched for the actor it was bound for',
+    w.spawned.map((s) => s.args[1]).sort(),
+    [WS, OTHER].sort(),
+    'one feed per workspace, not one per actor',
   )
   assert.equal(w.hellos.length, 0, 'mounting carries the watch back, not a new hello')
 
@@ -423,4 +428,33 @@ test('a binding whose workspace is missing is skipped', () => {
 
   const w = mount({ dshHome: home })
   assert.equal(w.spawned.length, 0)
+})
+
+test('thrum_watch_status reports the binding and its feed', async () => {
+  const w = mount()
+  w.session('s-1', `${WS}`)
+  await w.registered.execute({ actor: 'alice' }, { agent: w.agents.get('s-1') })
+
+  const status = w.tools.thrum_watch_status
+  assert.ok(status, 'the status tool is registered')
+  const result = await status.execute()
+  assert.equal(result.bindings.length, 1)
+  assert.equal(result.bindings[0].actor, 'alice')
+  assert.equal(result.bindings[0].feed, 'alive')
+  assert.equal(result.bindings[0].announced, 0)
+})
+
+test('mounting forgets a binding whose session the harness no longer holds', () => {
+  const home = mkdtempSync(join(tmpdir(), 'thrum-mailbox-'))
+  const recorded = Bindings.load(statePath(home))
+  recorded.bind(WS, 'alice', 's-gone')
+  recorded.bind(WS, 'bob', 's-live')
+
+  mkdirSync(join(home, 'sessions', 'ws'), { recursive: true })
+  mkdirSync(join(home, 'sessions', 'ws', 's-live'))
+  const w = mount({ dshHome: home })
+  // The mount already pruned s-gone; bob stays and is watched.
+  assert.equal(Bindings.load(statePath(home)).sessionFor(WS, 'alice'), undefined)
+  assert.equal(Bindings.load(statePath(home)).sessionFor(WS, 'bob'), 's-live')
+  assert.equal(w.spawned.length, 1)
 })

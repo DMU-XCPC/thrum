@@ -3,10 +3,10 @@
 // Keeping `defineTool` and the message factory as parameters is what lets the wiring —
 // which is where the subtle mistakes live — be read and tested without a running harness.
 
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
-import { watchMailbox } from './feed.js'
+import { watchWorkspace } from './feed.js'
 import { sayHello as sayHelloWith } from './hello.js'
 import { Bindings, statePath } from './state.js'
 import { makeWaker } from './wake.js'
@@ -61,7 +61,7 @@ export function install(ctx, config, deps) {
     log,
   })
 
-  /** One running watch per bound (root, actor). */
+  /** One running watch per workspace. */
   const feeds = new Map()
   /** Messages waiting out the coalescing window or a retry, per binding. */
   const batches = new Map()
@@ -166,20 +166,19 @@ export function install(ctx, config, deps) {
     batches.delete(k)
   }
 
-  const startFeed = (root, actor) => {
-    const k = key(root, actor)
-    feeds.get(k)?.stop()
-    feeds.set(
-      k,
-      watchMailbox({
+  const feedFor = (root) => {
+    let feed = feeds.get(root)
+    if (!feed) {
+      feed = watchWorkspace({
         spawn,
         command,
         root,
-        actor,
-        onMessage: (message) => onMessage(root, actor, message),
+        onMessage: (actor, message) => onMessage(root, actor, message),
         onError: (error) => log(error.message),
-      }),
-    )
+      })
+      feeds.set(root, feed)
+    }
+    return feed
   }
 
   const tool = defineTool({
@@ -254,7 +253,7 @@ export function install(ctx, config, deps) {
       bindings.bind(root, args.actor, sessionId)
       const pending = batches.get(key(root, args.actor))
       if (pending) pending.sessionId = sessionId // a rebind wins, even with a batch waiting
-      startFeed(root, args.actor)
+      feedFor(root).watch(args.actor)
       // Start the watch before saying hello: hello can be slow or time out, and the watch
       // must not wait for it. The mailbox's backlog covers anything that arrived meanwhile;
       // hello only changes which site mail is pushed to from now on.
@@ -347,17 +346,68 @@ export function install(ctx, config, deps) {
         )
       }
       const k = key(root, args.actor)
-      feeds.get(k)?.stop()
-      feeds.delete(k)
+      const feed = feeds.get(root)
+      feed?.unwatch(args.actor)
+      if (feed && !feed.has(args.actor)) {
+        // Nothing left in this workspace to report, so the process can go.
+        feed.stop()
+        feeds.delete(root)
+      }
       stopBatch(k)
       bindings.unbind(root, args.actor)
       return { unwatched: true, root, actor: args.actor }
     },
   })
 
+  const status = defineTool({
+    name: 'thrum_watch_status',
+    description:
+      'Report the actor bindings this host is watching: the actor, its workspace, the bound ' +
+      'session, whether the feed is running, and how many messages have been announced. Read-only.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          bindings: { type: 'array', items: { type: 'string' } },
+        },
+      },
+      render: (_args, value) => `${value.bindings.length} binding(s)`,
+    },
+    async execute() {
+      return {
+        bindings: bindings.entries().map(({ root, actor, sessionId }) => ({
+          actor,
+          root,
+          sessionId,
+          feed: feeds.get(root)?.has(actor) ? 'alive' : 'missing',
+          announced: bindings.announcedCount(root, actor),
+        })),
+      }
+    },
+  })
+
   ctx.effect(() => {
     const unregisterWatch = ctx.tools.register(tool)
     const unregisterUnwatch = ctx.tools.register(unwatch)
+    const unregisterStatus = ctx.tools.register(status)
+    // A binding whose session the harness no longer holds is dead weight. The harness
+    // store is the only one that can say so; without one, nothing is pruned. `bindings
+    // --prune` reads the same store by hand.
+    const sessionsDir = join(dirname(statePath(read(config.dshHome, '') || undefined)), 'sessions')
+    if (existsSync(sessionsDir)) {
+      const known = new Set()
+      for (const entry of readdirSync(sessionsDir, { recursive: true })) {
+        const id = String(entry).split('/').pop()
+        if (id) known.add(id)
+      }
+      for (const { root, actor, sessionId } of bindings.entries()) {
+        if (known.has(sessionId)) continue
+        bindings.unbind(root, actor)
+        log(`forgot ${actor} in ${root}: session ${sessionId} is gone`)
+      }
+    }
     // A watch lives in this process, so a host that has restarted has none — while the
     // session that asked still believes it is arranged. The bindings are what say which
     // mailboxes this host is responsible for, so they are picked up again here. A root that
@@ -370,7 +420,7 @@ export function install(ctx, config, deps) {
         absent++
         continue
       }
-      startFeed(root, actor)
+      feedFor(root).watch(actor)
       carried++
     }
     if (carried > 0 || absent > 0) {
@@ -382,6 +432,7 @@ export function install(ctx, config, deps) {
     return () => {
       unregisterWatch()
       unregisterUnwatch()
+      unregisterStatus()
       for (const feed of feeds.values()) feed.stop()
       feeds.clear()
       for (const batch of batches.values()) if (batch.timer) clearTimeout(batch.timer)
