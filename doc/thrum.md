@@ -349,6 +349,25 @@ previous design's half-and-half naming was a regret, and a wire is the wrong pla
 that. `history.exchange` is local only: it is this machine asking its own daemon to sync.
 `git.serve` is the daemon's internal payload, never a remote a repository names.
 
+## Links
+
+A site finds another by an address — the roster's `reach`, or a discovery hint — but the
+address only starts the relation. Once two daemons have a connection, that connection is the
+**link**: it is kept, it is bidirectional, and the route table measures it, not the address
+book.
+
+- **Either side may open it.** One direction is enough: if the helper reaches the holder, the
+  holder also gets a route to the helper over the same connection, without the helper having a
+  reachable address.
+- **It is kept.** A keepalive crosses each live link every route interval; a link that stops
+  answering is dropped and the route is recomputed. The daemon may idle only when no link and
+  no work remain.
+- **It is site-level.** A link carries the verbs, including `msg.forward` and
+  `history.exchange`; it belongs to no actor and no job, holds no mailbox and queues nothing.
+  Messages stay transient: a relay holds one only for the call.
+- **It is the route.** A live link is a direct edge at one hop even when the address book has
+  no usable address. The address book is the bootstrap, not the relation.
+
 ## When something is down
 
 | What is down | What stops | What continues |

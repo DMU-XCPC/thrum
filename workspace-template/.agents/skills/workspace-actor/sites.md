@@ -38,7 +38,11 @@ Your site keeps the name, the mail, the session and the handoff's `agent`; the o
 are yours, and `thrum work` on the helper refuses. The helper receives no hello and no mail.
 Your project's git is not modified: no remote, no branch and no ref is added there.
 
-**The helper's operator turns it on, once:**
+**A connection between two daemons is a link: once either side has reached the other, both have a
+route over it, and the address book is only what starts it. You do not have to arrange the
+direction.
+
+The helper's operator turns it on, once:**
 
 ```sh
 thrum site code on     # allow receiving a job's source snapshot

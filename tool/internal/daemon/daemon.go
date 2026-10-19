@@ -39,8 +39,9 @@ const protocolVersion = "thrum/1"
 
 // Request is one call.
 type Request struct {
-	Verb string          `json:"verb"`
-	Args json.RawMessage `json:"args,omitempty"`
+	Verb    string          `json:"verb"`
+	Args    json.RawMessage `json:"args,omitempty"`
+	NoReply bool            `json:"no_reply,omitempty"`
 }
 
 // Response is one answer.
@@ -78,6 +79,8 @@ type server struct {
 	listen        string
 	code          bool
 	run           bool
+	peers         map[string]*peerLink
+	peersMu       sync.Mutex
 
 	discoverMu   sync.Mutex
 	discoverConn *discovery.Socket
@@ -97,6 +100,7 @@ func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool
 	s.listen = listen
 	s.code = code
 	s.run = run
+	s.peers = map[string]*peerLink{}
 	s.routeEvery = routeEvery
 	if s.routeEvery <= 0 {
 		s.routeEvery = 5 * time.Second
@@ -375,10 +379,19 @@ func (s *server) auth(conn net.Conn, br *bufio.Reader) (string, bool, error) {
 func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool, caller string, joining bool) {
 	dec := json.NewDecoder(br)
 	enc := json.NewEncoder(conn)
+	var link *peerLink
+	if remote && caller != "" && !joining {
+		link = newPeerLink(conn, enc, caller, false)
+		s.registerPeer(caller, link)
+		defer s.unregisterPeer(caller, link)
+	}
 	for {
 		var req Request
 		if err := dec.Decode(&req); err != nil {
 			return
+		}
+		if link != nil {
+			link.seen()
 		}
 		if req.Verb == "git.serve" {
 			s.gitServe(conn, br, enc, req, joining)
@@ -389,11 +402,61 @@ func (s *server) serve(conn net.Conn, br *bufio.Reader, remote bool, caller stri
 			return
 		}
 		if joining {
-			_ = enc.Encode(fail(errors.New("a join connection carries repositories only")))
+			if !req.NoReply {
+				_ = enc.Encode(fail(errors.New("a join connection carries repositories only")))
+			}
 			continue
 		}
-		_ = enc.Encode(s.dispatch(req, remote, caller))
+		resp := s.dispatch(req, remote, caller)
+		if !req.NoReply {
+			if link != nil {
+				_ = link.send(resp)
+			} else {
+				_ = enc.Encode(resp)
+			}
+		}
 	}
+}
+
+// registerPeer records a live link. The incoming side replaces any older incoming
+// link; an outgoing link is owned by the daemon's sender and is not overwritten here.
+func (s *server) registerPeer(site string, p *peerLink) {
+	s.peersMu.Lock()
+	defer s.peersMu.Unlock()
+	if s.peers == nil {
+		s.peers = map[string]*peerLink{}
+	}
+	if old := s.peers[site]; old != nil && old.outgoing && p.outgoing {
+		_ = old.close()
+	}
+	s.peers[site] = p
+}
+
+func (s *server) unregisterPeer(site string, p *peerLink) {
+	s.peersMu.Lock()
+	defer s.peersMu.Unlock()
+	if cur := s.peers[site]; cur == p {
+		delete(s.peers, site)
+	}
+}
+
+// sendTo writes a request to a live link. It is how the reverse direction works:
+// a site that was reached can answer on the same connection without an address.
+func (s *server) sendTo(site string, req Request) error {
+	s.peersMu.Lock()
+	p := s.peers[site]
+	s.peersMu.Unlock()
+	if p == nil {
+		return fmt.Errorf("no live link to %s", site)
+	}
+	return p.send(req)
+}
+
+func (s *server) hasPeer(site string) bool {
+	s.peersMu.Lock()
+	defer s.peersMu.Unlock()
+	_, ok := s.peers[site]
+	return ok
 }
 
 type actorArgs struct {
@@ -624,6 +687,8 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 		}
 		return payload(map[string]any{"site": s.site})
 
+	case "site.ping":
+		return payload(map[string]any{"site": s.site})
 	case "run":
 		if !remote {
 			return fail(errors.New("run is for another site"))
@@ -647,6 +712,7 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 // pushMessage hands a message to this site's mailbox, refusing it when the actor has
 // moved. It is the destination end of both msg.push and a relayed msg.forward.
 func (s *server) pushMessage(args pushArgs) Response {
+
 	if place, ok := actors.Places(s.l).Actors[args.Message.To]; ok && place.Site != "" && place.Site != s.site {
 		data, _ := json.Marshal(map[string]string{"site": place.Site})
 		return Response{
@@ -679,6 +745,23 @@ func (s *server) pushMessage(args pushArgs) Response {
 type route struct {
 	NextHop string `json:"next_hop" yaml:"next_hop"`
 	Hops    int    `json:"hops" yaml:"hops"`
+	Live    bool   `json:"live,omitempty" yaml:"live,omitempty"`
+}
+
+// pingPeers keeps the live links alive and drops the ones that no longer answer.
+func (s *server) pingPeers() {
+	s.peersMu.Lock()
+	list := make([]*peerLink, 0, len(s.peers))
+	for _, p := range s.peers {
+		list = append(list, p)
+	}
+	s.peersMu.Unlock()
+	for _, p := range list {
+		if err := p.send(Request{Verb: "site.ping", NoReply: true}); err != nil {
+			_ = p.close()
+			s.unregisterPeer(p.site, p)
+		}
+	}
 }
 
 func (s *server) router() {
@@ -686,6 +769,7 @@ func (s *server) router() {
 	defer t.Stop()
 	alone := 0
 	for {
+		s.pingPeers()
 		if s.pollRoutes() == 0 {
 			alone++
 		} else {
@@ -713,7 +797,14 @@ func (s *server) pollRoutes() int {
 	best := map[string]route{}
 	sets := map[string]map[string]int{}
 	for name := range peers {
-		if name == s.site || peers[name].Key == "" || reachFor(s.l, name, peers) == "" {
+		if name == s.site || peers[name].Key == "" {
+			continue
+		}
+		if s.hasPeer(name) {
+			best[name] = route{NextHop: name, Hops: 1, Live: true}
+			continue
+		}
+		if reachFor(s.l, name, peers) == "" {
 			continue
 		}
 		c, err := dial(s.l, name, true)
@@ -743,7 +834,10 @@ func (s *server) pollRoutes() int {
 		}
 	}
 	s.setRoutes(best)
-	return len(sets)
+	s.peersMu.Lock()
+	live := len(s.peers)
+	s.peersMu.Unlock()
+	return len(sets) + live
 }
 
 func consider(m map[string]route, site string, r route) {

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestCodeSyncAndRun: the actor stays at s1; s2 is a helper that receives the
@@ -99,5 +100,22 @@ func TestActorPlace(t *testing.T) {
 	}
 	if out := r.run("status").ok(t, "status").stdout; !strings.Contains(out, "mail  at s1") {
 		t.Fatalf("status does not report the mail place: %s", out)
+	}
+}
+
+// TestOneWayLinkGivesTheReverseRoute: one direction is enough. The helper reaches
+// the holder; the holder then answers on the same live link, without an address for
+// the helper.
+func TestOneWayLinkGivesTheReverseRoute(t *testing.T) {
+	ts := setupTwoSites(t)
+	twoSiteDaemons(t, ts)
+	ts.w2.r().as("a2").run("message", "send", "a1", "--subject", "hello", "--body", "-").ok(t, "b to a")
+	time.Sleep(400 * time.Millisecond) // let the holder's route poll see the link
+	if out := ts.w1.r().run("site", "routes").ok(t, "routes").stdout; !strings.Contains(out, "s2") {
+		t.Fatalf("no reverse route: %s", out)
+	}
+	ts.w1.r().as("a1").run("message", "send", "a2", "--subject", "reply", "--body", "-").ok(t, "a to b")
+	if out := ts.w2.r().as("a2").run("message", "list").ok(t, "list").stdout; !strings.Contains(out, "reply") {
+		t.Fatalf("the reverse message did not arrive: %s", out)
 	}
 }
