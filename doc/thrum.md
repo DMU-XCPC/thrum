@@ -27,14 +27,30 @@ The roster lives in the line, one file per site:
 # doc/site/build-01.yaml
 site: build-01
 key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
-reach: build-01.internal:7700
+endpoint: build-01.internal:7700
 ```
 
 | Field | Meaning |
 | --- | --- |
 | `site` | the name; unique in the workspace |
 | `key` | this site's public key. The daemon authenticates peers with it, and with nothing else |
-| `reach` | where the daemon can be reached, when the operator declares it. Omitted means no address is declared, not that the site is unreachable |
+| `endpoint` | where peers dial this site, when the operator declares it. Omitted means no endpoint is declared, not that the site is unreachable |
+
+### Listening, endpoints, routes
+
+Three things are separate, and the vocabulary keeps them apart:
+
+- **listen** — where this site's daemon binds. It is site-local, defaults to `0.0.0.0:7700`, and
+  is never shared. `--listen` overrides it for a machine that must bind one interface.
+- **endpoint** — the address a peer dials. It may be declared in the roster, announced by the
+  daemon (its outbound address and listen port), or hinted by the LAN for a few seconds. A
+  declared endpoint is optional; what is not optional is that the daemon has one it can announce.
+- **route** — how this machine reaches a peer: direct or via a neighbour. It is resolved from the
+  local override, then the declared endpoint, then the hint; a live link beats all three.
+
+`thrum site route <peer> --via <host:port>` is the site-local override; `site reach` remains a
+hidden alias. `thrum migrate` moves an existing workspace's `reach` names to `endpoint` and `via`
+in one line event.
 
 The declaration travels by git, like every other durable fact, and needs no quorum to read. A
 site that is declared but unreachable is a site that is down, not a site that does not exist. A
@@ -359,9 +375,10 @@ book.
 - **Either side may open it.** One direction is enough: if the helper reaches the holder, the
   holder also gets a route to the helper over the same connection, without the helper having a
   reachable address.
-- **It is kept.** A keepalive crosses each live link every route interval; a link that stops
-  answering is dropped and the route is recomputed. The daemon may idle only when no link and
-  no work remain.
+- **It is kept.** The route poll is its keepalive: a link whose peer has stopped answering is
+  dropped and the route is recomputed. The daemon never initiates a frame on an incoming link,
+  so a request the peer is waiting on cannot be interleaved with a ping. It may idle only when
+  no link and no work remain.
 - **It is site-level.** A link carries the verbs, including `msg.forward` and
   `history.exchange`; it belongs to no actor and no job, holds no mailbox and queues nothing.
   Messages stay transient: a relay holds one only for the call.

@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/multiagentworkspace/thrum/tool/internal/daemon"
+	"github.com/multiagentworkspace/thrum/tool/internal/layout"
 )
 
 // TestCodeSyncAndRun: the actor stays at s1; s2 is a helper that receives the
@@ -118,4 +121,69 @@ func TestOneWayLinkGivesTheReverseRoute(t *testing.T) {
 	if out := ts.w2.r().as("a2").run("message", "list").ok(t, "list").stdout; !strings.Contains(out, "reply") {
 		t.Fatalf("the reverse message did not arrive: %s", out)
 	}
+}
+
+// TestMigrateReachToEndpoint: an old line with `reach` is moved to `endpoint` in one
+// commit, and the old name still reads before the migration.
+func TestMigrateReachToEndpoint(t *testing.T) {
+	w := newWorkspace(t)
+	// Make the record look like one written by the previous version.
+	w.write("doc/site/s1.yaml", "site: s1\nkey: "+siteKeyLine(t, w)+"reach: 127.0.0.1:7700\n")
+	w.git("add", "-A")
+	w.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "old record")
+
+	if out := w.r().run("migrate", "--dry-run").ok(t, "dry run").stdout; !strings.Contains(out, "reach -> endpoint") {
+		t.Fatalf("the dry run did not report the change: %s", out)
+	}
+	if !strings.Contains(w.file("doc/site/s1.yaml"), "reach:") {
+		t.Fatalf("the dry run wrote the file")
+	}
+	w.r().run("migrate").ok(t, "migrate")
+	got := w.file("doc/site/s1.yaml")
+	if strings.Contains(got, "reach:") || !strings.Contains(got, "endpoint: 127.0.0.1:7700") {
+		t.Fatalf("the record was not migrated: %s", got)
+	}
+	if subject := w.git("log", "-1", "--format=%s"); !strings.Contains(subject, "reach") {
+		t.Fatalf("the migration was not committed: %s", subject)
+	}
+	w.r().run("verify").ok(t, "verify after migration")
+	w.r().run("migrate").ok(t, "second migrate")
+	if out := w.r().run("migrate").ok(t, "third migrate").stdout; !strings.Contains(out, "nothing to migrate") {
+		t.Fatalf("migrate is not idempotent: %s", out)
+	}
+}
+
+// TestHelperDaemonDoesNotIdleOut: a site that declared itself a helper stays up.
+func TestHelperDaemonDoesNotIdleOut(t *testing.T) {
+	t.Setenv("THRUM_ROUTE_INTERVAL", "100ms")
+	w := newWorkspace(t)
+	w.r().run("site", "run", "on").ok(t, "run on")
+	w.r().run("sync").ok(t, "sync")
+	l := layout.New(w.root)
+	time.Sleep(1200 * time.Millisecond) // twelve intervals: past the idle threshold
+	if _, err := daemon.Status(l); err != nil {
+		t.Fatalf("a helper daemon idled out: %v", err)
+	}
+}
+
+// TestDaemonStartsWithoutDeclaredReach: no address is declared, so the daemon
+// chooses its own default listen point.
+func TestDaemonStartsWithoutDeclaredReach(t *testing.T) {
+	w := newWorkspace(t)
+	w.r().run("sync").ok(t, "sync")
+	if _, err := daemon.Status(layout.New(w.root)); err != nil {
+		t.Fatalf("the daemon did not start without a declared endpoint: %v", err)
+	}
+}
+
+// siteKeyLine returns the public key line from the existing site record.
+func siteKeyLine(t *testing.T, w *workspace) string {
+	t.Helper()
+	for _, ln := range strings.Split(w.file("doc/site/s1.yaml"), "\n") {
+		if strings.HasPrefix(ln, "key:") {
+			return strings.TrimSpace(strings.TrimPrefix(ln, "key:")) + "\n"
+		}
+	}
+	t.Fatal("no key in the site record")
+	return ""
 }

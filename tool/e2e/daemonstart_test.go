@@ -18,7 +18,7 @@ import (
 func TestDaemonStartsOnDemand(t *testing.T) {
 	a := newWorkspace(t)
 	pa := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	a.r().run("site", "reach", "s1", "--at", pa).ok(t, "a address")
+	a.r().run("site", "announce", "--at", pa).ok(t, "a endpoint")
 
 	pb := fmt.Sprintf("127.0.0.1:%d", freePort(t))
 	token := strings.TrimSpace(a.r().run("site", "invite", "s2", "--at", pb).ok(t, "invite").stdout)

@@ -95,7 +95,7 @@ func dial(l layout.Layout, peer string, allowSuccession bool) (*Client, error) {
 	}
 	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("%s did not answer: %w", peer, err)
+		return nil, fmt.Errorf("%s did not answer at %s: is its daemon running? start it there with any thrum command, or keep it up; if the address is stale, `thrum site route %s --via <host:port>` overrides it here: %w", peer, addr, peer, err)
 	}
 	br := bufio.NewReader(conn)
 	enc := json.NewEncoder(conn)

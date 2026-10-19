@@ -148,10 +148,7 @@ func Run(l layout.Layout, listen string, routeEvery time.Duration, discover bool
 
 	addr := listen
 	if addr == "" {
-		addr = reachFor(l, s.site, s.roster)
-	}
-	if addr == "" {
-		return fmt.Errorf("this site declares no reach: set one with `thrum site reach %s --at <host:port>`", s.site)
+		addr = ":7700"
 	}
 
 	_ = os.Remove(l.DaemonSocket())
@@ -601,7 +598,8 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 			return fail(fmt.Errorf("the message for %s exceeded the hop limit", args.Message.To))
 		}
 		if args.To == s.site {
-			return s.pushMessage(pushArgs{Message: args.Message, Body: args.Body, Files: args.Files})
+			resp := s.pushMessage(pushArgs{Message: args.Message, Body: args.Body, Files: args.Files})
+			return resp
 		}
 		r, ok := s.routeFor(args.To)
 		if !ok {
@@ -712,7 +710,6 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 // pushMessage hands a message to this site's mailbox, refusing it when the actor has
 // moved. It is the destination end of both msg.push and a relayed msg.forward.
 func (s *server) pushMessage(args pushArgs) Response {
-
 	if place, ok := actors.Places(s.l).Actors[args.Message.To]; ok && place.Site != "" && place.Site != s.site {
 		data, _ := json.Marshal(map[string]string{"site": place.Site})
 		return Response{
@@ -748,28 +745,11 @@ type route struct {
 	Live    bool   `json:"live,omitempty" yaml:"live,omitempty"`
 }
 
-// pingPeers keeps the live links alive and drops the ones that no longer answer.
-func (s *server) pingPeers() {
-	s.peersMu.Lock()
-	list := make([]*peerLink, 0, len(s.peers))
-	for _, p := range s.peers {
-		list = append(list, p)
-	}
-	s.peersMu.Unlock()
-	for _, p := range list {
-		if err := p.send(Request{Verb: "site.ping", NoReply: true}); err != nil {
-			_ = p.close()
-			s.unregisterPeer(p.site, p)
-		}
-	}
-}
-
 func (s *server) router() {
 	t := time.NewTicker(s.routeEvery)
 	defer t.Stop()
 	alone := 0
 	for {
-		s.pingPeers()
 		if s.pollRoutes() == 0 {
 			alone++
 		} else {
@@ -779,8 +759,14 @@ func (s *server) router() {
 		// nothing durable lives in the daemon, so it can stop. The next command
 		// starts it again.
 		if alone >= 6 {
-			s.once.Do(func() { close(s.stop) })
-			return
+			// A helper is meant to be used by others: it stays up even when no
+			// peer currently answers, or a remote command could never reach it.
+			if s.code || s.run {
+				alone = 0
+			} else {
+				s.once.Do(func() { close(s.stop) })
+				return
+			}
 		}
 		select {
 		case <-s.stop:
@@ -1235,14 +1221,20 @@ func workspaceID(l layout.Layout) (string, error) {
 func reachFor(l layout.Layout, site string, roster map[string]records.Site) string {
 	if b, err := os.ReadFile(filepath.Join(l.ConfigDir(), site+".yaml")); err == nil {
 		var cfg struct {
+			Via   string `yaml:"via"`
 			Reach string `yaml:"reach"`
 		}
-		if err := format.DecodeWhole(b, &cfg); err == nil && cfg.Reach != "" {
-			return cfg.Reach
+		if err := format.DecodeWhole(b, &cfg); err == nil {
+			if cfg.Via != "" {
+				return cfg.Via
+			}
+			if cfg.Reach != "" {
+				return cfg.Reach
+			}
 		}
 	}
-	if s, ok := roster[site]; ok && s.Reach != "" {
-		return s.Reach
+	if s, ok := roster[site]; ok && s.Addr() != "" {
+		return s.Addr()
 	}
 	return discoveredReach(l, site, discoveredFor)
 }

@@ -29,9 +29,18 @@ type CreateOptions struct {
 }
 
 type siteDecl struct {
-	Site  string `yaml:"site"`
-	Key   string `yaml:"key"`
-	Reach string `yaml:"reach,omitempty"`
+	Site     string `yaml:"site"`
+	Key      string `yaml:"key"`
+	Endpoint string `yaml:"endpoint,omitempty"`
+	Reach    string `yaml:"reach,omitempty"`
+}
+
+// addr is the declared endpoint, or the old reach from an existing line.
+func (d siteDecl) addr() string {
+	if d.Endpoint != "" {
+		return d.Endpoint
+	}
+	return d.Reach
 }
 
 type repoDecl struct {
@@ -115,7 +124,7 @@ func Create(opts CreateOptions) (err error) {
 	if err != nil {
 		return err
 	}
-	if err := writeDecl(l.Site(opts.Site), siteDecl{Site: opts.Site, Key: pub, Reach: opts.At}); err != nil {
+	if err := writeDecl(l.Site(opts.Site), siteDecl{Site: opts.Site, Key: pub, Endpoint: opts.At}); err != nil {
 		return err
 	}
 	for _, c := range opts.Code {

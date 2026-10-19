@@ -195,8 +195,8 @@ func Join(root string, t Token) error {
 		return err
 	}
 	data, err := format.MarshalYAML(struct {
-		Reach string `yaml:"reach"`
-	}{Reach: t.Reach})
+		Endpoint string `yaml:"endpoint"`
+	}{Endpoint: t.Reach})
 	if err != nil {
 		return err
 	}

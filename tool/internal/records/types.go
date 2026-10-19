@@ -15,10 +15,20 @@ type Actor struct {
 // Site is one machine's entry in the roster. A site that has been invited but has
 // not joined yet has no key.
 type Site struct {
-	Site   string `yaml:"site" json:"site"`
-	Key    string `yaml:"key,omitempty" json:"key,omitempty"`
-	Reach  string `yaml:"reach,omitempty" json:"reach,omitempty"`
-	Invite string `yaml:"invite,omitempty" json:"invite,omitempty"`
+	Site     string `yaml:"site" json:"site"`
+	Key      string `yaml:"key,omitempty" json:"key,omitempty"`
+	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	Invite   string `yaml:"invite,omitempty" json:"invite,omitempty"`
+	// Reach is the pre-endpoint name. It is read, never written.
+	Reach string `yaml:"reach,omitempty" json:"reach,omitempty"`
+}
+
+// Addr is the endpoint peers dial: the declared endpoint, or the old reach.
+func (s Site) Addr() string {
+	if s.Endpoint != "" {
+		return s.Endpoint
+	}
+	return s.Reach
 }
 
 // Repo is one code repository the project has.

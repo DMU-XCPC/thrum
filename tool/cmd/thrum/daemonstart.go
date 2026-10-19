@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,11 +17,20 @@ import (
 // localConfig is this machine's view of one site: where it reaches it and whether
 // this machine's daemon announces itself on the LAN. It is never committed.
 type localConfig struct {
-	Reach    string `yaml:"reach"`
+	Via      string `yaml:"via,omitempty"`
+	Reach    string `yaml:"reach,omitempty"`
 	Discover bool   `yaml:"discover,omitempty"`
 	Inactive bool   `yaml:"inactive,omitempty"`
 	Code     bool   `yaml:"code,omitempty"`
 	Run      bool   `yaml:"run,omitempty"`
+}
+
+// route is the address this machine dials for the site: the local override.
+func (c localConfig) route() string {
+	if c.Via != "" {
+		return c.Via
+	}
+	return c.Reach
 }
 
 func readLocalConfig(l layout.Layout, name string) localConfig {
@@ -66,11 +76,17 @@ func ensureDaemon(l layout.Layout) error {
 	if reach == "" {
 		reach = daemon.DefaultReach()
 	}
+	// The endpoint's host is how peers find this site; the daemon binds all
+	// interfaces on its port, so a declared endpoint also fixes the port.
+	listen := reach
+	if _, port, err := net.SplitHostPort(reach); err == nil && port != "" {
+		listen = ":" + port
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	args := []string{"--root", l.Root, "daemon", "run", "--listen", reach}
+	args := []string{"--root", l.Root, "daemon", "run", "--listen", listen}
 	// The test suite shortens the route interval to see the idle shutdown quickly.
 	if v := os.Getenv("THRUM_ROUTE_INTERVAL"); v != "" {
 		args = append(args, "--route-interval", v)

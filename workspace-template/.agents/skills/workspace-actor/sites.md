@@ -219,7 +219,9 @@ by `site reach`, or by the join for the inviter), the roster's declared `reach`,
 announcement under `var/discovered`. The discovery is opt-in (`thrum site discover on`), emits
 nothing until asked, and never writes the roster. Only an explicit declaration writes the roster:
 `create --at`, `site invite --at`, and `thrum site announce`. A site with no declared address is
-still reachable when discovery is on and the LAN has found it.
+still reachable when discovery is on and the LAN has found it. A hint is a few seconds old at
+most; an explicit `--at` (or `thrum site route <peer> --via <host:port>` on this machine) is what
+survives a longer drop.
 
 `thrum site reach <name> --at <host:port>` is the local override; `thrum site announce --at
 <host:port>` is the shared declaration, and it restarts this site's endpoint on the next command.
