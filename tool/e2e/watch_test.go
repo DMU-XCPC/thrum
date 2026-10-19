@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bufio"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -38,7 +39,50 @@ func startWatch(t *testing.T, w *workspace, actor string, args ...string) *watch
 	return &watchProc{lines: lines}
 }
 
-type watchProc struct{ lines chan string }
+type watchProc struct {
+	lines chan string
+	stdin io.WriteCloser
+}
+
+func (p *watchProc) send(t *testing.T, line string) {
+	t.Helper()
+	if _, err := io.WriteString(p.stdin, line+"\n"); err != nil {
+		t.Fatalf("writing to the watch: %v", err)
+	}
+}
+
+func startWatchCmd(t *testing.T, w *workspace, actor string, args ...string) *watchProc {
+	t.Helper()
+	full := append([]string{"--root", w.root}, args...)
+	cmd := exec.Command(thrumBin, full...)
+	cmd.Env = envWith("THRUM_ROOT="+w.root, "THRUM_ACTOR="+actor)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	lines := make(chan string, 32)
+	go func() {
+		sc := bufio.NewScanner(out)
+		for sc.Scan() {
+			lines <- sc.Text()
+		}
+		close(lines)
+	}()
+	t.Cleanup(func() {
+		_ = stdin.Close()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	return &watchProc{lines: lines, stdin: stdin}
+}
 
 func (p *watchProc) next(t *testing.T) string {
 	t.Helper()
@@ -84,5 +128,40 @@ func TestEventsStream(t *testing.T) {
 	line := p.next(t)
 	if !strings.Contains(line, `"kind":"message.delivered"`) || !strings.Contains(line, "event") {
 		t.Fatalf("the event line: %s", line)
+	}
+}
+
+// TestThrumWatch: the two-way stream. One process, a negotiated scope, and messages
+// routed by actor.
+func TestThrumWatch(t *testing.T) {
+	w := newWorkspace(t)
+	r := w.r()
+	r.run("actor", "declare", "a1", "--kind", "agent").ok(t, "a1")
+	r.run("actor", "declare", "a2", "--kind", "agent").ok(t, "a2")
+
+	p := startWatchCmd(t, w, "a1", "watch")
+	p.send(t, `{"op":"watch","actor":"a1"}`)
+	if line := p.next(t); !strings.Contains(line, `"kind":"watching"`) || !strings.Contains(line, `"actor":"a1"`) {
+		t.Fatalf("watch confirmation: %s", line)
+	}
+	p.send(t, `{"op":"scope","actors":["a1"]}`)
+	if line := p.next(t); !strings.Contains(line, `"kind":"scope"`) {
+		t.Fatalf("scope confirmation: %s", line)
+	}
+	r.as("a2").run("message", "send", "a1", "--subject", "x").ok(t, "send")
+	if line := p.next(t); !strings.Contains(line, `"kind":"message.delivered"`) || !strings.Contains(line, `"actor":"a1"`) {
+		t.Fatalf("delivery: %s", line)
+	}
+	p.send(t, `{"op":"watch","actor":"ghost"}`)
+	if line := p.next(t); !strings.Contains(line, `"kind":"error"`) {
+		t.Fatalf("undeclared actor: %s", line)
+	}
+	p.send(t, `{"op":"unwatch","actor":"a1"}`)
+	if line := p.next(t); !strings.Contains(line, `"kind":"unwatching"`) {
+		t.Fatalf("unwatch confirmation: %s", line)
+	}
+	p.send(t, `{"op":"bogus"}`)
+	if line := p.next(t); !strings.Contains(line, `"kind":"error"`) {
+		t.Fatalf("bad op: %s", line)
 	}
 }

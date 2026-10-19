@@ -11,7 +11,8 @@ the delivery path: **the mailbox is the truth; the stream is a hint.**
 
 | Interface | What it gives | State |
 | --- | --- | --- |
-| `thrum events --json` (and `--watch`) | one JSON event per line: a message delivered, a job's state changed, a shared history moved | design; the current CLI has it only as the hidden `daemon events` |
+| `thrum events --json` (and `--watch`) | one JSON event per line: a message delivered, a job's state changed, a shared history moved | current |
+| `thrum watch` (JSONL on stdin/stdout) | one process serves every actor in the workspace: `watch`/`unwatch`/`scope`/`ping` in, `watching`/`unwatching`/`scope`/`message.delivered`/`pong`/`error` out | current |
 | `thrum message list --watch --json` | the mailbox's backlog first, then one JSON message per line as it arrives | current |
 | `--json` on the read commands | the machine-readable form | current |
 | the mailbox (`var/msg/<actor>/<id>.md`, `<id>/` for attachments) | the truth | current; a plugin never writes it |
@@ -57,9 +58,10 @@ remembered, capped and pruned; a repeated nudge is the only cost of forgetting a
 ## What the current CLI provides
 
 `thrum events [--json]` is the local event stream, and `thrum message list --watch [--json]`
-prints the mailbox's backlog and then each arrival, one JSON object per line. The first event kind
-is `message.delivered`; the job-state and history-moved kinds the design names are not emitted yet,
-and no plugin depends on them.
+prints the mailbox's backlog and then each arrival, one JSON object per line. `thrum watch` is the
+multiplexed, two-way form: one process serves every actor in the workspace, and the plugin sets the
+scope it is responsible for. The first event kind is `message.delivered`; the job-state and
+history-moved kinds the design names are not emitted yet, and no plugin depends on them.
 
 ## The DSH companion
 

@@ -42,7 +42,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newCreateCmd(), newVersionCmd(), newActorCmd(), newRepoCmd(),
 		newJobCmd(), newWorktreeCmd(), newWorkCmd(), newWhereCmd(), newEnvCmd(),
 		newVerifyCmd(), newStatusCmd(), newCommitCmd(), newRetireCmd(),
-		newMessageCmd(), newDaemonCmd(), newEventsCmd(), newSiteCmd(),
+		newMessageCmd(), newDaemonCmd(), newEventsCmd(), newWatchCmd(), newSiteCmd(),
 		newJoinCmd(), newSyncCmd(), newAssetCmd(), newBundleCmd(),
 		newCleanCmd(), newUpdateCmd(), newGitProxyCmd())
 	return root
