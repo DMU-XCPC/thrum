@@ -210,7 +210,16 @@ func newServer(l layout.Layout) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &server{l: l, site: site, roster: roster, workspace: ws, stop: make(chan struct{}), routes: map[string]route{}}, nil
+	// The learned routes are a cache, but a restart is ordinary (an address change,
+	// an idle stop), and losing them means the next send fails until the poll runs
+	// again. `var/routes.yaml` is that cache.
+	routes := map[string]route{}
+	if _, err := format.ReadWhole(filepath.Join(l.Var(), "routes.yaml"), &struct {
+		Sites map[string]route `yaml:"sites"`
+	}{Sites: routes}); err != nil {
+		routes = map[string]route{}
+	}
+	return &server{l: l, site: site, roster: roster, workspace: ws, stop: make(chan struct{}), routes: routes}, nil
 }
 
 func (s *server) accept(ln net.Listener, remote bool) {
