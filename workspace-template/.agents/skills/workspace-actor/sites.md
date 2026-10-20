@@ -59,7 +59,7 @@ the CLI restarts it on the next command. The caller still has to ask (`sync --co
 2. Copy the working tree to the helper — tracked, uncommitted and untracked files, without
    `.git` and without the files `.gitignore` excludes:
    ```sh
-   thrum sync --code --job <id> --site <helper>
+   thrum code send <id> --site <helper>
    ```
    It is one-way and replaces `job/<id>/data/src/` on the helper. No repository is touched.
    **Do not clone into `data/src`.** The helper's `repos/` may be empty, and that is expected: the
@@ -109,8 +109,9 @@ lane; using the wrong one loses the thing or creates a second copy of the truth.
 | What you are moving | Use | Where it survives |
 | --- | --- | --- |
 | a command to run on another machine | `thrum run --site <helper> --job <id> -- <cmd>` | nothing; the output and exit status come back |
-| the job's source, to execute there | `thrum sync --code --job <id> --site <helper>` | the helper's `job/<id>/data/src/`, replaced whole; never a repository |
-| the job's transient inputs or outputs | `thrum bundle export <id> -o <file>` / `thrum bundle import <file>` | the payload, `job/<id>/`; disposable |
+| the job's source, to execute there | `thrum code send <id> --site <helper>` | the helper's `job/<id>/data/src/`, replaced whole; never a repository |
+| ordinary files, in or out | `thrum copy --to <helper> [--job <id>] <src>... <dst>` / `copy --from …` | the payload under `data/`, or a site scratch directory without `--job` |
+| the whole payload, as an archive | `thrum bundle export <id> -o <file>` / `thrum bundle import <file>` | the payload, `job/<id>/`; disposable |
 | durable bytes (a dataset, a large artifact) | `thrum asset publish` here; `thrum asset materialise <name> <version> --job <id>` there | the store, `repos/store.git`, addressed by a tag; `thrum sync` carries the tag |
 | a file for a person | `thrum message send <actor> --attach <file>` (≤ 10 MB) | the recipient's mailbox, not the workspace |
 | a piece of evidence | `thrum job handoff` (the ledger) | `handoff/<id>/`; `thrum sync` publishes it |

@@ -103,7 +103,8 @@ func newSyncCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&withCode, "code", false, "copy the job's working tree to a helper site")
+	cmd.Flags().BoolVar(&withCode, "code", false, "deprecated: use `thrum code send`")
+	_ = cmd.Flags().MarkHidden("code")
 	cmd.Flags().StringVar(&job, "job", "", "the job whose working tree is copied with --code")
 	cmd.Flags().StringVar(&site, "site", "", "the helper site for --code")
 	return cmd

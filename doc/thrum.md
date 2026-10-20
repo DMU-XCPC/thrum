@@ -225,11 +225,19 @@ status is the command's; the helper writes a log under `job/<id>/log/`. There is
 site is trusted and the command is the actor's. The helper's daemon refuses `run` unless its
 operator turns it on (`site run on`).
 
-`thrum sync --code --job <id> --site <helper>` copies the job's working tree — tracked files,
-uncommitted changes and untracked files, without `.git` — into the helper's `job/<id>/data/src/`.
-It is one-way, replaces the directory, and touches no repository: no remote is added, no ref or
-branch is written. It is off by default and needs the helper's `site code on` as well. It exists
-because only the site that holds the job can commit; the helper only needs the source.
+`thrum code send <job> --site <helper>` copies the job's working tree — tracked files, uncommitted
+changes and untracked files, without `.git` — into the helper's `job/<id>/data/src/`. It is
+one-way, replaces the directory, and touches no repository: no remote is added, no ref or branch is
+written. It is off by default and needs the helper's `site code on` as well. It exists because only
+the site that holds the job can commit; the helper only needs the source.
+
+`thrum copy --to <helper> [--job <id>] <src>... <dst>` and `thrum copy --from <helper> [--job <id>]
+<src>... <dst>` move ordinary files between sites. They carry bytes and nothing else: no git, no
+store, no records, no queue. The destination is the job's payload under `data/`, or a site-local
+scratch directory when no job is named.
+
+`thrum sync` exchanges the line, the ledger and the store; it is not a file transfer. The snapshot
+is `code send`, and arbitrary files are `copy`.
 
 The job's brief records `held_at`: the site whose branch and commits are the job's. `job show`
 and `status` display it, and `thrum work` on another site refuses instead of becoming a second

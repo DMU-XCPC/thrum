@@ -687,6 +687,58 @@ func (s *server) dispatch(req Request, remote bool, caller string) Response {
 
 	case "site.ping":
 		return payload(map[string]any{"site": s.site})
+	case "file.receive":
+		if !remote {
+			return fail(errors.New("file.receive is for another site"))
+		}
+		var args struct {
+			Job  string `json:"job"`
+			Name string `json:"name"`
+			Data string `json:"data"`
+		}
+		if err := json.Unmarshal(req.Args, &args); err != nil {
+			return fail(err)
+		}
+		data, err := base64.StdEncoding.DecodeString(args.Data)
+		if err != nil {
+			return fail(err)
+		}
+		dir, err := fileDir(s, args.Job)
+		if err != nil {
+			return fail(err)
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fail(err)
+		}
+		name := filepath.Base(args.Name)
+		if name == "" || name == "." || name == ".." {
+			return fail(fmt.Errorf("%q is not a file name", args.Name))
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			return fail(err)
+		}
+		return payload(map[string]string{"name": name})
+	case "file.fetch":
+		if !remote {
+			return fail(errors.New("file.fetch is for another site"))
+		}
+		var args struct {
+			Job  string `json:"job"`
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(req.Args, &args); err != nil {
+			return fail(err)
+		}
+		dir, err := fileDir(s, args.Job)
+		if err != nil {
+			return fail(err)
+		}
+		name := filepath.Base(args.Name)
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			return fail(err)
+		}
+		return payload(map[string]string{"data": base64.StdEncoding.EncodeToString(data)})
 	case "run":
 		if !remote {
 			return fail(errors.New("run is for another site"))
@@ -1206,6 +1258,18 @@ func payload(v any) Response {
 		return fail(err)
 	}
 	return Response{OK: true, Data: data}
+}
+
+// fileDir is where `copy` lands: the job's payload data/, or a site scratch
+// directory when no job is named.
+func fileDir(s *server, job string) (string, error) {
+	if job == "" {
+		return filepath.Join(s.l.Var(), "scratch"), nil
+	}
+	if !format.ValidSlug(job) {
+		return "", fmt.Errorf("%q is not a job id", job)
+	}
+	return s.l.PayloadSub(job, "data"), nil
 }
 
 func fail(err error) Response {

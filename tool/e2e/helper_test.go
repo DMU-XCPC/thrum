@@ -203,3 +203,32 @@ func TestRunRefusesAClonedSnapshot(t *testing.T) {
 	ts.w1.r().run("run", "--site", "s2", "--job", "j1", "--", "echo", "hello").
 		fails(t, "a cloned snapshot must be refused", "not a repository")
 }
+
+// TestCodeSendAndCopy: code send is the snapshot; copy moves ordinary files.
+func TestCodeSendAndCopy(t *testing.T) {
+	ts := setupTwoSites(t)
+	twoSiteDaemons(t, ts)
+	ts.w1.r().run("job", "open", "j1", "--repo", "code", "--label", "up", "--goal", "g").ok(t, "open")
+	ts.w2.r().run("site", "code", "on").ok(t, "code on")
+	ts.w2.r().run("site", "run", "on").ok(t, "run on")
+	ts.w2.r().run("sync").ok(t, "helper sync")
+	ts.w1.r().run("code", "send", "j1", "--site", "s2").ok(t, "code send")
+	if !ts.w2.exists(filepath.Join("job", "j1", "data", "src")) {
+		t.Fatalf("code send did not materialise data/src")
+	}
+
+	// An ordinary file, to the helper's payload data/ and back.
+	local := filepath.Join(t.TempDir(), "input.txt")
+	if err := os.WriteFile(local, []byte("input\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts.w1.r().run("copy", "--to", "s2", "--job", "j1", local).ok(t, "copy to")
+	if got, err := os.ReadFile(ts.w2.path("job", "j1", "data", "input.txt")); err != nil || string(got) != "input\n" {
+		t.Fatalf("copy --to did not land: %q %v", got, err)
+	}
+	back := filepath.Join(t.TempDir(), "back.txt")
+	ts.w1.r().run("copy", "--from", "s2", "--job", "j1", "input.txt", back).ok(t, "copy from")
+	if got, err := os.ReadFile(back); err != nil || string(got) != "input\n" {
+		t.Fatalf("copy --from did not return: %q %v", got, err)
+	}
+}
