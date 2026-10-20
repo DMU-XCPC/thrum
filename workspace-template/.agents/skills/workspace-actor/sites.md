@@ -101,6 +101,35 @@ the CLI restarts it on the next command. The caller still has to ask (`sync --co
 - `connect: connection refused` — the helper's daemon is not running; its next command starts it.
 - `job <id> is held at <site>` — you are on the helper; work the job at its holder.
 
+## Moving something between sites
+
+One question decides the tool: **what is it, and who owns it?** Everything below is a different
+lane; using the wrong one loses the thing or creates a second copy of the truth.
+
+| What you are moving | Use | Where it survives |
+| --- | --- | --- |
+| a command to run on another machine | `thrum run --site <helper> --job <id> -- <cmd>` | nothing; the output and exit status come back |
+| the job's source, to execute there | `thrum sync --code --job <id> --site <helper>` | the helper's `job/<id>/data/src/`, replaced whole; never a repository |
+| the job's transient inputs or outputs | `thrum bundle export <id> -o <file>` / `thrum bundle import <file>` | the payload, `job/<id>/`; disposable |
+| durable bytes (a dataset, a large artifact) | `thrum asset publish` here; `thrum asset materialise <name> <version> --job <id>` there | the store, `repos/store.git`, addressed by a tag; `thrum sync` carries the tag |
+| a file for a person | `thrum message send <actor> --attach <file>` (≤ 10 MB) | the recipient's mailbox, not the workspace |
+| a piece of evidence | `thrum job handoff` (the ledger) | `handoff/<id>/`; `thrum sync` publishes it |
+| a decision | the brief, a topic, a convention (the line) | `doc/`; `thrum sync` publishes it |
+| the branch itself, for editing | the project's own git, at the site that **holds** the job | `worktree/<label>/`; never the helper |
+| mail | `thrum message send` | the actor's own site; a helper receives none |
+
+The three that are easy to confuse:
+
+- **`data/src` is a snapshot, not a repository.** `sync --code` replaces it whole; never clone into
+  it. The branch is edited only at the holder.
+- **A message attachment is for a person, not for a job.** It is capped (10 MB); larger or
+  job-scoped bytes go to the store or the payload, and the message names the tag or the path.
+- **`bundle` is the payload, not the store.** The payload is disposable; anything that must
+  survive the job is published as an asset and named in the handoff.
+
+The exact syntax of every command is in `doc/commands.md`; this table is the choice, not the
+reference.
+
 ## Messages
 
 Actors reach each other through the fabric, not through the records. A message is **temporary work

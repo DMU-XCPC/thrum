@@ -203,7 +203,7 @@ one whose question it is.
 | name anything — a job, a repository, a label, a site, an actor, a convention, an asset version | `names.md` |
 | write a convention, start or promote a topic, retire a document | `knowledge.md` |
 | keep a result that has to outlive the job | `assets.md` |
-| touch another site, carry a payload, or meet a refusal | `sites.md` |
+| touch another site, move a file, carry a payload, or meet a refusal | `sites.md` |
 
 ## When thrum is wrong
 
