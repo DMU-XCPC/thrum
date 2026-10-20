@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -72,7 +73,9 @@ func newStatusCmd() *cobra.Command {
 			for _, w := range r.Worktrees {
 				state := "declared"
 				if w.Path != "" {
-					state = "materialised"
+					if _, err := os.Stat(w.Path); err == nil {
+						state = "materialised"
+					}
 				}
 				fmt.Fprintf(out, "  %-16s %-8s %-12s %s\n", w.Label, w.Repo, state, w.Branch)
 			}

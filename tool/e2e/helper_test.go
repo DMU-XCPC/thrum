@@ -232,3 +232,18 @@ func TestCodeSendAndCopy(t *testing.T) {
 		t.Fatalf("copy --from did not return: %q %v", got, err)
 	}
 }
+
+// TestStatusWorktreeState: a declared label with no directory is not materialised.
+func TestStatusWorktreeState(t *testing.T) {
+	w := newWorkspace(t)
+	w.r().run("worktree", "add", "up", "--repo", "code").ok(t, "worktree add")
+	if out := w.r().run("status").ok(t, "status").stdout; !strings.Contains(out, "up") || !strings.Contains(out, "materialised") {
+		t.Fatalf("a materialised label is not reported: %s", out)
+	}
+	if err := os.RemoveAll(w.path("worktree", "up")); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.r().run("status").ok(t, "status").stdout; !strings.Contains(out, "declared") {
+		t.Fatalf("a missing directory is still reported as materialised: %s", out)
+	}
+}
