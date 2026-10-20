@@ -79,7 +79,7 @@ done in the wrong place is work the next actor will not find, and no command wil
 
 | | |
 | --- | --- |
-| **the directory thrum names** | `thrum where --job <job-id>` prints it, and `thrum work <job-id>` takes the job up and puts you there. This, and only this, is where the code is edited. On a **helper** — a site that does not hold the job — there is no such directory: the job's source is `job/<id>/data/src`, a snapshot `thrum sync --code` writes and `thrum run --site` executes in. **Do not clone into it**; it is not a repository, it is replaced whole, and the branch leaves the holder only through the project's git. |
+| **the directory thrum names** | `thrum where --job <job-id>` prints it, and `thrum work <job-id>` takes the job up and puts you there. This, and only this, is where the code is edited. On a **helper** — a site that does not hold the job — there is no such directory: the job's source is `job/<id>/data/src`, a snapshot `thrum code send` writes and `thrum run --site` executes in. **Do not clone into it**; it is not a repository, it is replaced whole, and the branch leaves the holder only through the project's git. |
 | **your job's payload** | `job/<job-id>/`: scratch, logs, a tool's output. `thrum env --job <job-id>` points `TMPDIR` and the cache and state directories at it, so a tool that respects them cannot write anywhere else. |
 | **the records you write** | the brief's body, `handoff/<job-id>/…`, and the project's `doc/topic/` and `doc/convention/`. |
 | **nothing under `var/`** | It is thrum's — *including making a directory there*. An entry a hand invents is invisible to `thrum status` and `verify`, is never collected, and never travels. |

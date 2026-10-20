@@ -94,11 +94,11 @@ job/<job-id>/
 ```
 
 `data/src/` is a working-tree snapshot copied from the site that holds the job by
-`thrum sync --code`; it is a transient input like the rest of `data/`, replaced whole on every
+`thrum code send`; it is a transient input like the rest of `data/`, replaced whole on every
 sync and collected with the payload.
 
 **It is not a repository, and you never clone into it.** A `.git` here is a mistake: the next
-`sync --code` deletes the directory and unpacks the snapshot over it, and a clone would carry a
+`code send` deletes the directory and unpacks the snapshot over it, and a clone would carry a
 remote and a default branch the job does not own. The helper's `repos/` may be empty; that is
 expected. If you need the branch — to edit, commit or push — that is the site that **holds** the
 job and its `worktree/<label>/`, not the helper.

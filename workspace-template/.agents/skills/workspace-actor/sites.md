@@ -50,7 +50,7 @@ thrum site run on      # allow executing remote commands
 ```
 
 Both are site-local, never committed, and off by default. The daemon reads them when it starts;
-the CLI restarts it on the next command. The caller still has to ask (`sync --code`, `run`).
+the CLI restarts it on the next command. The caller still has to ask (`code send`, `copy`, `run`).
 
 **The workflow:**
 
@@ -66,17 +66,17 @@ the CLI restarts it on the next command. The caller still has to ask (`sync --co
    snapshot is the source, the helper never edits or commits the branch, and a `.git` in `data/src`
    is deleted by the next sync.
 3. Bring the inputs. On the helper: `thrum sync` (line, ledger, store), then
-   `thrum asset materialise <name> <version> --job <id>`, or `thrum bundle import` for a payload
-   from this site.
+   `thrum asset materialise <name> <version> --job <id>`, `thrum copy --from <this site>` for an
+   ordinary file, or `thrum bundle import` for a whole payload from this site.
 4. Run there. The default directory is the helper's `job/<id>/data/src/`; `TMPDIR`, the cache
    and the state are the helper's payload; stdout and the exit status come back; a log is
    written under `job/<id>/log/`:
    ```sh
    thrum run --site <helper> --job <id> -- make test
    ```
-5. Bring the results home. Small output is in the run's stdout; large results live in the
-   helper's `job/<id>/out/`. Export/import them with `thrum bundle`, or publish durable bytes
-   with `thrum asset publish` and let this site sync the tag.
+5. Bring the results home. Small output is in the run's stdout; a few files come back with
+   `thrum copy --from <helper> --job <id>`, a whole payload with `thrum bundle export/import`, and
+   durable bytes with `thrum asset publish` (this site syncs the tag).
 6. Write the handoff here — you are the agent — naming the artifacts by their raw hashes. Close
    as usual. The branch and commits remain yours; the helper's repository is unchanged.
 
@@ -86,7 +86,7 @@ the CLI restarts it on the next command. The caller still has to ask (`sync --co
   command is yours; thrum does not decide it.
 - **Not a live stream.** The run's output comes back whole (captured); the full log is on the
   helper.
-- **Not a git transfer.** `sync --code` carries files, not history; the helper's own git
+- **Not a git transfer.** `code send` carries files, not history; the helper's own git
   remains the project's. Nothing is fetched, pushed or branched.
 - **Not a second writer.** The snapshot replaces `data/src/`; the helper never commits or holds
   the job. Moving the writer is a different act: handoff/close here, make the branch available
@@ -121,7 +121,7 @@ lane; using the wrong one loses the thing or creates a second copy of the truth.
 
 The three that are easy to confuse:
 
-- **`data/src` is a snapshot, not a repository.** `sync --code` replaces it whole; never clone into
+- **`data/src` is a snapshot, not a repository.** `code send` replaces it whole; never clone into
   it. The branch is edited only at the holder.
 - **A message attachment is for a person, not for a job.** It is capped (10 MB); larger or
   job-scoped bytes go to the store or the payload, and the message names the tag or the path.
