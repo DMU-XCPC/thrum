@@ -163,6 +163,13 @@ package into a profile is the whole installation:
 dsh plugin --profile web add /path/to/harness/dsh
 ```
 
+An installation is checked against the running DSH before the package is imported: the
+`@deepseek-ai/dsh-*` peer ranges must accept that runtime, or the harness skips the bundle and
+names the unmet requirement. Those ranges are part of the plugin, not packaging detail; when DSH
+moves, they move in the same change as the code. `node --test test/` asks the harness's own
+evaluator, so an upgrade that outruns the package fails the tests instead of quietly unloading
+it at boot.
+
 What follows is mounting it by hand instead — in a patch layer of your own, or where the
 package is not installed. Three things about that are easy to get wrong, and all three were
 checked against a real `dsh` boot rather than against cordis alone:
